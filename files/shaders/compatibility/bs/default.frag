@@ -42,6 +42,8 @@ uniform float distortionStrength;
 #include "lib/material/vertexcolors.glsl"
 
 #include "compatibility/shadows_fragment.glsl"
+#define MGE_WX_STAGE 0 // bs/default.vert emits the weather verdict
+#define MGE_FOG
 #include "compatibility/fog.glsl"
 #include "compatibility/normals.glsl"
 
@@ -87,7 +89,8 @@ void main()
 
     float shadowing = unshadowedLightRatio(linearDepth);
     vec3 diffuseLight, ambientLight, specularLight;
-    doLighting(gl_FragCoord.xy, passViewPos, viewNormal, material.shininess, shadowing, diffuseLight, ambientLight, specularLight);
+    // OpenMGE XE: shadowing 1.0 = full sun; mgeShadowMult applies the shadow below.
+    doLighting(gl_FragCoord.xy, passViewPos, viewNormal, material.shininess, 1.0, diffuseLight, ambientLight, specularLight);
     vec3 diffuse = diffuseColor.xyz * diffuseLight;
     vec3 ambient = getAmbientColor(material, passColor).xyz * ambientLight;
     vec3 emission = getEmissionColor(material, passColor).xyz * material.emissiveMult;
@@ -100,6 +103,10 @@ void main()
     clampLighting(lighting);
 
     gl_FragData[0].xyz = gl_FragData[0].xyz * lighting + specular;
+
+    // MGE XE shadow receiver: multiplies the final colour, ambient included,
+    // before fog.
+    gl_FragData[0].xyz *= mgeShadowMult(shadowing, viewNormal);
 
     gl_FragData[0] = applyFogAtDist(gl_FragData[0], passViewPos, euclideanDepth, linearDepth, near, far);
 

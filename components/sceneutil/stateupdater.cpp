@@ -93,6 +93,8 @@ namespace SceneUtil
         stateset->addUniform(new osg::Uniform("windSpeed", 0.0f));
         stateset->addUniform(new osg::Uniform("playerPos", osg::Vec3f(0.f, 0.f, 0.f)));
         stateset->addUniform(new osg::Uniform("useTreeAnim", false));
+        stateset->addUniform(new osg::Uniform("viewerUnderwater", false));
+        stateset->addUniform(new osg::Uniform("isRefraction", false));
     }
 
     void SharedUniformStateUpdater::apply(osg::StateSet* stateset, osg::NodeVisitor* nv)
@@ -103,6 +105,7 @@ namespace SceneUtil
         stateset->getUniform("screenRes")->set(mScreenRes);
         stateset->getUniform("windSpeed")->set(mWindSpeed);
         stateset->getUniform("playerPos")->set(mPlayerPos);
+        stateset->getUniform("viewerUnderwater")->set(mViewerUnderwater);
     }
 
     void SharedUniformStateUpdater::setNear(float near)
@@ -128,6 +131,11 @@ namespace SceneUtil
     void SharedUniformStateUpdater::setPlayerPos(osg::Vec3f playerPos)
     {
         mPlayerPos = playerPos;
+    }
+
+    void SharedUniformStateUpdater::setViewerUnderwater(bool underwater)
+    {
+        mViewerUnderwater = underwater;
     }
 
     void StateUpdater::setDefaults(osg::StateSet* stateset)

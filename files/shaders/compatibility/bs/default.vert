@@ -36,6 +36,10 @@ varying vec3 passNormal;
 #include "compatibility/shadows_vertex.glsl"
 #include "compatibility/normals.glsl"
 
+// OpenMGE XE lighting: weather verdict computed per vertex, decoded by
+// bs/default.frag (MGE_WX_STAGE 0).
+#include "compatibility/mge_fog.glsl"
+
 centroid varying vec4 passColor;
 
 void main(void)
@@ -72,4 +76,6 @@ void main(void)
     vec3 viewNormal = normalize(gl_NormalMatrix * passNormal);
     setupShadowCoords(viewPos, viewNormal);
 #endif
+
+    mgeWxEmitVaryings(); // weather verdict hoist (mge_fog.glsl)
 }

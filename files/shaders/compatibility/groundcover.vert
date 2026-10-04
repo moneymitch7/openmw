@@ -41,11 +41,12 @@ varying vec3 passViewPos;
 #include "compatibility/normals.glsl"
 #include "lib/view/depth.glsl"
 
+// osg_ViewMatrixInverse and playerPos itself (do not redeclare below).
+#include "mge_fog.glsl"
+
 uniform float osg_SimulationTime;
-uniform mat4 osg_ViewMatrixInverse;
 uniform mat4 osg_ViewMatrix;
 uniform float windSpeed;
-uniform vec3 playerPos;
 
 centroid varying vec4 passColor;
 
@@ -186,4 +187,6 @@ void main(void)
 #if (@shadows_enabled)
     setupShadowCoords(viewPos, viewNormal);
 #endif
+
+    mgeWxEmitVaryings(); // scene verdict hoist (mge_fog.glsl)
 }

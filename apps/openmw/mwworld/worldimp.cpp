@@ -1821,6 +1821,11 @@ namespace MWWorld
         return mWeatherManager->getTransitionFactor();
     }
 
+    void World::setMgeScattering(const osg::Vec4f& outScatter, const osg::Vec4f& inScatter, bool enable)
+    {
+        mRendering->setMgeScattering(outScatter, inScatter, enable);
+    }
+
     unsigned int World::getNightDayMode() const
     {
         return mWeatherManager->getNightDayMode();
@@ -2221,6 +2226,7 @@ namespace MWWorld
         camera->setYaw(camera->getYaw() + rot[2]);
         return true;
     }
+
 
     void World::saveLoaded(const ESM::ESMReader& reader)
     {

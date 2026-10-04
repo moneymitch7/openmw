@@ -202,6 +202,13 @@ SensitivityLow: "Low"
 SettingsWindow: "Options"
 Subtitles: "Subtitles"
 SunlightScattering: "Sunlight Scattering"
+ShadowSoftShadows: "Soft Shadows"
+ShadowSoftShadowsTooltip: "Smooth shadow edges. Decreases performance slightly but allows you to use a lower Shadow Map Resolution to compensate."
+ShadowUpdateInterval: "Shadow Temporal Reuse"
+ShadowUpdateIntervalTooltip: |-
+    Reuse shadow maps across frames instead of recalculating every frame.
+    Significantly improves CPU performance at the cost of slightly delayed shadow updates.
+    Automatically disabled at very low FPS. Requires restart.
 TestingExteriorCells: "Testing Exterior Cells"
 TestingInteriorCells: "Testing Interior Cells"
 TextureFiltering: "Texture Filtering"

@@ -1,3 +1,4 @@
+#include <cmath>
 #include "renderingmanager.hpp"
 
 #include <cstdlib>
@@ -373,6 +374,45 @@ namespace MWRender
 
         mFog = std::make_unique<FogManager>();
 
+        // MGE XE parity uniforms for the ported MGE shaders. Attached to the
+        // root node so sky, water and scene shaders all see them.
+        // mgeWeatherUniforms = 1 tells the shaders a patched engine provides
+        // live values (stock builds leave these at the GLSL default of 0).
+        mMgeNiceWeatherUniform = new osg::Uniform("mgeNiceWeather", 0.f);
+        mMgeSkyColorUniform = new osg::Uniform("mgeSkyColor", osg::Vec3f(0.5f, 0.5f, 0.5f));
+        // (weather Fog Ratio ff, weather Fog Offset fo, isExterior, isDay)
+        mMgeFogParamsUniform = new osg::Uniform("mgeFogParams", osg::Vec4f(1.f, 0.f, 1.f, 1.f));
+        // Weather-transition endpoints. Shaders derive fog ranges at both
+        // endpoint weathers and lerp the derived values, so nonlinear terms
+        // don't compress the visual change into a fraction of the
+        // transition. Cur = (ff, fo, valid, 0); Next = (ff, fo, blend, 0).
+        mMgeFogParamsCurUniform = new osg::Uniform("mgeFogParamsCur", osg::Vec4f(-1.f, 0.f, 0.f, 0.f));
+        mMgeFogParamsNextUniform = new osg::Uniform("mgeFogParamsNext", osg::Vec4f(-1.f, 0.f, 0.f, 0.f));
+        // World-space sun direction, valid in every render pass. Deriving
+        // the sun from the per-pass light list instead is degenerate in the
+        // water-reflection RTT's sky rendering (normalize(0) -> NaN -> black
+        // reflected sky).
+        mMgeSunDirUniform = new osg::Uniform("mgeSunDir", osg::Vec3f(0.f, 0.f, 0.f));
+        // XE Sky Variations: daily scattering override fed from
+        // Lua (core.weather.setMgeScattering); off = shader preset consts.
+        mMgeOutscatterUniform = new osg::Uniform("mgeOutscatterU", osg::Vec3f(0.f, 0.f, 0.f));
+        mMgeInscatterUniform = new osg::Uniform("mgeInscatterU", osg::Vec3f(0.f, 0.f, 0.f));
+        mMgeScatterOnUniform = new osg::Uniform("mgeScatterUniformsOn", 0.f);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeNiceWeatherUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeSkyColorUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsCurUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsNextUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeSunDirUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeOutscatterUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeInscatterUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeScatterOnUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("mgeWeatherUniforms", 1.f));
+        // MGE fog envelope from settings; the Distant Land Generator app is
+        // the intended editor (game closed), so ctor-time read suffices
+        mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform(
+            "mgeFogRange", osg::Vec2f(Settings::fog().mMgeFogStartCells, Settings::fog().mMgeFogEndCells)));
+
         mSky = std::make_unique<SkyManager>(
             sceneRoot, mRootNode, mViewer->getCamera(), resourceSystem->getSceneManager(), mSkyBlending);
         if (mSkyBlending)
@@ -574,6 +614,28 @@ namespace MWRender
         mPostProcessor->getStateUpdater()->setSunVis(sunVis);
     }
 
+    void RenderingManager::setMgeWeather(float niceWeather, const osg::Vec4f& skyColor, float dlFogFactor,
+        float dlFogOffset, bool isExterior, float dlFogFactorCur, float dlFogOffsetCur, float dlFogFactorNext,
+        float dlFogOffsetNext, float dlFogBlend)
+    {
+        mMgeNiceWeatherUniform->set(niceWeather);
+        mMgeSkyColorUniform->set(osg::Vec3f(skyColor.x(), skyColor.y(), skyColor.z()));
+        // isDay from mNight (set by WeatherManager just before this call).
+        // MGE equivalent: updateSun flips sunPos.z downward when sunVis==0 so
+        // the scattering sees a below-horizon sun at night.
+        mMgeFogParamsUniform->set(osg::Vec4f(dlFogFactor, dlFogOffset, isExterior ? 1.f : 0.f, mNight ? 0.f : 1.f));
+        mMgeFogParamsCurUniform->set(
+            osg::Vec4f(dlFogFactorCur, dlFogOffsetCur, dlFogFactorCur >= 0.f ? 1.f : 0.f, 0.f));
+        mMgeFogParamsNextUniform->set(osg::Vec4f(dlFogFactorNext, dlFogOffsetNext, dlFogBlend, 0.f));
+    }
+
+    void RenderingManager::setMgeScattering(const osg::Vec4f& outScatter, const osg::Vec4f& inScatter, bool enable)
+    {
+        mMgeOutscatterUniform->set(osg::Vec3f(outScatter.x(), outScatter.y(), outScatter.z()));
+        mMgeInscatterUniform->set(osg::Vec3f(inScatter.x(), inScatter.y(), inScatter.z()));
+        mMgeScatterOnUniform->set(enable ? 1.f : 0.f);
+    }
+
     const osg::Vec4f& RenderingManager::getSunLightPosition() const
     {
         return mSunLight->getPosition();
@@ -590,6 +652,13 @@ namespace MWRender
         const osg::Vec3f sunlightPos = Settings::shaders().mMatchSunlightToSun ? position : -direction;
         // need to wrap this in a StateUpdater?
         mSunLight->setPosition(osg::Vec4f(sunlightPos, 0.f));
+
+        // MGE parity: world-space sun direction for the scatter shaders,
+        // identical to the light-0 direction the main pass sees, but valid
+        // in every render pass (the RTT sky rendering has no usable light 0)
+        osg::Vec3f mgeSun = sunlightPos;
+        mgeSun.normalize();
+        mMgeSunDirUniform->set(mgeSun);
 
         mSky->setSunDirection(position);
 
@@ -769,6 +838,7 @@ namespace MWRender
         mStateUpdater->setUnderwaterFogColor(fogUnderwaterColor);
 
         mViewer->getCamera()->setClearColor(isUnderwater ? fogUnderwaterColor : fogColor);
+        mSharedUniformStateUpdater->setViewerUnderwater(isUnderwater);
 
         auto world = MWBase::Environment::get().getWorld();
         const auto& stateUpdater = mPostProcessor->getStateUpdater();
@@ -1459,6 +1529,37 @@ namespace MWRender
                     if (auto* hud = MWBase::Environment::get().getWindowManager()->getPostProcessorHud())
                         hud->setVisible(false);
                 }
+            }
+            else if (it->first == "Shadows")
+            {
+                mViewer->stopThreading();
+
+                mShadowManager->setupShadowSettings(
+                    Settings::shadows(), mResourceSystem->getSceneManager()->getShaderManager());
+
+                // Recompute casting masks from current settings
+                int shadowCastingTraversalMask = Mask_Scene;
+                if (Settings::shadows().mActorShadows)
+                    shadowCastingTraversalMask |= Mask_Actor;
+                if (Settings::shadows().mPlayerShadows)
+                    shadowCastingTraversalMask |= Mask_Player;
+
+                int indoorShadowCastingTraversalMask = shadowCastingTraversalMask;
+                if (Settings::shadows().mObjectShadows)
+                    shadowCastingTraversalMask |= (Mask_Object | Mask_Static);
+                if (Settings::shadows().mTerrainShadows)
+                    shadowCastingTraversalMask |= Mask_Terrain;
+
+                mShadowManager->updateCastingMasks(shadowCastingTraversalMask, indoorShadowCastingTraversalMask);
+
+                // Update global shader defines (soft shadows, resolution, cascade count)
+                auto defines = mResourceSystem->getSceneManager()->getShaderManager().getGlobalDefines();
+                auto shadowDefines = mShadowManager->getShadowDefines(Settings::shadows());
+                for (const auto& [name, value] : shadowDefines)
+                    defines[name] = value;
+                mResourceSystem->getSceneManager()->getShaderManager().setGlobalDefines(defines);
+
+                mViewer->startThreading();
             }
         }
 

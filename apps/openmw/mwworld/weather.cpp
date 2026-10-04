@@ -862,6 +862,9 @@ namespace MWWorld
             mWindSpeed = 0.f;
             mCurrentWindSpeed = 0.f;
             mNextWindSpeed = 0.f;
+            // MGE XE parity: interiors run linear palette fog (niceWeather=0,
+            // isExterior=0), matching MGE's adjustFog interior branch.
+            mRendering.setMgeWeather(0.f, mResult.mSkyColor, 1.f, 0.f, false);
             return;
         }
 
@@ -945,6 +948,46 @@ namespace MWWorld
         mRendering.setSunColour(mResult.mSunColor, mResult.mSunColor, mResult.mGlareView * glareFade);
 
         mRendering.getSkyManager()->setWeather(mResult);
+
+        // MGE XE parity: feed weather identity + sky colour to the shaders
+        // (consumed by the MGE fog/scattering shaders in resources/shaders).
+        {
+            // Weathers are RefIds on master; MGE's "nice" weathers are the
+            // built-in Clear (script id 0) and Cloudy (1). Weathers added by
+            // Lua count as not nice, as in MGE.
+            const auto niceOf = [](const Weather* w) {
+                return (w != nullptr && (w->mScriptId == 0 || w->mScriptId == 1)) ? 1.f : 0.f;
+            };
+            const Weather* current = mWeatherStore->search(mCurrentWeather);
+            const Weather* next = mWeatherStore->search(mNextWeather);
+            float niceWeather = niceOf(current);
+            if (next != nullptr)
+            {
+                // mTransitionFactor counts down from 1 to 0 as the transition
+                // progresses; the engine's own blend uses (1 - factor), see
+                // calculateWeatherResult. Using the raw factor would snap the
+                // scatter to the next weather the instant a transition begins.
+                niceWeather = lerp(niceWeather, niceOf(next), 1.f - mTransitionFactor);
+            }
+            // MGE squares the blended value (distantland.cpp adjustFog:
+            // niceWeather *= niceWeather)
+            niceWeather *= niceWeather;
+            // Endpoint fog params + blend: the shaders derive fog ranges at
+            // both endpoint weathers and lerp the derived values, so nonlinear
+            // terms don't compress the visible change into a fraction of the
+            // transition.
+            float ffCur = current != nullptr ? current->mDL.FogFactor : mResult.mDLFogFactor;
+            float foCur = (current != nullptr ? current->mDL.FogOffset : mResult.mDLFogOffset) / 100.0f;
+            float ffNext = ffCur, foNext = foCur, fogBlend = 0.f;
+            if (next != nullptr)
+            {
+                ffNext = next->mDL.FogFactor;
+                foNext = next->mDL.FogOffset / 100.0f;
+                fogBlend = 1.f - mTransitionFactor;
+            }
+            mRendering.setMgeWeather(niceWeather, mResult.mSkyColor, mResult.mDLFogFactor,
+                mResult.mDLFogOffset / 100.0f, true, ffCur, foCur, ffNext, foNext, fogBlend);
+        }
 
         // Play sounds
         if (mPlayingAmbientSoundID != mResult.mAmbientLoopSoundID)

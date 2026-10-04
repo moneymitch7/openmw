@@ -45,6 +45,8 @@ uniform mat4 texMat1;
 #include "shadows_fragment.glsl"
 
 #include "lib/material/parallax.glsl"
+#define MGE_WX_STAGE 0
+#define MGE_FOG
 #include "fog.glsl"
 #include "compatibility/normals.glsl"
 
@@ -52,6 +54,7 @@ centroid varying vec4 passColor;
 
 void main()
 {
+    mgeWxCompute(); // single-instance weather decomposition
     Material material = getMaterial();
 
     vec2 adjustedUV = (texMat0 * vec4(uv, 0.0, 1.0)).xy;
@@ -83,10 +86,12 @@ void main()
 #endif
 
     float shadowing = unshadowedLightRatio(linearDepth);
+    // Sun contribution stays full here; the MGE shadow receiver darkens the
+    // final colour below (mgeShadowMult - cloud fade lives inside it now).
     vec3 lighting, specular;
 #if !PER_PIXEL_LIGHTING
-    lighting = mix(shadedLighting, passLighting, shadowing);
-    specular = mix(shadedSpecular, passSpecular, shadowing);
+    lighting = passLighting;
+    specular = passSpecular;
 #else
 #if @specularMap
     float shininess = 128.0; // TODO: make configurable
@@ -96,13 +101,20 @@ void main()
     vec3 specularColor = getSpecularColor(material, passColor).xyz;
 #endif
     vec3 diffuseLight, ambientLight, specularLight;
-    doLighting(gl_FragCoord.xy, passViewPos, viewNormal, shininess, shadowing, diffuseLight, ambientLight, specularLight);
+    // OpenMGE XE: shadowing 1.0 = full sun; mgeShadowMult applies the shadow below.
+    doLighting(gl_FragCoord.xy, passViewPos, viewNormal, shininess, 1.0, diffuseLight, ambientLight, specularLight);
     lighting = diffuseColor.xyz * diffuseLight + getAmbientColor(material, passColor).xyz * ambientLight + getEmissionColor(material, passColor).xyz;
     specular = specularColor * specularLight;
     clampLighting(lighting);
 #endif
 
     gl_FragData[0].xyz = gl_FragData[0].xyz * lighting + specular;
+
+    gl_FragData[0].xyz = perObjectTonemap(gl_FragData[0].xyz);
+
+    // MGE XE shadow receiver: multiplies the final colour, ambient included,
+    // before fog.
+    gl_FragData[0].xyz *= mgeShadowMult(shadowing, viewNormal);
 
     gl_FragData[0] = applyFogAtDist(gl_FragData[0], passViewPos, euclideanDepth, linearDepth, near, far);
 

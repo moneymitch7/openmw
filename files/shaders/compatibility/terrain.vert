@@ -30,6 +30,8 @@ varying vec3 passNormal;
 
 centroid varying vec4 passColor;
 
+#include "mge_fog.glsl"
+
 void main(void)
 {
     Material material = getMaterial();
@@ -80,4 +82,6 @@ void main(void)
 #if (@shadows_enabled)
     setupShadowCoords(viewPos, viewNormal);
 #endif
+
+    mgeWxEmitVaryings(); // scene verdict hoist (mge_fog.glsl)
 }

@@ -299,6 +299,7 @@ namespace MWGui
         getWidget(mClusteredLightingButton, "ClusteredLightingButton");
         getWidget(mLightsResetButton, "LightsResetButton");
         getWidget(mMaxLights, "MaxLights");
+        getWidget(mShadowUpdateInterval, "ShadowUpdateInterval");
         getWidget(mScriptFilter, "ScriptFilter");
         getWidget(mScriptList, "ScriptList");
         getWidget(mScriptBox, "ScriptBox");
@@ -358,6 +359,8 @@ namespace MWGui
             += MyGUI::newDelegate(this, &SettingsWindow::onShadowsButtonClicked);
         mShadowMapResolution->eventComboChangePosition
             += MyGUI::newDelegate(this, &SettingsWindow::onShadowMapResolutionChanged);
+        mShadowUpdateInterval->eventComboChangePosition
+            += MyGUI::newDelegate(this, &SettingsWindow::onShadowUpdateIntervalChanged);
 
         mWindowModeList->eventComboChangePosition += MyGUI::newDelegate(this, &SettingsWindow::onWindowModeChanged);
         mVSyncModeList->eventComboChangePosition += MyGUI::newDelegate(this, &SettingsWindow::onVSyncModeChanged);
@@ -421,6 +424,11 @@ namespace MWGui
         updateMaxLightsComboBox(mMaxLights);
 
         updateShadowMapResolutionComboBox(mShadowMapResolution);
+        {
+            const int interval = Settings::shadows().mShadowUpdateInterval;
+            if (interval >= 1 && interval <= 4)
+                mShadowUpdateInterval->setIndexSelected(static_cast<size_t>(interval - 1));
+        }
 
         const Settings::WindowMode windowMode = Settings::video().mWindowMode;
         mWindowBorderButton->setEnabled(
@@ -644,6 +652,18 @@ namespace MWGui
         Settings::shaders().mMaxLights.set(8 * static_cast<int>(pos + 1));
         apply();
         configureWidgets(mMainWidget, false);
+    }
+
+    void SettingsWindow::onShadowUpdateIntervalChanged(MyGUI::ComboBox* /*sender*/, size_t pos)
+    {
+        if (pos != MyGUI::ITEM_NONE)
+        {
+            Settings::shadows().mShadowUpdateInterval.set(static_cast<int>(pos + 1));
+            apply();
+
+            MWBase::Environment::get().getWindowManager()->interactiveMessageBox(
+                "#{OMWEngine:ChangeRequiresRestart}", { "#{Interface:OK}" }, true);
+        }
     }
 
     void SettingsWindow::onLightsResetButtonClicked(MyGUI::Widget* /*sender*/)

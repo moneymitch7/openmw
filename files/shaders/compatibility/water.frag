@@ -54,6 +54,7 @@ vec2 normalCoords(vec2 uv, float scale, float speed, float time, float timer1, f
 
 uniform sampler2D rippleMap;
 uniform vec3 playerPos;
+#define OMW_DECL_PLAYERPOS // also used by mge_fog.glsl via fog.glsl
 
 varying vec3 worldPos;
 
@@ -82,6 +83,11 @@ uniform vec2 screenRes;
 #include "lib/light/struct.glsl"
 
 #include "shadows_fragment.glsl"
+// OpenMGE XE lighting: water surfaces take the MGE XE fog too, so the sea
+// fades into the same atmospheric haze as the land. water.vert computes the
+// weather verdict; this fragment only decodes the varyings.
+#define MGE_WX_STAGE 0
+#define MGE_FOG
 #include "fog.glsl"
 
 bool hasOpaqueGeometry(vec2 coords)

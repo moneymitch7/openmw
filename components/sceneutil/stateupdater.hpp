@@ -71,6 +71,8 @@ namespace SceneUtil
 
         void setPlayerPos(osg::Vec3f playerPos);
 
+        void setViewerUnderwater(bool underwater);
+
     private:
         float mNear = 0.f;
         float mFar = 0.f;
@@ -78,6 +80,7 @@ namespace SceneUtil
         float mSkyBlendingStartCoef = 0.f;
         osg::Vec3f mPlayerPos;
         osg::Vec2f mScreenRes;
+        bool mViewerUnderwater = false;
     };
 
     class StateUpdater : public StateSetUpdater

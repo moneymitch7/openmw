@@ -10,6 +10,16 @@ varying float linearDepth;
 
 uniform vec3 nodePosition;
 uniform vec3 playerPos;
+#define OMW_DECL_PLAYERPOS // mge_fog.glsl reuses it
+
+// OpenMGE XE lighting: the weather verdict for the water's fog is computed
+// here, per vertex, and shipped through varyings; water.frag defines
+// MGE_WX_STAGE 0 and only decodes. Water opts into the full decomposition
+// core (v4 + rescue), as in the 0.51 port.
+#define WX_NEED_FULL_CORE 1
+#define MGE_WX_V4 1
+#define MGE_WX_RESCUE 1
+#include "compatibility/mge_fog.glsl"
 
 varying vec3 worldPos;
 varying vec2 rippleMapUV;
@@ -29,4 +39,6 @@ void main(void)
     linearDepth = getLinearDepth(gl_Position.z, viewPos.z);
 
     setupShadowCoords(viewPos, normalize((gl_NormalMatrix * gl_Normal).xyz));
+
+    mgeWxEmitVaryings(); // weather verdict hoist (mge_fog.glsl)
 }

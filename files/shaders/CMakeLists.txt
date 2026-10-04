@@ -34,6 +34,8 @@ set(SHADER_FILES
     lib/light/clamp.glsl
     lib/light/util.glsl
     lib/light/struct.glsl
+    lib/fog/uniforms.glsl
+    lib/mge/compat.glsl
     lib/sky/passes.glsl
     lib/material/parallax.glsl
     lib/material/alpha.glsl
@@ -43,6 +45,7 @@ set(SHADER_FILES
     compatibility/ripples_blobber.frag
     compatibility/ripples_simulate.frag
     compatibility/fog.glsl
+    compatibility/mge_fog.glsl
     compatibility/groundcover.vert
     compatibility/groundcover.frag
     compatibility/globalmap.vert

@@ -2,6 +2,19 @@
 
 #include "lib/sky/passes.glsl"
 
+// MGE XE fog port: the sky dome shares the fog scattering equation at
+// fogdist=1 so the horizon is seamless (XE Main.fx SkyPS).
+#define MGE_WX_STAGE 0
+#include "mge_fog.glsl"
+
+// MGE parity: suppress the vanilla sun glare. MGE XE hides it while its
+// Sunshafts shader runs (that shader draws its own disc and rays); turn
+// this on when using the MGE XE / MGG Sunshafts post-processing shader,
+// otherwise the sun gets two glare stacks and reads far too hot.
+#ifndef MGE_SUPPRESS_SUNGLARE
+#define MGE_SUPPRESS_SUNGLARE 0
+#endif
+
 uniform int pass;
 uniform sampler2D diffuseMap;
 uniform sampler2D maskMap;      // PASS_MOON
@@ -15,11 +28,28 @@ uniform vec4 diffuseColor;
 
 varying vec2 diffuseMapUV;
 varying vec4 passColor;
+varying vec3 passViewPos;
+
+vec3 skyWorldDir()
+{
+    return normalize((osg_ViewMatrixInverse * vec4(normalize(passViewPos), 0.0)).xyz);
+}
 
 void paintAtmosphere(inout vec4 color)
 {
     color = diffuseColor;
-    color.a *= passColor.a;
+    // MGE XE: replace the dome colour with the scattering equation + dither
+    color.xyz = mgeFogColourSky(skyWorldDir(), diffuseColor.xyz, diffuseColor.xyz)
+              + vec3(mgeSkyDither(gl_FragCoord.xy));
+    // Vanilla fades the dome rim to transparency (vertex alpha) so the
+    // clear colour (the raw palette fog) shows through as the sky-fog blend.
+    // MGE instead re-colours the engine fog to scatter every frame
+    // (distantland.cpp "Simplified version of scattering"). This dome
+    // already carries the correct colour at every direction, so render it
+    // opaque: the palette colour must never show through in nice weather
+    // (under a dark-fog palette like MGG it reads as a blue band above the
+    // horizon).
+    color.a = 1.0;
 }
 
 void paintAtmosphereNight(inout vec4 color)
@@ -34,8 +64,27 @@ void paintClouds(inout vec4 color)
     color.a *= passColor.a * opacity;
     color.xyz = clamp(color.xyz * diffuseColor.xyz, 0.0, 1.0);
 
-    // ease transition between clear color and atmosphere/clouds
-    color = mix(vec4(fog.color.xyz, color.a), color, passColor.a);
+    // ease transition between clear color and atmosphere/clouds.
+    // Deliberate deviation from both stock and MGE: stock fades clouds to
+    // the fog colour because its scene fog converges there, but this fog
+    // model converges to the scatter colour, and a dark palette fog (e.g.
+    // MGG Clear deep blue) would otherwise paint a fog-coloured band across
+    // the horizon sky. MGE needs no fade at all only because its cloud rim
+    // sits against the scatter dome. Fade to the dome colour at this
+    // direction instead: nice weather gives scatter, bad weather gives
+    // palette fog (matching stock).
+    vec3 horizonCol = mgeFogColourSky(skyWorldDir(), mgeLegacyFog().color.xyz, diffuseColor.xyz);
+
+    // Dense-weather raised sky-fog band: clouds fade into the band
+    // wherever it covers the dome, so fog visually wraps tall massifs
+    // instead of dark clouds cutting in right above them.
+    // mgeSkyFogH is raise-aware and ff-gated: in Clear/Cloudy the band is
+    // the stock XE rim and this mix is a no-op above it.
+    float wDenseCloud = mgeDerivedFog().wDense;
+    float band = (1.0 - mgeSkyFogH(skyWorldDir().z)) * wDenseCloud;
+    color.xyz = mix(color.xyz, horizonCol, band);
+
+    color = mix(vec4(horizonCol, color.a), color, passColor.a);
 }
 
 void paintMoon(inout vec4 color)
@@ -72,7 +121,16 @@ void paintSun(inout vec4 color)
 
 void paintSunglare(inout vec4 color)
 {
+#if MGE_SUPPRESS_SUNGLARE
+    // MGE parity: the classic Sunshafts shader declares disableSunglare,
+    // and MGE suppresses the vanilla sunglare while it runs (its own disc
+    // + rays replace it). OpenMW has no annotation channel, so suppress
+    // here; without this both glare stacks draw and the sun reads far too
+    // hot (especially at sunset, amplified by bloom).
+    color = vec4(0.0);
+#else
     color = diffuseColor;
+#endif
 }
 
 void processSunflashQuery()
@@ -85,6 +143,7 @@ void processSunflashQuery()
 
 void main()
 {
+    mgeWxCompute(); // single-instance weather decomposition
     vec4 color = vec4(0.0);
 
     if (pass == PASS_ATMOSPHERE)
@@ -104,6 +163,22 @@ void main()
         processSunflashQuery();
         return;
     }
+
+    // Underwater source probe (mge_fog.glsl, normally off): everything the
+    // sky program draws while the camera is submerged tints green.
+    if (mgeUwProbe())
+        color.xyz = mix(color.xyz, vec3(0.0, 1.0, 0.0), 0.6);
+
+#if MGE_PARITY_PROBE
+    // v8: distinct colour per pass, alpha forced opaque - names both the
+    // full-screen coverer and the black horizon band's owner.
+    if (pass == PASS_ATMOSPHERE)            color = vec4(0.0, 0.0, 1.0, 1.0); // blue
+    else if (pass == PASS_CLOUDS)           color = vec4(0.0, 1.0, 0.0, color.a); // green, keep alpha
+    else if (pass == PASS_SUN)              color = vec4(1.0, 0.0, 0.0, color.a); // red
+    else if (pass == PASS_SUNGLARE)         color = vec4(1.0, 1.0, 0.0, 1.0); // yellow
+    else if (pass == PASS_ATMOSPHERE_NIGHT) color = vec4(0.0, 1.0, 1.0, color.a); // cyan
+    else if (pass == PASS_MOON)             color = vec4(1.0, 1.0, 1.0, color.a); // white
+#endif
 
     gl_FragData[0] = color;
 }

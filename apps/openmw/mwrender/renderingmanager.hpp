@@ -143,6 +143,13 @@ namespace MWRender
         const osg::Vec4f& getSunLightPosition() const;
         void setSunDirection(const osg::Vec3f& direction);
         void setSunColour(const osg::Vec4f& diffuse, const osg::Vec4f& specular, float sunVis);
+
+        // MGE XE parity: weather identity + sky colour for the ported MGE shaders
+        void setMgeScattering(const osg::Vec4f& outScatter, const osg::Vec4f& inScatter, bool enable);
+
+        void setMgeWeather(float niceWeather, const osg::Vec4f& skyColor, float dlFogFactor, float dlFogOffset,
+            bool isExterior, float dlFogFactorCur = -1.f, float dlFogOffsetCur = 0.f, float dlFogFactorNext = -1.f,
+            float dlFogOffsetNext = 0.f, float dlFogBlend = 0.f);
         void setNight(bool isNight) { mNight = isNight; }
 
         void configureAmbient(const MWWorld::Cell& cell);
@@ -313,6 +320,15 @@ namespace MWRender
         osg::ref_ptr<IntersectionVisitorWithIgnoreList> mIntersectionVisitor;
 
         osg::ref_ptr<osgViewer::Viewer> mViewer;
+        osg::ref_ptr<osg::Uniform> mMgeNiceWeatherUniform;
+        osg::ref_ptr<osg::Uniform> mMgeSkyColorUniform;
+        osg::ref_ptr<osg::Uniform> mMgeFogParamsUniform;
+        osg::ref_ptr<osg::Uniform> mMgeFogParamsCurUniform;
+        osg::ref_ptr<osg::Uniform> mMgeFogParamsNextUniform;
+        osg::ref_ptr<osg::Uniform> mMgeOutscatterUniform;
+        osg::ref_ptr<osg::Uniform> mMgeInscatterUniform;
+        osg::ref_ptr<osg::Uniform> mMgeScatterOnUniform;
+        osg::ref_ptr<osg::Uniform> mMgeSunDirUniform;
         osg::ref_ptr<osg::Group> mRootNode;
         osg::ref_ptr<SceneUtil::LightManager> mSceneRoot;
         Resource::ResourceSystem* mResourceSystem;

@@ -31,6 +31,13 @@ namespace Settings
         SettingValue<float> mSkyBlendingStart{ mIndex, "Fog", "sky blending start",
             makeClampStrictMaxSanitizerFloat(0, 1) };
         SettingValue<osg::Vec2f> mSkyRttResolution{ mIndex, "Fog", "sky rtt resolution" };
+        // MGE fog envelope (cells), fed to mge_fog.glsl as the mgeFogRange
+        // uniform; 0 = shader built-in defaults (2 / 5)
+        SettingValue<float> mMgeFogStartCells{ mIndex, "Fog", "mge fog start cells", makeMaxSanitizerFloat(0) };
+        SettingValue<float> mMgeFogEndCells{ mIndex, "Fog", "mge fog end cells", makeMaxSanitizerFloat(0) };
+        // MGE XE below-water fog envelope [cells]; both 0 = stock underwater fog
+        SettingValue<float> mMgeUnderwaterFogStartCells{ mIndex, "Fog", "mge underwater fog start cells" };
+        SettingValue<float> mMgeUnderwaterFogEndCells{ mIndex, "Fog", "mge underwater fog end cells" };
     };
 }
 
