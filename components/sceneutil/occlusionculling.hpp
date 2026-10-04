@@ -55,6 +55,16 @@ namespace SceneUtil
             mNumBuildingVerts += verts;
         }
 
+        /// Per-frame time budget for building new occluder meshes, shared by every cell. A town coming into
+        /// view would otherwise build all of its meshes in one frame; objects over the budget wait for a later
+        /// frame (they are drawn and tested with their bounds meanwhile). One build always goes through.
+        bool canBuildOccluderMesh() const { return mMeshBuildsThisFrame == 0 || mMeshBuildSeconds < sMeshBuildBudget; }
+        void addOccluderMeshBuild(double seconds)
+        {
+            ++mMeshBuildsThisFrame;
+            mMeshBuildSeconds += seconds;
+        }
+
         /// Write the per-pixel depth buffer to depthData (width*height floats, bottom-to-top).
         void computePixelDepthBuffer(float* depthData) const;
 
@@ -74,6 +84,10 @@ namespace SceneUtil
         unsigned int mNumBuildingOccluders = 0;
         unsigned int mNumBuildingTris = 0;
         unsigned int mNumBuildingVerts = 0;
+
+        static constexpr double sMeshBuildBudget = 0.002; // seconds per frame
+        unsigned int mMeshBuildsThisFrame = 0;
+        double mMeshBuildSeconds = 0.0;
     };
 }
 

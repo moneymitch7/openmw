@@ -47,6 +47,8 @@ namespace SceneUtil
         mNumBuildingOccluders = 0;
         mNumBuildingTris = 0;
         mNumBuildingVerts = 0;
+        mMeshBuildsThisFrame = 0;
+        mMeshBuildSeconds = 0.0;
         mFrameActive = true;
     }
 

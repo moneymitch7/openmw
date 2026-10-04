@@ -3,6 +3,7 @@
 #include "vismask.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <queue>
 #include <unordered_set>
@@ -497,7 +498,7 @@ namespace MWRender
     {
     }
 
-    CellOcclusionCallback::CachedMesh& CellOcclusionCallback::getOccluderEntry(osg::Node* node)
+    CellOcclusionCallback::CachedMesh* CellOcclusionCallback::getOccluderEntry(osg::Node* node)
     {
         // The mesh is built in world space once per node. If the node later moves or animates
         // (its bounds change), it is marked dynamic instead of rebuilt every frame: from then on
@@ -515,10 +516,14 @@ namespace MWRender
                     && ((cached.mBound.center() - currentBound.center()).length2() >= 1.f
                         || std::abs(cached.mBound.radius() - currentBound.radius()) >= 1.f))
                     cached.mDynamic = true;
-                return cached;
+                return &cached;
             }
             mMeshCache.erase(it);
         }
+
+        if (!mCuller->canBuildOccluderMesh())
+            return nullptr;
+        const auto buildStart = std::chrono::steady_clock::now();
 
         int meshRes = mOccluderMeshResolution;
         const float radius = currentBound.radius();
@@ -533,7 +538,9 @@ namespace MWRender
         entry.mNode = node;
         entry.mBound = currentBound;
         entry.mMesh = buildSimplifiedMesh(node, meshRes, mOccluderShrinkFactor);
-        return mMeshCache.emplace(node, std::move(entry)).first->second;
+        mCuller->addOccluderMeshBuild(
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - buildStart).count());
+        return &mMeshCache.emplace(node, std::move(entry)).first->second;
     }
 
     void CellOcclusionCallback::operator()(osg::Group* node, osgUtil::CullVisitor* cv)
@@ -606,12 +613,13 @@ namespace MWRender
                 continue;
             }
 
-            // Cached occluder mesh (with AABB for the visibility test). Dynamic objects and
-            // objects without usable geometry bounds go to pass 2 (never skipped untested).
-            const CachedMesh& entry = getOccluderEntry(child);
-            if (entry.mDynamic || !entry.mMesh.aabb.valid())
+            // Cached occluder mesh (with AABB for the visibility test). Dynamic objects, objects
+            // without usable geometry bounds and objects whose mesh isn't built yet (this frame's
+            // build budget is spent) go to pass 2 (never skipped untested).
+            const CachedMesh* entry = getOccluderEntry(child);
+            if (entry == nullptr || entry->mDynamic || !entry->mMesh.aabb.valid())
                 continue;
-            const OccluderMesh& mesh = entry.mMesh;
+            const OccluderMesh& mesh = entry->mMesh;
             mHandledInFirstPass[i] = 1;
 
             if (mCuller->testVisibleAABB(mesh.aabb))

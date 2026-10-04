@@ -90,6 +90,9 @@ namespace MWGui
         void changeWallpaper();
 
         void draw();
+
+        /// Keeps the loading screen up until the GL objects queued for incremental compilation are done.
+        void finishPendingCompiles();
     };
 
 }

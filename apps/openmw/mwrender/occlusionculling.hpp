@@ -154,8 +154,9 @@ namespace MWRender
             bool mDynamic = false;
         };
 
-        /// Cached occluder mesh (actual triangles + AABB) for a node, built once per node.
-        CachedMesh& getOccluderEntry(osg::Node* node);
+        /// Cached occluder mesh (actual triangles + AABB) for a node, built once per node. nullptr when the
+        /// node has no mesh yet and this frame's build budget is spent (it is built on a later frame).
+        CachedMesh* getOccluderEntry(osg::Node* node);
 
         osg::ref_ptr<SceneUtil::OcclusionCuller> mCuller;
         float mOccluderMinRadius;

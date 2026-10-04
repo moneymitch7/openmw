@@ -1,7 +1,11 @@
 #include "loadingscreen.hpp"
 
 #include <array>
+#include <chrono>
+#include <mutex>
+#include <thread>
 
+#include <osgUtil/IncrementalCompileOperation>
 #include <osgViewer/Viewer>
 
 #include <osg/Texture2D>
@@ -172,10 +176,40 @@ namespace MWGui
         MWBase::Environment::get().getWindowManager()->pushGuiMode(mShowWallpaper ? GM_LoadingWallpaper : GM_Loading);
     }
 
+    void LoadingScreen::finishPendingCompiles()
+    {
+        // OpenMGE XE: the shader programs and textures of what was just loaded are compiled incrementally in the
+        // draw thread (osgUtil::IncrementalCompileOperation), a slice per loading-screen frame, and the loading
+        // screen used to close with part of that work still queued. Whatever was left then compiled on demand in
+        // the first frames of play: a freeze just after arriving, longer with the bigger MGE shaders. Keep the
+        // loading screen up until the queue is empty. Capped, because background cell preloading can keep adding
+        // work, and only when the screen was actually shown, so a quick load that never showed it stays quick.
+        osgUtil::IncrementalCompileOperation* ico = mViewer->getIncrementalCompileOperation();
+        if (ico == nullptr || mLastRenderTime < mLoadingOnTime)
+            return;
+
+        const auto hasPending = [ico] {
+            std::lock_guard<OpenThreads::Mutex> lock(*ico->getToCompiledMutex());
+            return !ico->getToCompile().empty();
+        };
+
+        constexpr double maxWaitMs = 4000.0;
+        const double start = mTimer.time_m();
+        while (hasPending() && mTimer.time_m() - start < maxWaitMs)
+        {
+            const double lastRender = mLastRenderTime;
+            draw(); // raises the compile budget for the frame, see draw()
+            if (mLastRenderTime == lastRender)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1)); // frame-rate limited, wait for the next
+        }
+    }
+
     void LoadingScreen::loadingOff()
     {
         if (--mNestedLoadingCount > 0)
             return;
+
+        finishPendingCompiles();
 
         if (mLastRenderTime < mLoadingOnTime)
         {
