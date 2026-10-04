@@ -12,6 +12,11 @@ namespace Resource
     class SceneManager;
 }
 
+namespace SceneUtil
+{
+    class OcclusionCuller;
+}
+
 namespace MWRender
 {
 
@@ -47,8 +52,18 @@ namespace MWRender
 
         void getPagedRefnums(const osg::Vec4i& activeGrid, std::vector<ESM::RefNum>& out);
 
+        /// OpenMGE XE: distant chunks created from now on build occluder meshes for their
+        /// buildings and are tested against the software occlusion buffer.
+        void setOcclusionCuller(SceneUtil::OcclusionCuller* culler, unsigned int maxTriangles)
+        {
+            mOcclusionCuller = culler;
+            mMaxTriangles = maxTriangles;
+        }
+
     private:
         Resource::SceneManager* mSceneManager;
+        SceneUtil::OcclusionCuller* mOcclusionCuller = nullptr;
+        unsigned int mMaxTriangles = 30000;
         bool mActiveGrid;
         bool mDebugBatches;
         float mMergeFactor;

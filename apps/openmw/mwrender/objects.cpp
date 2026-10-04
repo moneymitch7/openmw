@@ -2,6 +2,7 @@
 
 #include <osg/Group>
 
+#include <components/esm/defs.hpp>
 #include <components/misc/resourcehelpers.hpp>
 #include <components/misc/strings/algorithm.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
@@ -15,6 +16,7 @@
 #include "creatureanimation.hpp"
 #include "esm4npcanimation.hpp"
 #include "npcanimation.hpp"
+#include "occlusionculling.hpp"
 #include "vismask.hpp"
 
 namespace MWRender
@@ -48,6 +50,7 @@ namespace MWRender
         {
             cellnode = new osg::Group;
             cellnode->setName("Cell Root");
+            addOcclusionCallback(*cellnode);
             mRootNode->addChild(cellnode);
             mCellSceneNodes[ptr.getCell()] = cellnode;
         }
@@ -58,6 +61,9 @@ namespace MWRender
         cellnode->addChild(insert);
 
         SceneUtil::addUserData(*insert, ptr);
+
+        if (ptr.getType() == ESM::REC_DOOR || ptr.getType() == ESM::REC_DOOR4)
+            SceneUtil::addUserData(*insert, SkipOcclusion{});
 
         const float* f = ptr.getRefData().getPosition().pos;
 
@@ -208,6 +214,7 @@ namespace MWRender
         if (mCellSceneNodes.find(newCell) == mCellSceneNodes.end())
         {
             cellnode = new osg::Group;
+            addOcclusionCallback(*cellnode);
             mRootNode->addChild(cellnode);
             mCellSceneNodes[newCell] = cellnode;
         }
@@ -246,4 +253,28 @@ namespace MWRender
         return nullptr;
     }
 
+    void Objects::setOcclusionCuller(SceneUtil::OcclusionCuller* culler, float occluderMinRadius,
+        float occluderMaxRadius, float occluderShrinkFactor, int occluderMeshResolution, int occluderMaxMeshResolution,
+        float occluderInsideThreshold, float occluderMaxDistance, bool enableStaticOccluders, unsigned int maxTriangles)
+    {
+        mOcclusionCuller = culler;
+        mOccluderMinRadius = occluderMinRadius;
+        mOccluderMaxRadius = occluderMaxRadius;
+        mOccluderShrinkFactor = occluderShrinkFactor;
+        mOccluderMeshResolution = occluderMeshResolution;
+        mOccluderMaxMeshResolution = occluderMaxMeshResolution;
+        mOccluderInsideThreshold = occluderInsideThreshold;
+        mOccluderMaxDistance = occluderMaxDistance;
+        mEnableStaticOccluders = enableStaticOccluders;
+        mMaxTriangles = maxTriangles;
+    }
+
+    void Objects::addOcclusionCallback(osg::Group& cellNode)
+    {
+        if (mOcclusionCuller == nullptr)
+            return;
+        cellNode.addCullCallback(new CellOcclusionCallback(mOcclusionCuller, mOccluderMinRadius, mOccluderMaxRadius,
+            mOccluderShrinkFactor, mOccluderMeshResolution, mOccluderMaxMeshResolution, mOccluderInsideThreshold,
+            mOccluderMaxDistance, mEnableStaticOccluders, mMaxTriangles));
+    }
 }

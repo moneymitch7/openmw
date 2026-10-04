@@ -1,5 +1,6 @@
 #include "objectpaging.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -50,6 +51,7 @@
 #include "apps/openmw/mwclass/esm4base.hpp"
 #include "apps/openmw/mwworld/esmstore.hpp"
 
+#include "occlusionculling.hpp"
 #include "vismask.hpp"
 
 namespace MWRender
@@ -779,6 +781,16 @@ namespace MWRender
         std::vector<osg::ref_ptr<const osg::Node>> templateRefs;
         osgUtil::StateToCompile stateToCompile(0, nullptr);
         CopyOp copyop(activeGrid, copyMask);
+
+        // OpenMGE XE occlusion culling: simplified meshes of building-sized objects in distant
+        // chunks, rasterized as occluders by PagedOccluderCallback.
+        const bool buildOccluders = mOcclusionCuller != nullptr && !activeGrid
+            && Settings::camera().mOcclusionCulling && Settings::camera().mOcclusionCullingStatics;
+        PagedOccluders pagedOccluders;
+        const float occluderMinRadius = Settings::camera().mOcclusionOccluderMinRadius;
+        const int occluderMeshRes = Settings::camera().mOcclusionOccluderMeshResolution;
+        const int occluderMaxMeshRes = Settings::camera().mOcclusionOccluderMaxMeshResolution;
+        const float occluderShrinkFactor = Settings::camera().mOcclusionOccluderShrinkFactor;
         for (const auto& pair : nodes)
         {
             const osg::Node* cnode = pair.first;
@@ -841,6 +853,33 @@ namespace MWRender
                                           : osg::CopyOp::DEEP_COPY_NODES);
                 copyop.mDistances = lodDistances / ref.mScale;
                 copyop.copy(cnode, trans);
+
+                if (buildOccluders)
+                {
+                    const float scaledRadius = cnode->getBound().radius() * ref.mScale;
+                    if (scaledRadius >= occluderMinRadius)
+                    {
+                        // Scale grid resolution with object size so the grid cell size stays about
+                        // constant: large structures (Vivec cantons) keep openings like archways.
+                        int adaptiveRes = occluderMeshRes;
+                        if (scaledRadius > occluderMinRadius && occluderMinRadius > 0)
+                            adaptiveRes = std::clamp(
+                                static_cast<int>(occluderMeshRes * (scaledRadius / occluderMinRadius)),
+                                occluderMeshRes, occluderMaxMeshRes);
+                        OccluderMesh occMesh = buildSimplifiedMesh(trans, adaptiveRes, occluderShrinkFactor);
+                        if (!occMesh.indices.empty())
+                        {
+                            // chunk-relative to world space
+                            occMesh.aabb = osg::BoundingBox();
+                            for (osg::Vec3f& v : occMesh.vertices)
+                            {
+                                v += worldCenter;
+                                occMesh.aabb.expandBy(v);
+                            }
+                            pagedOccluders.mOccluderMeshes.push_back(std::move(occMesh));
+                        }
+                    }
+                }
 
                 if (activeGrid)
                 {
@@ -927,6 +966,17 @@ namespace MWRender
         }
         for (const auto& ref : templateRefs)
             SceneUtil::addTemplateRef(*group, ref.get());
+
+        // Every distant chunk gets the occlusion callback: the whole-chunk visibility test needs
+        // no occluder data, so even building-less chunks are skipped when fully hidden. Active
+        // grid chunks are left alone (the camera is inside them).
+        if (mOcclusionCuller != nullptr && !activeGrid)
+        {
+            if (!pagedOccluders.mOccluderMeshes.empty())
+                SceneUtil::addUserData(*group, std::move(pagedOccluders));
+            group->addCullCallback(new PagedOccluderCallback(
+                mOcclusionCuller, Settings::camera().mOcclusionOccluderMaxDistance, mMaxTriangles));
+        }
 
         return group;
     }

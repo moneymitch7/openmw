@@ -188,6 +188,9 @@ endif()
 
 add_subdirectory(smhasher)
 
+# Intel Masked Software Occlusion Culling (OpenMGE XE occlusion culling)
+add_subdirectory(maskedoc)
+
 if (BUILD_BENCHMARKS AND NOT OPENMW_USE_SYSTEM_BENCHMARK)
 
     set(BENCHMARK_ENABLE_TESTING OFF)

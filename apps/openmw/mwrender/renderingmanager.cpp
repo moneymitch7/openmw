@@ -32,6 +32,7 @@
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
 #include <components/sceneutil/lightmanager.hpp>
+#include <components/sceneutil/occlusionculling.hpp>
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/sceneutil/rtt.hpp>
@@ -47,6 +48,7 @@
 
 #include <components/terrain/quadtreeworld.hpp>
 #include <components/terrain/terraingrid.hpp>
+#include <components/terrain/terrainoccluder.hpp>
 
 #include <components/esm3/loadcell.hpp>
 #include <components/esm4/loadcell.hpp>
@@ -76,6 +78,7 @@
 #include "navmesh.hpp"
 #include "npcanimation.hpp"
 #include "objectpaging.hpp"
+#include "occlusionculling.hpp"
 #include "pathgrid.hpp"
 #include "postprocessor.hpp"
 #include "recastmesh.hpp"
@@ -320,6 +323,39 @@ namespace MWRender
         mGroundcover = chunkMgr.mGroundcover.get();
         mObjectPaging = chunkMgr.mObjectPaging.get();
 
+        // OpenMGE XE: software occlusion culling. Terrain (and building occluders from paged
+        // chunks and cells) are rasterized into a small CPU depth buffer during the main
+        // camera's cull; objects fully behind it are skipped before they reach the GPU.
+        if (Settings::camera().mOcclusionCulling)
+        {
+            const int bufW = Settings::camera().mOcclusionBufferWidth;
+            const int bufH = Settings::camera().mOcclusionBufferHeight;
+            mOcclusionCuller = new SceneUtil::OcclusionCuller(bufW, bufH);
+            mOcclusionCuller->setTestMargin(Settings::camera().mOcclusionTestMargin);
+
+            mTerrainOccluder
+                = std::make_unique<Terrain::TerrainOccluder>(mTerrainStorage.get(), Constants::CellSizeInUnits);
+            mTerrainOccluder->setWorldspace(ESM::Cell::sDefaultWorldspaceId);
+            mTerrainOccluder->setLodLevel(Settings::camera().mOcclusionTerrainLod);
+
+            const unsigned int maxTriangles = static_cast<unsigned int>(Settings::camera().mOcclusionMaxTriangles);
+            mSceneOcclusionCallback = new SceneOcclusionCallback(mOcclusionCuller, mTerrainOccluder.get(),
+                Settings::camera().mOcclusionTerrainRadius, Settings::camera().mOcclusionCullingTerrain,
+                Settings::camera().mOcclusionDebugOverlay, Settings::camera().mOcclusionDebugMessages,
+                Settings::camera().mOcclusionCullingInteriors);
+            sceneRoot->addCullCallback(mSceneOcclusionCallback);
+
+            mObjects->setOcclusionCuller(mOcclusionCuller, Settings::camera().mOcclusionOccluderMinRadius,
+                Settings::camera().mOcclusionOccluderMaxRadius, Settings::camera().mOcclusionOccluderShrinkFactor,
+                Settings::camera().mOcclusionOccluderMeshResolution,
+                Settings::camera().mOcclusionOccluderMaxMeshResolution,
+                Settings::camera().mOcclusionOccluderInsideThreshold,
+                Settings::camera().mOcclusionOccluderMaxDistance, Settings::camera().mOcclusionCullingStatics,
+                maxTriangles);
+            if (mObjectPaging)
+                mObjectPaging->setOcclusionCuller(mOcclusionCuller, maxTriangles);
+        }
+
         mStateUpdater = new SceneUtil::StateUpdater();
         sceneRoot->addUpdateCallback(mStateUpdater);
 
@@ -474,6 +510,10 @@ namespace MWRender
     {
         // let background loading thread finish before we delete anything else
         mWorkQueue = nullptr;
+
+        // the callback points at mTerrainOccluder, which is destroyed with us
+        if (mSceneOcclusionCallback)
+            mSceneRoot->removeCullCallback(mSceneOcclusionCallback);
     }
 
     osgUtil::IncrementalCompileOperation* RenderingManager::getIncrementalCompileOperation()
@@ -677,6 +717,17 @@ namespace MWRender
             enableTerrain(true, store->getCell()->getWorldSpace());
             mTerrain->loadCell(store->getCell()->getGridX(), store->getCell()->getGridY());
         }
+
+        if (mSceneOcclusionCallback)
+        {
+            const MWWorld::Cell& cell = *store->getCell();
+            const bool isInterior = !cell.isExterior() && !cell.isQuasiExterior();
+            // The terrain occluder only knows the default (Morrowind) worldspace; anywhere else
+            // it must not rasterize that worldspace's terrain, so treat it like a quasi-exterior.
+            const bool noTerrainOccluder
+                = cell.isQuasiExterior() || (cell.isExterior() && cell.getWorldSpace() != ESM::Cell::sDefaultWorldspaceId);
+            mSceneOcclusionCallback->setCellType(isInterior, noTerrainOccluder);
+        }
     }
     void RenderingManager::removeCell(const MWWorld::CellStore* store)
     {
@@ -706,6 +757,9 @@ namespace MWRender
                 mTerrain = newChunks.mTerrain.get();
                 mGroundcover = newChunks.mGroundcover.get();
                 mObjectPaging = newChunks.mObjectPaging.get();
+                if (mOcclusionCuller && mObjectPaging)
+                    mObjectPaging->setOcclusionCuller(
+                        mOcclusionCuller, static_cast<unsigned int>(Settings::camera().mOcclusionMaxTriangles));
             }
         }
         mTerrain->enable(enable);
