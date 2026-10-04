@@ -85,6 +85,7 @@ namespace Shader
             OpaqueColorTexture,
             SkyTexture,
             ShadowMaps,
+            MgeWeather, // OpenMGE XE once-per-frame weather verdict
             SLOT_COUNT
         };
 

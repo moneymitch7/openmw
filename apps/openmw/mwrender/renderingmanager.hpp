@@ -104,6 +104,7 @@ namespace MWRender
     class TerrainStorage;
     class LandManager;
     class SceneOcclusionCallback;
+    class MgeWeatherPass;
     class NavMesh;
     class ActorsPaths;
     class RecastMesh;
@@ -361,6 +362,7 @@ namespace MWRender
         std::unique_ptr<SceneUtil::ShadowManager> mShadowManager;
         osg::ref_ptr<SceneUtil::OcclusionCuller> mOcclusionCuller;
         osg::ref_ptr<SceneOcclusionCallback> mSceneOcclusionCallback;
+        osg::ref_ptr<MgeWeatherPass> mMgeWeatherPass;
         std::unique_ptr<Terrain::TerrainOccluder> mTerrainOccluder;
         osg::ref_ptr<PostProcessor> mPostProcessor;
         osg::ref_ptr<NpcAnimation> mPlayerAnimation;

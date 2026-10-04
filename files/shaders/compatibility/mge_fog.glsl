@@ -237,6 +237,14 @@ uniform vec2 mgeFogRange;
 #ifndef MGE_WX_STAGE
 #define MGE_WX_STAGE 1
 #endif
+// Once-per-frame verdict (OpenMGE XE port): the model is frame-constant, so
+// the engine runs it once per frame in a tiny pass (MGE_WX_PASS, see
+// mge_weather.frag) into an 8x2 float texture - row 0 the scene flavour,
+// row 1 water's full-core flavour - and the consumer vertex stages read that
+// texture (MGE_WX_VERTEX + MGE_WX_STAGE 0) instead of compiling the model.
+// Same expressions, same uniforms, computed once instead of per vertex; the
+// vertex programs shrink back to about stock size.
+#ifndef MGE_WX_PASS
 // The verdict varyings (written by mgeWxEmitVaryings in the vertex stage,
 // read by the MGE_WX_STAGE 0 readers; inert in compute-mode fragments).
 varying vec4 mgeWxVSky;   // xyz mgeSampleSkyCol(), w mgeGetNiceWeather()
@@ -247,6 +255,7 @@ varying vec4 mgeWxVEnv;   // xy fffoA, zw fffoB (mgeDecomposeWeather)
 varying vec4 mgeWxVRev;   // xyz corridor-reveal fog base, w nice-nice wxt gate (198)
 varying vec4 mgeWxVScatO; // xyz recovered outscatter, w recovery weight (225)
 varying vec4 mgeWxVScatI; // xyz recovered inscatter, w unused
+#endif // !MGE_WX_PASS
 
 #if MGE_WX_STAGE
 // ==== MGG phase-segment sky classifier (stock exes) ====
@@ -2475,6 +2484,7 @@ float mgeWxtNiceGate()
 // consumer .vert main(); packs every frame-constant product the fragment
 // consumers read. All values identical to the pre-hoist per-fragment
 // computation (same expressions, same per-pass uniforms).
+#ifndef MGE_WX_PASS
 void mgeWxEmitVaryings()
 {
     mgeWxCompute();
@@ -2493,6 +2503,36 @@ void mgeWxEmitVaryings()
     mgeWxVScatO = vec4(wxG_scatOut, wxG_scatW);
     mgeWxVScatI = vec4(wxG_scatIn, 0.0);
 }
+#else
+// Pass flavour of mgeWxEmitVaryings: the same products in the same order,
+// texel i of the verdict row (the MGE_WX_TEXEL_* order below).
+vec4 mgeWxVerdict(int texel)
+{
+    mgeWxCompute();
+    int wxi; int wxj; float wxa; float wxh;
+    float wxc = mgeDecomposeIdx(wxi, wxj, wxa, wxh);
+    vec4 vIdx = vec4(wxc, wxa, wxh, float(wxi) * 10.0 + float(wxj));
+    vec3 sb; float nb;
+    mgeDecomposeSkyNice(sb, nb);
+    vec4 vDec = vec4(sb, nb);
+    vec2 eA; vec2 eB; float ea;
+    mgeDecomposeWeather(eA, eB, ea);
+    vec4 vEnv = vec4(eA, eB);
+    vec4 vFog = mgeGetFogParams();
+    vec4 vSky = vec4(mgeSampleSkyCol(), mgeGetNiceWeather());
+    vec4 vRev = vec4(mgeRevealFogBase(), mgeWxtNiceGate());
+    vec4 vScatO = vec4(wxG_scatOut, wxG_scatW);
+    vec4 vScatI = vec4(wxG_scatIn, 0.0);
+    if (texel == 0) return vSky;
+    if (texel == 1) return vFog;
+    if (texel == 2) return vIdx;
+    if (texel == 3) return vDec;
+    if (texel == 4) return vEnv;
+    if (texel == 5) return vRev;
+    if (texel == 6) return vScatO;
+    return vScatI;
+}
+#endif // MGE_WX_PASS
 
 // Scatter triplet accessor, stage flavor: preset/uniform baseline plus
 // the recovered daily roll at the corridor weight. one site so wall,
@@ -2503,6 +2543,31 @@ void mgeScatterTriplets(out vec3 sOut, out vec3 sIn)
     sIn = (mgeScatterUniformsOn > 0.5) ? mgeInscatterU : mgeInscatter;
 }
 #else // !MGE_WX_STAGE: fragment-decode readers (scene verdict hoist)
+#ifdef MGE_WX_VERTEX
+// Consumer vertex stage: ships the once-per-frame verdict (see the top of
+// this file) through the same varyings the fragment readers decode. Row 0
+// is the scene flavour, row 1 water's full core (MGE_WX_ROW 1).
+#ifndef MGE_WX_ROW
+#define MGE_WX_ROW 0
+#endif
+uniform sampler2D mgeWxTex;
+vec4 mgeWxTexel(float texel)
+{
+    // texture2D in a vertex stage reads the base level (GLSL 1.20); the texture has no mips.
+    return texture2D(mgeWxTex, vec2((texel + 0.5) / 8.0, (float(MGE_WX_ROW) + 0.5) / 2.0));
+}
+void mgeWxEmitVaryings()
+{
+    mgeWxVSky = mgeWxTexel(0.0);
+    mgeWxVFog = mgeWxTexel(1.0);
+    mgeWxVIdx = mgeWxTexel(2.0);
+    mgeWxVDec = mgeWxTexel(3.0);
+    mgeWxVEnv = mgeWxTexel(4.0);
+    mgeWxVRev = mgeWxTexel(5.0);
+    mgeWxVScatO = mgeWxTexel(6.0);
+    mgeWxVScatI = mgeWxTexel(7.0);
+}
+#endif // MGE_WX_VERTEX
 // The est model is not compiled in this unit. Every reader returns the
 // verdict emitted by the paired vertex stage; interfaces and call sites
 // are unchanged, so consumer code is identical in both modes.
@@ -2544,6 +2609,10 @@ void mgeScatterTriplets(out vec3 sOut, out vec3 sIn)
     sIn = (mgeScatterUniformsOn > 0.5) ? mgeInscatterU : mgeInscatter;
 }
 #endif // MGE_WX_STAGE
+
+// The rest of this file is the fragment-side fog and scattering; consumer
+// vertex stages (MGE_WX_VERTEX) only ship the verdict and skip it.
+#ifndef MGE_WX_VERTEX
 
 // Weather-transition endpoint policy (the uniforms are declared in the
 // top block): the fog ranges below contain knee-shaped terms (dense
@@ -3516,4 +3585,5 @@ float mgeSkyDither(vec2 fragCoord)
     int i = int(mod(fragCoord.x, 4.0)) * 4 + int(mod(fragCoord.y, 4.0));
     return d[i];
 }
+#endif // !MGE_WX_VERTEX
 #endif

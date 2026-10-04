@@ -46,6 +46,8 @@ set(SHADER_FILES
     compatibility/ripples_simulate.frag
     compatibility/fog.glsl
     compatibility/mge_fog.glsl
+    compatibility/mge_weather.vert
+    compatibility/mge_weather.frag
     compatibility/groundcover.vert
     compatibility/groundcover.frag
     compatibility/globalmap.vert

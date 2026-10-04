@@ -42,6 +42,10 @@ varying vec3 passViewPos;
 #include "lib/view/depth.glsl"
 
 // osg_ViewMatrixInverse and playerPos itself (do not redeclare below).
+// OpenMGE XE: the weather verdict comes from the once-per-frame pass texture
+// (see the top of mge_fog.glsl); the model itself is not compiled here.
+#define MGE_WX_STAGE 0
+#define MGE_WX_VERTEX 1
 #include "mge_fog.glsl"
 
 uniform float osg_SimulationTime;

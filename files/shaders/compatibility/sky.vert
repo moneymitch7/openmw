@@ -5,6 +5,10 @@
 #include "lib/sky/passes.glsl"
 
 // (same pair as sky.frag).
+// OpenMGE XE: the weather verdict comes from the once-per-frame pass texture
+// (see the top of mge_fog.glsl); the model itself is not compiled here.
+#define MGE_WX_STAGE 0
+#define MGE_WX_VERTEX 1
 #include "mge_fog.glsl"
 
 uniform int pass;

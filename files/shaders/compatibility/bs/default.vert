@@ -38,6 +38,10 @@ varying vec3 passNormal;
 
 // OpenMGE XE lighting: weather verdict computed per vertex, decoded by
 // bs/default.frag (MGE_WX_STAGE 0).
+// OpenMGE XE: the weather verdict comes from the once-per-frame pass texture
+// (see the top of mge_fog.glsl); the model itself is not compiled here.
+#define MGE_WX_STAGE 0
+#define MGE_WX_VERTEX 1
 #include "compatibility/mge_fog.glsl"
 
 centroid varying vec4 passColor;

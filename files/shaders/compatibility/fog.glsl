@@ -239,7 +239,10 @@ void computeFog(vec3 pos, float euclideanDist, float linearDist, float near, flo
     // transmittance * scene + inscatter, the inscatter coloured by
     // atmospheric scattering in nice weather (mgeFogColour, radial distance).
     // Underwater views, and draws with a fixed fog depth, keep the stock path.
-    if (!cameraBelowWater && fog.depth < 0.0 && length(pos) > 0.0)
+    // So do scenes outside the main scene root (the inventory character preview
+    // disables fog with fog.depth = -1 too): they have neither the weather
+    // uniforms nor the once-per-frame verdict texture (mgeWeatherUniforms = 0).
+    if (!cameraBelowWater && fog.depth < 0.0 && length(pos) > 0.0 && mgeWeatherUniforms > 0.5)
     {
         vec3 dirWorld = normalize((osg_ViewMatrixInverse * vec4(normalize(pos), 0.0)).xyz);
         vec4 f = mgeFogColour(pos, far, mgeSampleSkyCol(), mgeSkyBehind(dirWorld));

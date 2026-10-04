@@ -83,6 +83,10 @@ varying vec4 passTangent;
 // camera-turn hitches (permutation compile storms of the huge vertex
 // body - the 95/97 class relocated to the vertex stage). The lite tier
 // below is the measured scene ceiling; v5 stays water + post only.
+// OpenMGE XE: the weather verdict comes from the once-per-frame pass texture
+// (see the top of mge_fog.glsl); the model itself is not compiled here.
+#define MGE_WX_STAGE 0
+#define MGE_WX_VERTEX 1
 #include "mge_fog.glsl"
 
 #if @particleOcclusion

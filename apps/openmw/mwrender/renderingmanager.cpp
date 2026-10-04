@@ -77,6 +77,7 @@
 #include "groundcover.hpp"
 #include "navmesh.hpp"
 #include "npcanimation.hpp"
+#include "mgeweatherpass.hpp"
 #include "objectpaging.hpp"
 #include "occlusionculling.hpp"
 #include "pathgrid.hpp"
@@ -464,6 +465,19 @@ namespace MWRender
             int skyTextureUnit = mResourceSystem->getSceneManager()->getShaderManager().reserveGlobalTextureUnits(
                 Shader::ShaderManager::Slot::SkyTexture);
             mPerViewUniformStateUpdater->enableSkyRTT(skyTextureUnit, mSky->getSkyRTT());
+        }
+
+        // OpenMGE XE: the MGE weather model runs once per frame into a small texture that the scene's vertex
+        // shaders read (see mgeweatherpass.hpp). Under the scene root, so it sees the same sun, fog and weather
+        // uniforms as the main view; the texture is bound for everything under the root node.
+        {
+            Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
+            const int mgeWxUnit = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::MgeWeather);
+            mMgeWeatherPass = new MgeWeatherPass(shaderManager, mgeWxUnit);
+            sceneRoot->addChild(mMgeWeatherPass);
+            osg::StateSet* rootStateSet = mRootNode->getOrCreateStateSet();
+            rootStateSet->setTextureAttribute(mgeWxUnit, mMgeWeatherPass->getTexture(), osg::StateAttribute::ON);
+            rootStateSet->addUniform(new osg::Uniform("mgeWxTex", mgeWxUnit));
         }
 
         osg::Camera::CullingMode cullingMode = osg::Camera::DEFAULT_CULLING | osg::Camera::FAR_PLANE_CULLING;
