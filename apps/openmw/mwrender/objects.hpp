@@ -31,6 +31,11 @@ namespace SceneUtil
 
 namespace MWRender
 {
+    class OccluderRegistry;
+}
+
+namespace MWRender
+{
 
     class Animation;
 
@@ -73,7 +78,7 @@ namespace MWRender
         void setOcclusionCuller(SceneUtil::OcclusionCuller* culler, float occluderMinRadius, float occluderMaxRadius,
             float occluderShrinkFactor, int occluderMeshResolution, int occluderMaxMeshResolution,
             float occluderInsideThreshold, float occluderMaxDistance, bool enableStaticOccluders,
-            unsigned int maxTriangles);
+            unsigned int maxTriangles, OccluderRegistry* registry);
 
     private:
         void addOcclusionCallback(osg::Group& cellNode);
@@ -88,6 +93,7 @@ namespace MWRender
         float mOccluderMaxDistance = 6144.0f;
         bool mEnableStaticOccluders = true;
         unsigned int mMaxTriangles = 30000;
+        OccluderRegistry* mOccluderRegistry = nullptr; // owned by the RenderingManager
 
         void operator=(const Objects&);
         Objects(const Objects&);

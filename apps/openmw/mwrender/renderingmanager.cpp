@@ -1,5 +1,5 @@
-#include <cmath>
 #include "renderingmanager.hpp"
+#include <cmath>
 
 #include <cstdlib>
 
@@ -32,8 +32,8 @@
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
 #include <components/sceneutil/lightmanager.hpp>
-#include <components/sceneutil/occlusionculling.hpp>
 #include <components/sceneutil/material.hpp>
+#include <components/sceneutil/occlusionculling.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/sceneutil/rtt.hpp>
 #include <components/sceneutil/shadow.hpp>
@@ -75,9 +75,9 @@
 #include "effectmanager.hpp"
 #include "fogmanager.hpp"
 #include "groundcover.hpp"
+#include "mgeweatherpass.hpp"
 #include "navmesh.hpp"
 #include "npcanimation.hpp"
-#include "mgeweatherpass.hpp"
 #include "objectpaging.hpp"
 #include "occlusionculling.hpp"
 #include "pathgrid.hpp"
@@ -340,21 +340,27 @@ namespace MWRender
             mTerrainOccluder->setLodLevel(Settings::camera().mOcclusionTerrainLod);
 
             const unsigned int maxTriangles = static_cast<unsigned int>(Settings::camera().mOcclusionMaxTriangles);
+            OccluderRules occluderRules;
+            const float occluderMaxDistance = Settings::camera().mOcclusionOccluderMaxDistance;
+            occluderRules.mMaxDistanceSq = occluderMaxDistance * occluderMaxDistance;
+            occluderRules.mInsideThreshold = Settings::camera().mOcclusionOccluderInsideThreshold;
+            occluderRules.mMaxTriangles = maxTriangles;
+            mOccluderRegistry = new OccluderRegistry;
             mSceneOcclusionCallback = new SceneOcclusionCallback(mOcclusionCuller, mTerrainOccluder.get(),
                 Settings::camera().mOcclusionTerrainRadius, Settings::camera().mOcclusionCullingTerrain,
                 Settings::camera().mOcclusionDebugOverlay, Settings::camera().mOcclusionDebugMessages,
-                Settings::camera().mOcclusionCullingInteriors);
+                Settings::camera().mOcclusionCullingInteriors, mOccluderRegistry, occluderRules,
+                Settings::camera().mOcclusionCullingStatics);
             sceneRoot->addCullCallback(mSceneOcclusionCallback);
 
             mObjects->setOcclusionCuller(mOcclusionCuller, Settings::camera().mOcclusionOccluderMinRadius,
                 Settings::camera().mOcclusionOccluderMaxRadius, Settings::camera().mOcclusionOccluderShrinkFactor,
                 Settings::camera().mOcclusionOccluderMeshResolution,
                 Settings::camera().mOcclusionOccluderMaxMeshResolution,
-                Settings::camera().mOcclusionOccluderInsideThreshold,
-                Settings::camera().mOcclusionOccluderMaxDistance, Settings::camera().mOcclusionCullingStatics,
-                maxTriangles);
+                Settings::camera().mOcclusionOccluderInsideThreshold, Settings::camera().mOcclusionOccluderMaxDistance,
+                Settings::camera().mOcclusionCullingStatics, maxTriangles, mOccluderRegistry);
             if (mObjectPaging)
-                mObjectPaging->setOcclusionCuller(mOcclusionCuller, maxTriangles);
+                mObjectPaging->setOcclusionCuller(mOcclusionCuller, mOccluderRegistry, maxTriangles);
         }
 
         mStateUpdater = new SceneUtil::StateUpdater();
@@ -746,8 +752,8 @@ namespace MWRender
             const bool isInterior = !cell.isExterior() && !cell.isQuasiExterior();
             // The terrain occluder only knows the default (Morrowind) worldspace; anywhere else
             // it must not rasterize that worldspace's terrain, so treat it like a quasi-exterior.
-            const bool noTerrainOccluder
-                = cell.isQuasiExterior() || (cell.isExterior() && cell.getWorldSpace() != ESM::Cell::sDefaultWorldspaceId);
+            const bool noTerrainOccluder = cell.isQuasiExterior()
+                || (cell.isExterior() && cell.getWorldSpace() != ESM::Cell::sDefaultWorldspaceId);
             mSceneOcclusionCallback->setCellType(isInterior, noTerrainOccluder);
         }
     }
@@ -780,8 +786,8 @@ namespace MWRender
                 mGroundcover = newChunks.mGroundcover.get();
                 mObjectPaging = newChunks.mObjectPaging.get();
                 if (mOcclusionCuller && mObjectPaging)
-                    mObjectPaging->setOcclusionCuller(
-                        mOcclusionCuller, static_cast<unsigned int>(Settings::camera().mOcclusionMaxTriangles));
+                    mObjectPaging->setOcclusionCuller(mOcclusionCuller, mOccluderRegistry,
+                        static_cast<unsigned int>(Settings::camera().mOcclusionMaxTriangles));
             }
         }
         mTerrain->enable(enable);
@@ -1484,6 +1490,13 @@ namespace MWRender
         if (stats->collectStats("resource"))
         {
             mTerrain->reportStats(frameNumber, stats);
+            // OpenMGE XE: the main view's software occlusion (counts of the most recent occlusion frame)
+            if (mOcclusionCuller)
+            {
+                stats->setAttribute(frameNumber, "Occlusion Tested", mOcclusionCuller->getNumTested());
+                stats->setAttribute(frameNumber, "Occlusion Culled", mOcclusionCuller->getNumOccluded());
+                stats->setAttribute(frameNumber, "Occluder Meshes", mOcclusionCuller->getNumBuildingOccluders());
+            }
         }
     }
 

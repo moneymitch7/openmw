@@ -61,6 +61,7 @@ namespace Settings
         SettingValue<bool> mOcclusionCullingInteriors{ mIndex, "Camera", "occlusion culling interiors" };
         SettingValue<int> mOcclusionMaxTriangles{ mIndex, "Camera", "occlusion max triangles",
             makeClampSanitizerInt(0, 500000) };
+        SettingValue<bool> mOcclusionActiveGridOccluders{ mIndex, "Camera", "occlusion active grid occluders" };
     };
 }
 

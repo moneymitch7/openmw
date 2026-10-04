@@ -19,6 +19,7 @@ namespace SceneUtil
 
 namespace MWRender
 {
+    class OccluderRegistry;
 
     typedef std::tuple<osg::Vec2f, float, bool> ChunkId; // Center, Size, ActiveGrid
 
@@ -52,17 +53,21 @@ namespace MWRender
 
         void getPagedRefnums(const osg::Vec4i& activeGrid, std::vector<ESM::RefNum>& out);
 
-        /// OpenMGE XE: distant chunks created from now on build occluder meshes for their
-        /// buildings and are tested against the software occlusion buffer.
-        void setOcclusionCuller(SceneUtil::OcclusionCuller* culler, unsigned int maxTriangles)
+        /// OpenMGE XE: chunks created from now on build occluder meshes for their buildings and are tested against
+        /// the software occlusion buffer (the registry, owned by the RenderingManager, feeds the nearest-first
+        /// occluder pre-pass).
+        void setOcclusionCuller(
+            SceneUtil::OcclusionCuller* culler, OccluderRegistry* registry, unsigned int maxTriangles)
         {
             mOcclusionCuller = culler;
+            mOccluderRegistry = registry;
             mMaxTriangles = maxTriangles;
         }
 
     private:
         Resource::SceneManager* mSceneManager;
         SceneUtil::OcclusionCuller* mOcclusionCuller = nullptr;
+        OccluderRegistry* mOccluderRegistry = nullptr;
         unsigned int mMaxTriangles = 30000;
         bool mActiveGrid;
         bool mDebugBatches;

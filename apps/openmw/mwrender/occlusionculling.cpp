@@ -245,11 +245,117 @@ namespace MWRender
         return mesh;
     }
 
+    bool rasterizeOccluderMesh(
+        SceneUtil::OcclusionCuller& culler, const OccluderMesh& mesh, const osg::Vec3f& eye, const OccluderRules& rules)
+    {
+        if (mesh.indices.empty() || !mesh.aabb.valid())
+            return false;
+
+        // Distant buildings cover few pixels; terrain handles far-distance occlusion.
+        const osg::Vec3f center = mesh.aabb.center();
+        if ((center - eye).length2() > rules.mMaxDistanceSq)
+            return false;
+
+        // Don't rasterize when the eye is inside the (scaled) AABB: it would fill the entire buffer.
+        const osg::Vec3f halfExtent
+            = (osg::Vec3f(mesh.aabb.xMax(), mesh.aabb.yMax(), mesh.aabb.zMax()) - center) * rules.mInsideThreshold;
+        osg::BoundingBox scaledBB;
+        scaledBB.expandBy(center - halfExtent);
+        scaledBB.expandBy(center + halfExtent);
+        if (scaledBB.contains(eye))
+            return false;
+
+        const unsigned int newTris = static_cast<unsigned int>(mesh.indices.size() / 3);
+        if (rules.mMaxTriangles > 0 && culler.getNumBuildingTris() + newTris > rules.mMaxTriangles)
+            return false;
+
+        culler.rasterizeOccluder(mesh.vertices, mesh.indices);
+        culler.incrementBuildingOccluders(newTris, static_cast<unsigned int>(mesh.vertices.size()));
+        return true;
+    }
+
+    void OccluderRegistry::noteCell(CellOcclusionCallback* callback)
+    {
+        mNextCells.emplace_back(callback);
+    }
+
+    void OccluderRegistry::noteChunk(osg::Node* chunk)
+    {
+        mNextChunks.emplace_back(chunk);
+    }
+
+    namespace
+    {
+        /// Whether node is (still) in the scene graph below root.
+        bool isUnder(const osg::Node* node, const osg::Node* root, int depth = 0)
+        {
+            if (node == root)
+                return true;
+            if (depth > 32)
+                return false;
+            for (const osg::Group* parent : node->getParents())
+                if (isUnder(parent, root, depth + 1))
+                    return true;
+            return false;
+        }
+    }
+
+    void OccluderRegistry::rasterizeNearestFirst(SceneUtil::OcclusionCuller& culler, const osg::Vec3f& eye,
+        const OccluderRules& rules, const osg::Node* sceneRoot)
+    {
+        // Last frame's sources become this frame's pre-pass input; this frame's start empty.
+        mCells.swap(mNextCells);
+        mChunks.swap(mNextChunks);
+        mNextCells.clear();
+        mNextChunks.clear();
+        mRasterized.clear();
+        mCandidates.clear();
+
+        for (const auto& weakCell : mCells)
+        {
+            osg::ref_ptr<CellOcclusionCallback> cell;
+            if (weakCell.lock(cell) && cell->getCellNode() != nullptr && isUnder(cell->getCellNode(), sceneRoot))
+                cell->collectOccluders(eye, mCandidates);
+        }
+        for (const auto& weakChunk : mChunks)
+        {
+            // Paged chunks have no scene-graph parent (the terrain's QuadTreeWorld traverses their nodes by hand),
+            // so "drawn last frame" is the test. Their contents only change when the paging rebuilds them (a paged
+            // static disabled by a script), which the next view picks up anyway.
+            osg::ref_ptr<osg::Node> chunk;
+            if (!weakChunk.lock(chunk))
+                continue;
+            // Chunk occluder meshes are stored in world space.
+            if (const PagedOccluders* pod = SceneUtil::findUserData<PagedOccluders>(*chunk))
+                for (const OccluderMesh& mesh : pod->mOccluderMeshes)
+                    if (!mesh.indices.empty() && mesh.aabb.valid())
+                        mCandidates.push_back({ &mesh, (mesh.aabb.center() - eye).length2() });
+        }
+
+        std::sort(mCandidates.begin(), mCandidates.end(),
+            [](const Candidate& a, const Candidate& b) { return a.mDistanceSq < b.mDistanceSq; });
+
+        for (const Candidate& candidate : mCandidates)
+        {
+            if (candidate.mDistanceSq > rules.mMaxDistanceSq)
+                break; // sorted: everything after is farther
+            // A mesh shared by two sources (e.g. the same chunk listed twice) is drawn once.
+            if (mRasterized.count(candidate.mMesh) != 0)
+                continue;
+            if (rasterizeOccluderMesh(culler, *candidate.mMesh, eye, rules))
+                mRasterized.insert(candidate.mMesh);
+        }
+    }
+
     SceneOcclusionCallback::SceneOcclusionCallback(SceneUtil::OcclusionCuller* culler,
         Terrain::TerrainOccluder* occluder, int radiusCells, bool enableTerrainOccluder, bool enableDebugOverlay,
-        bool enableDebugMessages, bool enableInteriors)
+        bool enableDebugMessages, bool enableInteriors, OccluderRegistry* registry, const OccluderRules& rules,
+        bool enableStaticOccluders)
         : mCuller(culler)
         , mTerrainOccluder(occluder)
+        , mRegistry(registry)
+        , mRules(rules)
+        , mEnableStaticOccluders(enableStaticOccluders)
         , mRadiusCells(radiusCells)
         , mEnableTerrainOccluder(enableTerrainOccluder)
         , mEnableDebugOverlay(enableDebugOverlay)
@@ -386,6 +492,10 @@ namespace MWRender
                 mCuller->rasterizeOccluder(mPositions, mIndices);
         }
 
+        // Buildings the main view drew last frame, nearest first, before any visibility test.
+        if (mRegistry && mEnableStaticOccluders)
+            mRegistry->rasterizeNearestFirst(*mCuller, cv->getEyePoint(), mRules, node);
+
         // Continue normal cull traversal, CellOcclusionCallbacks will test against the buffer
         traverse(node, cv);
 
@@ -421,11 +531,12 @@ namespace MWRender
         }
     }
 
-    PagedOccluderCallback::PagedOccluderCallback(
-        SceneUtil::OcclusionCuller* culler, float maxDistance, unsigned int maxTriangles)
+    PagedOccluderCallback::PagedOccluderCallback(SceneUtil::OcclusionCuller* culler, OccluderRegistry* registry,
+        const OccluderRules& rules, const osg::BoundingBox& localBounds)
         : mCuller(culler)
-        , mMaxDistanceSq(maxDistance * maxDistance)
-        , mMaxTriangles(maxTriangles)
+        , mRegistry(registry)
+        , mRules(rules)
+        , mLocalBounds(localBounds)
     {
     }
 
@@ -437,45 +548,49 @@ namespace MWRender
             return;
         }
 
-        // Transform chunk bounding sphere from local to world space.
-        // The chunk sits under a PAT, so node->getBound() is in chunk-local space.
-        const osg::BoundingSphere& bs = node->getBound();
-        if (bs.valid())
+        // The chunk sits under a PAT, so its bounds are in chunk-local space.
+        osg::Matrixd viewInverse;
+        viewInverse.invert(cv->getCurrentCamera()->getViewMatrix());
+        const osg::Matrixd modelToWorld = *cv->getModelViewMatrix() * viewInverse;
+
+        osg::BoundingBox worldBB;
+        if (mLocalBounds.valid())
         {
-            osg::Matrixd viewInverse;
-            viewInverse.invert(cv->getCurrentCamera()->getViewMatrix());
-            const osg::Matrixd modelToWorld = *cv->getModelViewMatrix() * viewInverse;
-            const osg::Vec3f worldCenter = bs.center() * modelToWorld;
-            const float r = bs.radius();
+            // Tight bounds of the chunk's contents: much smaller than the box around the bounding sphere for the
+            // flat, wide chunks of a town, so far more of them can be found fully hidden.
+            for (unsigned int i = 0; i < 8; ++i)
+                worldBB.expandBy(mLocalBounds.corner(i) * modelToWorld);
+        }
+        else
+        {
+            const osg::BoundingSphere& bs = node->getBound();
+            if (bs.valid())
+            {
+                const osg::Vec3f worldCenter = bs.center() * modelToWorld;
+                const float r = bs.radius();
+                worldBB = osg::BoundingBox(worldCenter - osg::Vec3f(r, r, r), worldCenter + osg::Vec3f(r, r, r));
+            }
+        }
 
-            osg::BoundingBox worldBB(worldCenter.x() - r, worldCenter.y() - r, worldCenter.z() - r, worldCenter.x() + r,
-                worldCenter.y() + r, worldCenter.z() + r);
-
-            // If entire chunk is occluded, skip rasterization and traversal
+        if (worldBB.valid())
+        {
+            // Entire chunk hidden: skip rasterization and traversal. (With the eye inside the box the test always
+            // passes, so the chunk around the camera is never skipped.)
             if (!mCuller->testVisibleAABB(worldBB))
                 return;
 
-            // Rasterize nearby building occluder meshes for visible chunks
-            const osg::Vec3f eyeWorld(viewInverse(3, 0), viewInverse(3, 1), viewInverse(3, 2));
-
             if (const PagedOccluders* pod = SceneUtil::findUserData<PagedOccluders>(*node))
             {
+                const osg::Vec3f eyeWorld(viewInverse(3, 0), viewInverse(3, 1), viewInverse(3, 2));
                 for (const auto& occMesh : pod->mOccluderMeshes)
                 {
-                    if (occMesh.indices.empty())
+                    // already drawn by the nearest-first pre-pass this frame
+                    if (mRegistry && mRegistry->isRasterized(&occMesh))
                         continue;
-
-                    const osg::Vec3f center = occMesh.aabb.center();
-                    if ((center - eyeWorld).length2() > mMaxDistanceSq)
-                        continue;
-
-                    unsigned int newTris = static_cast<unsigned int>(occMesh.indices.size() / 3);
-                    if (mMaxTriangles > 0 && mCuller->getNumBuildingTris() + newTris > mMaxTriangles)
-                        continue;
-
-                    mCuller->rasterizeOccluder(occMesh.vertices, occMesh.indices);
-                    mCuller->incrementBuildingOccluders(newTris, static_cast<unsigned int>(occMesh.vertices.size()));
+                    rasterizeOccluderMesh(*mCuller, occMesh, eyeWorld, mRules);
                 }
+                if (mRegistry)
+                    mRegistry->noteChunk(node);
             }
         }
 
@@ -484,7 +599,8 @@ namespace MWRender
 
     CellOcclusionCallback::CellOcclusionCallback(SceneUtil::OcclusionCuller* culler, float occluderMinRadius,
         float occluderMaxRadius, float occluderShrinkFactor, int occluderMeshResolution, int occluderMaxMeshResolution,
-        float occluderInsideThreshold, float occluderMaxDistance, bool enableStaticOccluders, unsigned int maxTriangles)
+        float occluderInsideThreshold, float occluderMaxDistance, bool enableStaticOccluders, unsigned int maxTriangles,
+        OccluderRegistry* registry)
         : mCuller(culler)
         , mOccluderMinRadius(occluderMinRadius)
         , mOccluderMaxRadius(occluderMaxRadius)
@@ -495,7 +611,30 @@ namespace MWRender
         , mOccluderMaxDistanceSq(occluderMaxDistance * occluderMaxDistance)
         , mEnableStaticOccluders(enableStaticOccluders)
         , mMaxTriangles(maxTriangles)
+        , mRegistry(registry)
     {
+    }
+
+    void CellOcclusionCallback::collectOccluders(
+        const osg::Vec3f& eye, std::vector<OccluderRegistry::Candidate>& out) const
+    {
+        if (!mEnableStaticOccluders)
+            return;
+        for (const auto& [node, entry] : mMeshCache)
+        {
+            // Only objects that were occluders in the cell's last cull and are still its children now: an object
+            // removed since (a scripted Disable, a deletion) must never occlude. Moving/animated objects never do.
+            if (entry.mSeenFrame != mLastFrame || entry.mDynamic || entry.mMesh.indices.empty()
+                || !entry.mMesh.aabb.valid())
+                continue;
+            osg::ref_ptr<osg::Node> object;
+            if (!entry.mNode.lock(object) || object.get() != node)
+                continue;
+            const osg::Node::ParentList& parents = object->getParents();
+            if (std::find(parents.begin(), parents.end(), mCellNode.get()) == parents.end())
+                continue;
+            out.push_back({ &entry.mMesh, (entry.mMesh.aabb.center() - eye).length2() });
+        }
     }
 
     CellOcclusionCallback::CachedMesh* CellOcclusionCallback::getOccluderEntry(osg::Node* node)
@@ -563,6 +702,12 @@ namespace MWRender
                 return; // Entire cell occluded, no children traversed
         }
 
+        mLastFrame = cv->getFrameStamp()->getFrameNumber();
+        mCellNode = node;
+        if (mRegistry)
+            mRegistry->noteCell(this);
+        const OccluderRules rules{ mOccluderMaxDistanceSq, mOccluderInsideThreshold, mMaxTriangles };
+
         const unsigned int numChildren = node->getNumChildren();
         mHandledInFirstPass.assign(numChildren, 0);
 
@@ -590,16 +735,9 @@ namespace MWRender
                     {
                         for (const auto& occMesh : pod->mOccluderMeshes)
                         {
-                            if (occMesh.indices.empty())
+                            if (mRegistry && mRegistry->isRasterized(&occMesh))
                                 continue;
-
-                            unsigned int newTris = static_cast<unsigned int>(occMesh.indices.size() / 3);
-                            if (mMaxTriangles > 0 && mCuller->getNumBuildingTris() + newTris > mMaxTriangles)
-                                continue;
-
-                            mCuller->rasterizeOccluder(occMesh.vertices, occMesh.indices);
-                            mCuller->incrementBuildingOccluders(
-                                newTris, static_cast<unsigned int>(occMesh.vertices.size()));
+                            rasterizeOccluderMesh(*mCuller, occMesh, cv->getEyePoint(), rules);
                         }
                     }
                 }
@@ -616,41 +754,18 @@ namespace MWRender
             // Cached occluder mesh (with AABB for the visibility test). Dynamic objects, objects
             // without usable geometry bounds and objects whose mesh isn't built yet (this frame's
             // build budget is spent) go to pass 2 (never skipped untested).
-            const CachedMesh* entry = getOccluderEntry(child);
+            CachedMesh* entry = getOccluderEntry(child);
             if (entry == nullptr || entry->mDynamic || !entry->mMesh.aabb.valid())
                 continue;
+            entry->mSeenFrame = mLastFrame; // a current child: eligible for next frame's pre-pass
             const OccluderMesh& mesh = entry->mMesh;
             mHandledInFirstPass[i] = 1;
 
             if (mCuller->testVisibleAABB(mesh.aabb))
             {
-                if (mEnableStaticOccluders && !mesh.indices.empty())
-                {
-                    // Skip rasterization for distant buildings, they cover few pixels
-                    // and terrain already handles far-distance occlusion
-                    float distSq = (bs.center() - cv->getEyePoint()).length2();
-                    if (distSq < mOccluderMaxDistanceSq)
-                    {
-                        // Don't rasterize as occluder if camera is inside the (scaled) AABB
-                        osg::Vec3f center = mesh.aabb.center();
-                        osg::Vec3f halfExtent
-                            = (osg::Vec3f(mesh.aabb.xMax(), mesh.aabb.yMax(), mesh.aabb.zMax()) - center)
-                            * mOccluderInsideThreshold;
-                        osg::BoundingBox scaledBB;
-                        scaledBB.expandBy(center - halfExtent);
-                        scaledBB.expandBy(center + halfExtent);
-                        if (!scaledBB.contains(cv->getEyePoint()))
-                        {
-                            unsigned int newTris = static_cast<unsigned int>(mesh.indices.size() / 3);
-                            if (mMaxTriangles == 0 || mCuller->getNumBuildingTris() + newTris <= mMaxTriangles)
-                            {
-                                mCuller->rasterizeOccluder(mesh.vertices, mesh.indices);
-                                mCuller->incrementBuildingOccluders(
-                                    newTris, static_cast<unsigned int>(mesh.vertices.size()));
-                            }
-                        }
-                    }
-                }
+                // Rasterize as an occluder unless the nearest-first pre-pass already did
+                if (mEnableStaticOccluders && !(mRegistry && mRegistry->isRasterized(&mesh)))
+                    rasterizeOccluderMesh(*mCuller, mesh, cv->getEyePoint(), rules);
 
                 child->accept(*cv);
             }

@@ -102,8 +102,7 @@ namespace MWRender
         insertBegin(ptr);
         ptr.getRefData().getBaseNode()->setNodeMask(Mask_Actor);
         // OpenMGE XE: marks the actor for [Shaders] 'clamp lighting actors'
-        ptr.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(
-            new osg::Uniform("uClampLightingActor", 1.f));
+        ptr.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(new osg::Uniform("uClampLightingActor", 1.f));
 
         bool animated = true;
         std::string animationMesh
@@ -128,8 +127,7 @@ namespace MWRender
         insertBegin(ptr);
         ptr.getRefData().getBaseNode()->setNodeMask(Mask_Actor);
         // OpenMGE XE: marks the actor for [Shaders] 'clamp lighting actors'
-        ptr.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(
-            new osg::Uniform("uClampLightingActor", 1.f));
+        ptr.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(new osg::Uniform("uClampLightingActor", 1.f));
 
         if (ptr.getType() == ESM::REC_NPC_4)
         {
@@ -261,9 +259,11 @@ namespace MWRender
 
     void Objects::setOcclusionCuller(SceneUtil::OcclusionCuller* culler, float occluderMinRadius,
         float occluderMaxRadius, float occluderShrinkFactor, int occluderMeshResolution, int occluderMaxMeshResolution,
-        float occluderInsideThreshold, float occluderMaxDistance, bool enableStaticOccluders, unsigned int maxTriangles)
+        float occluderInsideThreshold, float occluderMaxDistance, bool enableStaticOccluders, unsigned int maxTriangles,
+        OccluderRegistry* registry)
     {
         mOcclusionCuller = culler;
+        mOccluderRegistry = registry;
         mOccluderMinRadius = occluderMinRadius;
         mOccluderMaxRadius = occluderMaxRadius;
         mOccluderShrinkFactor = occluderShrinkFactor;
@@ -281,6 +281,6 @@ namespace MWRender
             return;
         cellNode.addCullCallback(new CellOcclusionCallback(mOcclusionCuller, mOccluderMinRadius, mOccluderMaxRadius,
             mOccluderShrinkFactor, mOccluderMeshResolution, mOccluderMaxMeshResolution, mOccluderInsideThreshold,
-            mOccluderMaxDistance, mEnableStaticOccluders, mMaxTriangles));
+            mOccluderMaxDistance, mEnableStaticOccluders, mMaxTriangles, mOccluderRegistry));
     }
 }

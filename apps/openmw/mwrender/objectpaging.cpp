@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <osg/ComputeBoundsVisitor>
 #include <osg/LOD>
 #include <osg/MatrixTransform>
 #include <osg/Sequence>
@@ -782,10 +783,12 @@ namespace MWRender
         osgUtil::StateToCompile stateToCompile(0, nullptr);
         CopyOp copyop(activeGrid, copyMask);
 
-        // OpenMGE XE occlusion culling: simplified meshes of building-sized objects in distant
-        // chunks, rasterized as occluders by PagedOccluderCallback.
-        const bool buildOccluders = mOcclusionCuller != nullptr && !activeGrid
-            && Settings::camera().mOcclusionCulling && Settings::camera().mOcclusionCullingStatics;
+        // OpenMGE XE occlusion culling: simplified meshes of building-sized objects, rasterized as
+        // occluders by PagedOccluderCallback and the nearest-first pre-pass. Active-grid chunks (the
+        // town around the player) too, unless 'occlusion active grid occluders' is off.
+        const bool buildOccluders = mOcclusionCuller != nullptr
+            && (!activeGrid || Settings::camera().mOcclusionActiveGridOccluders) && Settings::camera().mOcclusionCulling
+            && Settings::camera().mOcclusionCullingStatics;
         PagedOccluders pagedOccluders;
         const float occluderMinRadius = Settings::camera().mOcclusionOccluderMinRadius;
         const int occluderMeshRes = Settings::camera().mOcclusionOccluderMeshResolution;
@@ -863,9 +866,9 @@ namespace MWRender
                         // constant: large structures (Vivec cantons) keep openings like archways.
                         int adaptiveRes = occluderMeshRes;
                         if (scaledRadius > occluderMinRadius && occluderMinRadius > 0)
-                            adaptiveRes = std::clamp(
-                                static_cast<int>(occluderMeshRes * (scaledRadius / occluderMinRadius)),
-                                occluderMeshRes, occluderMaxMeshRes);
+                            adaptiveRes
+                                = std::clamp(static_cast<int>(occluderMeshRes * (scaledRadius / occluderMinRadius)),
+                                    occluderMeshRes, occluderMaxMeshRes);
                         OccluderMesh occMesh = buildSimplifiedMesh(trans, adaptiveRes, occluderShrinkFactor);
                         if (!occMesh.indices.empty())
                         {
@@ -967,15 +970,25 @@ namespace MWRender
         for (const auto& ref : templateRefs)
             SceneUtil::addTemplateRef(*group, ref.get());
 
-        // Every distant chunk gets the occlusion callback: the whole-chunk visibility test needs
-        // no occluder data, so even building-less chunks are skipped when fully hidden. Active
-        // grid chunks are left alone (the camera is inside them).
-        if (mOcclusionCuller != nullptr && !activeGrid)
+        // Every chunk gets the occlusion callback: the whole-chunk visibility test needs no occluder
+        // data, so even building-less chunks are skipped when fully hidden. Active-grid chunks are
+        // small (1/8 to 1/2 cell near the camera), so the chunks of a town hidden behind nearer
+        // buildings can be skipped too; the one around the camera always passes the test.
+        if (mOcclusionCuller != nullptr && (!activeGrid || Settings::camera().mOcclusionActiveGridOccluders))
         {
             if (!pagedOccluders.mOccluderMeshes.empty())
                 SceneUtil::addUserData(*group, std::move(pagedOccluders));
-            group->addCullCallback(new PagedOccluderCallback(
-                mOcclusionCuller, Settings::camera().mOcclusionOccluderMaxDistance, mMaxTriangles));
+            // Tight bounds of the contents (chunk-local): a far smaller test box than the one around
+            // the bounding sphere.
+            osg::ComputeBoundsVisitor boundsVisitor;
+            group->accept(boundsVisitor);
+            OccluderRules rules;
+            const float maxDistance = Settings::camera().mOcclusionOccluderMaxDistance;
+            rules.mMaxDistanceSq = maxDistance * maxDistance;
+            rules.mInsideThreshold = Settings::camera().mOcclusionOccluderInsideThreshold;
+            rules.mMaxTriangles = mMaxTriangles;
+            group->addCullCallback(
+                new PagedOccluderCallback(mOcclusionCuller, mOccluderRegistry, rules, boundsVisitor.getBoundingBox()));
         }
 
         return group;

@@ -129,8 +129,7 @@ namespace MWRender
                 = shaderManager.getShader("mge_weather.frag", defines, osg::Shader::FRAGMENT);
             osg::ref_ptr<osg::Geometry> geometry = createRow(row);
             if (vertex && fragment)
-                geometry->getOrCreateStateSet()->setAttributeAndModes(
-                    shaderManager.getProgram(vertex, fragment), on);
+                geometry->getOrCreateStateSet()->setAttributeAndModes(shaderManager.getProgram(vertex, fragment), on);
             mCamera->addChild(geometry);
         }
 

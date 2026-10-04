@@ -67,16 +67,16 @@ namespace Resource
                 "",
                 "Mechanics Actors",
                 "Mechanics Objects",
-                "",
                 "Physics Actors",
                 "Physics Objects",
                 "Physics Projectiles",
                 "Physics HeightFields",
-                "",
                 "Lua UsedMemory",
-                "",
                 "StringRefId Count",
                 "",
+                "Occlusion Tested",
+                "Occlusion Culled",
+                "Occluder Meshes",
             };
 
             static_assert(std::size(firstPage) == itemsPerPage);
