@@ -48,6 +48,24 @@ uniform vec3 playerPos;
 // mgeWeatherUniforms=1 and feeds live values; on stock builds GLSL defaults
 // them to 0 and the palette heuristics below take over.
 uniform float mgeWeatherUniforms;
+#if !defined(MGE_WX_PASS) && !defined(MGE_WX_VERTEX) && !defined(MGE_KEEP_STOCK_TIER)
+// OpenMGE XE: this engine always feeds the MGE uniforms, and the fragment-side code below only runs inside
+// fog.glsl's MGE branch, which is gated on the real uniform (mgeEngineFed()). Everything past that gate is
+// therefore always engine-fed, so the stock-exe fallbacks ("mgeWeatherUniforms < 0.5" branches) are dead
+// there. Making the test a compile-time constant lets the compiler drop them instead of compiling them into
+// every scene shader (about a fifth of the fragment compile time). The weather pass and the vertex readers
+// are excluded; MGE_KEEP_STOCK_TIER restores the runtime test.
+float mgeEngineFed()
+{
+    return mgeWeatherUniforms;
+}
+#define mgeWeatherUniforms 1.0
+#else
+float mgeEngineFed()
+{
+    return mgeWeatherUniforms;
+}
+#endif
 uniform float mgeNiceWeather; // squared transition blend, as in MGE
 uniform vec3 mgeSkyColor;
 // (ff = weather Fog Ratio, fo = weather Fog Offset [0..2], isExterior, isDay).
@@ -253,8 +271,11 @@ varying vec4 mgeWxVIdx;   // x conf, y alpha, z hour, w i*10+j
 varying vec4 mgeWxVDec;   // xyz decomposed skyBlend, w niceBlend
 varying vec4 mgeWxVEnv;   // xy fffoA, zw fffoB (mgeDecomposeWeather)
 varying vec4 mgeWxVRev;   // xyz corridor-reveal fog base, w nice-nice wxt gate (198)
-varying vec4 mgeWxVScatO; // xyz recovered outscatter, w recovery weight (225)
-varying vec4 mgeWxVScatI; // xyz recovered inscatter, w unused
+// Derived fog envelope (mgeDerivedFog) and the near-linear fit, frame-constant, so the fragment stage reads
+// them instead of deriving them per pixel. (These two slots used to carry the retired scatter recovery,
+// which no fragment code read.)
+varying vec4 mgeWxVDrvA;  // expStart, expDiv, fogEnd, wDense
+varying vec4 mgeWxVDrvB;  // wLayer, near-linear fog start, near-linear fog end, unused
 #endif // !MGE_WX_PASS
 
 #if MGE_WX_STAGE
@@ -2031,9 +2052,8 @@ float wxSearchLite(vec3 fc, float d, int ph,
 // verdict, blind at dusk corridors - engagement domain measured empty
 // in-game; the variation duty moved to the Correct pass, MGE_R2V) and
 // (docs/retired-mechanisms.md, MGE_SCAT_ROLL_RECOVERY). The globals
-// and the mgeWxVScat* varyings stay declared, permanently zero, so
-// the removal is a pure dead branch (preprocessed output unchanged);
-// linkers strip unused varyings.
+// stay declared, permanently zero; the two varying slots that carried
+// them now carry the derived fog envelope (mgeWxVDrvA/B).
 float wxG_scatW = 0.0;
 vec3 wxG_scatOut = vec3(0.0);
 vec3 wxG_scatIn = vec3(0.0);
@@ -2481,58 +2501,9 @@ float mgeWxtNiceGate()
 #endif
 }
 
-// consumer .vert main(); packs every frame-constant product the fragment
-// consumers read. All values identical to the pre-hoist per-fragment
-// computation (same expressions, same per-pass uniforms).
-#ifndef MGE_WX_PASS
-void mgeWxEmitVaryings()
-{
-    mgeWxCompute();
-    int wxi; int wxj; float wxa; float wxh;
-    float wxc = mgeDecomposeIdx(wxi, wxj, wxa, wxh);
-    mgeWxVIdx = vec4(wxc, wxa, wxh, float(wxi) * 10.0 + float(wxj));
-    vec3 sb; float nb;
-    mgeDecomposeSkyNice(sb, nb);
-    mgeWxVDec = vec4(sb, nb);
-    vec2 eA; vec2 eB; float ea;
-    mgeDecomposeWeather(eA, eB, ea);
-    mgeWxVEnv = vec4(eA, eB);
-    mgeWxVFog = mgeGetFogParams();
-    mgeWxVSky = vec4(mgeSampleSkyCol(), mgeGetNiceWeather());
-    mgeWxVRev = vec4(mgeRevealFogBase(), mgeWxtNiceGate());
-    mgeWxVScatO = vec4(wxG_scatOut, wxG_scatW);
-    mgeWxVScatI = vec4(wxG_scatIn, 0.0);
-}
-#else
-// Pass flavour of mgeWxEmitVaryings: the same products in the same order,
-// texel i of the verdict row (the MGE_WX_TEXEL_* order below).
-vec4 mgeWxVerdict(int texel)
-{
-    mgeWxCompute();
-    int wxi; int wxj; float wxa; float wxh;
-    float wxc = mgeDecomposeIdx(wxi, wxj, wxa, wxh);
-    vec4 vIdx = vec4(wxc, wxa, wxh, float(wxi) * 10.0 + float(wxj));
-    vec3 sb; float nb;
-    mgeDecomposeSkyNice(sb, nb);
-    vec4 vDec = vec4(sb, nb);
-    vec2 eA; vec2 eB; float ea;
-    mgeDecomposeWeather(eA, eB, ea);
-    vec4 vEnv = vec4(eA, eB);
-    vec4 vFog = mgeGetFogParams();
-    vec4 vSky = vec4(mgeSampleSkyCol(), mgeGetNiceWeather());
-    vec4 vRev = vec4(mgeRevealFogBase(), mgeWxtNiceGate());
-    vec4 vScatO = vec4(wxG_scatOut, wxG_scatW);
-    vec4 vScatI = vec4(wxG_scatIn, 0.0);
-    if (texel == 0) return vSky;
-    if (texel == 1) return vFog;
-    if (texel == 2) return vIdx;
-    if (texel == 3) return vDec;
-    if (texel == 4) return vEnv;
-    if (texel == 5) return vRev;
-    if (texel == 6) return vScatO;
-    return vScatI;
-}
-#endif // MGE_WX_PASS
+// The compute-mode emitters (mgeWxEmitVaryings for a compute-mode vertex stage,
+// mgeWxVerdict for the weather pass) are defined at the end of this file:
+// they also pack the derived fog envelope, which is defined further down.
 
 // Scatter triplet accessor, stage flavor: preset/uniform baseline plus
 // the recovered daily roll at the corridor weight. one site so wall,
@@ -2564,8 +2535,8 @@ void mgeWxEmitVaryings()
     mgeWxVDec = mgeWxTexel(3.0);
     mgeWxVEnv = mgeWxTexel(4.0);
     mgeWxVRev = mgeWxTexel(5.0);
-    mgeWxVScatO = mgeWxTexel(6.0);
-    mgeWxVScatI = mgeWxTexel(7.0);
+    mgeWxVDrvA = mgeWxTexel(6.0);
+    mgeWxVDrvB = mgeWxTexel(7.0);
 }
 #endif // MGE_WX_VERTEX
 // The est model is not compiled in this unit. Every reader returns the
@@ -2643,6 +2614,7 @@ struct MgeFogDerived
     float wLayer;     // height-layer gate
 };
 
+#if MGE_WX_STAGE
 MgeFogDerived mgeDeriveFogAt(float ff, float fo)
 {
     MgeFogDerived d;
@@ -2704,6 +2676,37 @@ MgeFogDerived mgeDerivedFog()
 #endif
     return s;
 }
+
+// XE adjustFog's linear near-fog range, fitted to the exp curve at
+// mgeNearFitDist and at min(fogEnd, nearViewRange): x = start, y = end.
+vec2 mgeNearFit(MgeFogDerived dv)
+{
+    float farIntercept = min(dv.fogEnd * mgeCell, mgeNearViewRange);
+    float eN = exp(-(mgeNearFitDist - dv.expStart) / dv.expDiv);
+    float eF = exp(-(farIntercept - dv.expStart) / dv.expDiv);
+    float fogNearStart = mgeNearFitDist + (farIntercept - mgeNearFitDist) * (1.0 - eN) / (eF - eN);
+    float fogNearEnd = mgeNearFitDist + (farIntercept - mgeNearFitDist) * (0.0 - eN) / (eF - eN);
+    return vec2(fogNearStart, fogNearEnd);
+}
+#else // !MGE_WX_STAGE
+// Readers: the envelope and the near fit only depend on frame-constant
+// uniforms and the verdict, so the weather pass derives them (same code,
+// above) and the vertex stage ships them in mgeWxVDrvA/B.
+MgeFogDerived mgeDerivedFog()
+{
+    MgeFogDerived d;
+    d.expStart = mgeWxVDrvA.x;
+    d.expDiv = mgeWxVDrvA.y;
+    d.fogEnd = mgeWxVDrvA.z;
+    d.wDense = mgeWxVDrvA.w;
+    d.wLayer = mgeWxVDrvB.x;
+    return d;
+}
+vec2 mgeNearFit(MgeFogDerived dv)
+{
+    return mgeWxVDrvB.yz;
+}
+#endif // MGE_WX_STAGE
 
 // Dense-weather sky-fog band raise. The XE dome blend puts solid fog
 // colour only below dirZ ~0.075 (~4 deg); tall massifs (Red Mountain
@@ -2966,12 +2969,21 @@ float mgeUwTrans(float dist)
     return clamp((e - dist) / max(e - s, 1.0), 0.0, 1.0);
 }
 
-// Core scatter equation: XE Common.fx fogColourScatter nice branch,
-// verbatim (live 0.18 constants). fogdist in [0,1]. Explicit-sun entry
-// point: callers that need the scatter under a known sun (the vertical-sun
-// RTT rebase in fog.glsl) pass it directly; mgeScatter below resolves the
-// pass's own sun first. The night flip lives here so both paths share it.
-vec3 mgeScatterWithSun(vec3 dir, float fogdist, vec3 skyCol, vec3 sunWorld)
+// The scatter equation split at its only distance-dependent step: the
+// setup (sun, mie/rayleigh colour, attenuation coefficient) depends on the
+// direction alone, and mgeFogColourWorld needs the scatter at up to three
+// distances for one direction (the haze, the horizon seal, the mirror dome).
+// Sharing the setup keeps the equation out of the fragment programs three
+// times over (shorter compiles); the arithmetic is unchanged, step for step.
+struct MgeScatterPrep
+{
+    vec3 att;     // attenuation coefficient, before the fogdist integral
+    vec3 colour;  // mie + rayleigh colour
+    float gain;   // XE's atmdep gain term
+    float sunB;   // sunaltitude_b
+};
+
+MgeScatterPrep mgeScatterPrepWithSun(vec3 dir, vec3 skyCol, vec3 sunWorld)
 {
     // MGE parity: at night the engine sun light still travels above the
     // horizon (invisible); MGE flips sunPos.z downward when sunVis==0 so the
@@ -2984,6 +2996,8 @@ vec3 mgeScatterWithSun(vec3 dir, float fogdist, vec3 skyCol, vec3 sunWorld)
     float sunaltitude_a = 2.8 + 4.3 / sunaltitude;
     float sunaltitude_b = clamp(1.0 - exp2(-1.9 * sunaltitude), 0.0, 1.0);
     float sunaltitude_c = clamp(exp(-4.0 * sunZ), 0.0, 1.0) * clamp(sunaltitude, 0.0, 1.0);
+    MgeScatterPrep p;
+    p.sunB = sunaltitude_b;
 
 #if MGE_SCATTER_ERA_2020
     // 0.11-era branch (2020 XE Common.fx): exp(-2) mie damping,
@@ -3000,12 +3014,9 @@ vec3 mgeScatterWithSun(vec3 dir, float fogdist, vec3 skyCol, vec3 sunWorld)
     vec3 scOut;
     mgeScatterTriplets(scOut, scIn);   // baseline + roll recovery (225)
     vec3 sunscatter = mix(scIn, scOut, 0.5 * (1.0 + suncos));
-    vec3 att = atmdep * sunscatter * (sunaltitude_a + mie);
-    att = (1.0 - exp(-fogdist * att)) / att;
-
-    vec3 colour = vec3(0.125 * mie) + newSkyCol * rayl;
-    colour *= att * (1.1 * atmdep + 0.5) * sunaltitude_b;
-    return colour;
+    p.att = atmdep * sunscatter * (sunaltitude_a + mie);
+    p.colour = vec3(0.125 * mie) + newSkyCol * rayl;
+    p.gain = 1.1 * atmdep + 0.5;
 #else
     vec3 newSkyCol = mix(skyCol, mgeSkylightScatter, mgeSkylightMix);
 
@@ -3018,17 +3029,34 @@ vec3 mgeScatterWithSun(vec3 dir, float fogdist, vec3 skyCol, vec3 sunWorld)
     vec3 scOut;
     mgeScatterTriplets(scOut, scIn);   // baseline + roll recovery (225)
     vec3 sunscatter = mix(scIn, scOut, 0.5 * (1.0 + suncos));
-    vec3 att = atmdep * sunscatter * (sunaltitude_a + 0.7 * mie);
-    att = (1.0 - exp(-fogdist * att)) / att;
-
-    vec3 colour = vec3(0.125 * mie) + newSkyCol * rayl;
-    colour *= att * (1.17 * atmdep + 0.89) * sunaltitude_b;
-    return colour;
+    p.att = atmdep * sunscatter * (sunaltitude_a + 0.7 * mie);
+    p.colour = vec3(0.125 * mie) + newSkyCol * rayl;
+    p.gain = 1.17 * atmdep + 0.89;
 #endif
+    return p;
 }
 
-// Pass-sun resolver + scatter (the general entry point).
-vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
+// The scatter at inscatter distance fogdist in [0,1] (the XE integral).
+vec3 mgeScatterAt(MgeScatterPrep p, float fogdist)
+{
+    vec3 att = (1.0 - exp(-fogdist * p.att)) / p.att;
+    vec3 colour = p.colour;
+    colour *= att * p.gain * p.sunB;
+    return colour;
+}
+
+// Core scatter equation: XE Common.fx fogColourScatter nice branch,
+// verbatim (live 0.18 constants). fogdist in [0,1]. Explicit-sun entry
+// point: callers that need the scatter under a known sun (the vertical-sun
+// RTT rebase in fog.glsl) pass it directly; mgeScatter below resolves the
+// pass's own sun first. The night flip lives in the setup so both share it.
+vec3 mgeScatterWithSun(vec3 dir, float fogdist, vec3 skyCol, vec3 sunWorld)
+{
+    return mgeScatterAt(mgeScatterPrepWithSun(dir, skyCol, sunWorld), fogdist);
+}
+
+// Pass-sun resolver.
+vec3 mgeScatterSun()
 {
     vec3 sunWorld;
     if (dot(mgeSunDir, mgeSunDir) > 1e-4)
@@ -3056,7 +3084,19 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
         if (mgeStockMirrored() && sunWorld.z < 0.0)
             sunWorld.z = -sunWorld.z;
     }
-    return mgeScatterWithSun(dir, fogdist, skyCol, sunWorld);
+    return sunWorld;
+}
+
+// Scatter setup for this pass's own sun.
+MgeScatterPrep mgeScatterPrep(vec3 dir, vec3 skyCol)
+{
+    return mgeScatterPrepWithSun(dir, skyCol, mgeScatterSun());
+}
+
+// Pass-sun resolver + scatter (the general entry point).
+vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
+{
+    return mgeScatterAt(mgeScatterPrep(dir, skyCol), fogdist);
 }
 
 // MGE_MIRROR_SEAL_WIDEN: in mirrored passes, start the horizon seal at
@@ -3265,11 +3305,10 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         // considerably more readable in dense weather (Foggy at 4000u:
         // ~60% fogged vs ~83% pure-exp). Running the exp curve at all
         // ranges washes out close objects.
-        float farIntercept = min(fogEnd * mgeCell, mgeNearViewRange);
-        float eN = exp(-(mgeNearFitDist - fogExpStart) / fogExpDivisor);
-        float eF = exp(-(farIntercept - fogExpStart) / fogExpDivisor);
-        float fogNearStart = mgeNearFitDist + (farIntercept - mgeNearFitDist) * (1.0 - eN) / (eF - eN);
-        float fogNearEnd = mgeNearFitDist + (farIntercept - mgeNearFitDist) * (0.0 - eN) / (eF - eN);
+        // (the fit is frame-constant: mgeNearFit, from the weather pass)
+        vec2 nearFit = mgeNearFit(dv);
+        float fogNearStart = nearFit.x;
+        float fogNearEnd = nearFit.y;
         fog = clamp((fogNearEnd - distEff) / (fogNearEnd - fogNearStart), 0.0, 1.0);
     }
     else
@@ -3321,6 +3360,12 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     // (pattern-free), full fog to the exact sky pixel.
     if (skyBehind.a > 0.5)
         convBase = mix(convBase, skyBehind.rgb, smoothstep(0.55, 0.92, 1.0 - fog));
+    // One scatter setup for this direction, shared by the mirror dome, the
+    // haze and the horizon seal below (each only evaluates it in nice
+    // weather, which is exactly when the setup is made).
+    MgeScatterPrep scatPrep = MgeScatterPrep(vec3(1.0), vec3(0.0), 0.0, 0.0);
+    if (mgeGetNiceWeather() > 0.001)
+        scatPrep = mgeScatterPrep(dirWorld, skyCol);
 #if MGE_MIRROR_DOME_CONV
     // top): the skyBehind convergence above, with the dome law
     // standing in for the RTT a mirrored pass cannot have. The dome
@@ -3337,7 +3382,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         float mcN = mgeGetNiceWeather();
         wxMirDome = convBase;
         if (mcN > 0.001)
-            wxMirDome = mix(convBase, mgeScatter(dirWorld, 1.0, skyCol), mcN);
+            wxMirDome = mix(convBase, mgeScatterAt(scatPrep, 1.0), mcN);
         wxMirOn = 1.0;
         float mcw = smoothstep(0.55, 0.92, 1.0 - fog);
         if (mcw > 0.001)
@@ -3391,7 +3436,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     // sun z-correction recovers the true sun in those passes, so
     // reflected fogged terrain scatters identically to the direct view.
     if (nice > 0.001)
-        rgb = mix(rgb, mgeScatter(dirWorld, fogdist, skyCol), nice);
+        rgb = mix(rgb, mgeScatterAt(scatPrep, fogdist), nice);
 
     // Horizon seal: with the 2020-era fog scale the inscatter distance
     // caps at 0.224*4 = 0.896 at the view edge, so the farthest water/land
@@ -3420,7 +3465,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     {
         vec3 domeBad = convBase;
         vec3 domeCol = mix(domeBad,
-            (nice > 0.001) ? mgeScatter(dirWorld, 1.0, skyCol) : domeBad, nice);
+            (nice > 0.001) ? mgeScatterAt(scatPrep, 1.0) : domeBad, nice);
 #if MGE_MIRROR_DOME_CONV
         // Mirrored passes seal to the same dome the convergence above
         // used (computed from the pre-convergence convBase):
@@ -3585,5 +3630,69 @@ float mgeSkyDither(vec2 fragCoord)
     int i = int(mod(fragCoord.x, 4.0)) * 4 + int(mod(fragCoord.y, 4.0));
     return d[i];
 }
+#if MGE_WX_STAGE
+// Compute-mode emitters: every frame-constant product the fragment readers
+// decode, in texel order 0 Sky, 1 Fog, 2 Idx, 3 Dec, 4 Env, 5 Rev,
+// 6/7 the derived fog envelope and near fit (mgeWxVDrvA/B). All values are
+// the same expressions on the same uniforms as a per-fragment evaluation.
+vec4 mgeWxDerivedA()
+{
+    MgeFogDerived dv = mgeDerivedFog();
+    return vec4(dv.expStart, dv.expDiv, dv.fogEnd, dv.wDense);
+}
+vec4 mgeWxDerivedB()
+{
+    MgeFogDerived dv = mgeDerivedFog();
+    vec2 nearFit = mgeNearFit(dv);
+    return vec4(dv.wLayer, nearFit.x, nearFit.y, 0.0);
+}
+#ifndef MGE_WX_PASS
+// Compute-mode vertex stage (the pre-pass design): emit the verdict.
+void mgeWxEmitVaryings()
+{
+    mgeWxCompute();
+    int wxi; int wxj; float wxa; float wxh;
+    float wxc = mgeDecomposeIdx(wxi, wxj, wxa, wxh);
+    mgeWxVIdx = vec4(wxc, wxa, wxh, float(wxi) * 10.0 + float(wxj));
+    vec3 sb; float nb;
+    mgeDecomposeSkyNice(sb, nb);
+    mgeWxVDec = vec4(sb, nb);
+    vec2 eA; vec2 eB; float ea;
+    mgeDecomposeWeather(eA, eB, ea);
+    mgeWxVEnv = vec4(eA, eB);
+    mgeWxVFog = mgeGetFogParams();
+    mgeWxVSky = vec4(mgeSampleSkyCol(), mgeGetNiceWeather());
+    mgeWxVRev = vec4(mgeRevealFogBase(), mgeWxtNiceGate());
+    mgeWxVDrvA = mgeWxDerivedA();
+    mgeWxVDrvB = mgeWxDerivedB();
+}
+#else
+// Weather pass (mge_weather.frag): texel i of the verdict row.
+vec4 mgeWxVerdict(int texel)
+{
+    mgeWxCompute();
+    int wxi; int wxj; float wxa; float wxh;
+    float wxc = mgeDecomposeIdx(wxi, wxj, wxa, wxh);
+    vec4 vIdx = vec4(wxc, wxa, wxh, float(wxi) * 10.0 + float(wxj));
+    vec3 sb; float nb;
+    mgeDecomposeSkyNice(sb, nb);
+    vec4 vDec = vec4(sb, nb);
+    vec2 eA; vec2 eB; float ea;
+    mgeDecomposeWeather(eA, eB, ea);
+    vec4 vEnv = vec4(eA, eB);
+    vec4 vFog = mgeGetFogParams();
+    vec4 vSky = vec4(mgeSampleSkyCol(), mgeGetNiceWeather());
+    vec4 vRev = vec4(mgeRevealFogBase(), mgeWxtNiceGate());
+    if (texel == 0) return vSky;
+    if (texel == 1) return vFog;
+    if (texel == 2) return vIdx;
+    if (texel == 3) return vDec;
+    if (texel == 4) return vEnv;
+    if (texel == 5) return vRev;
+    if (texel == 6) return mgeWxDerivedA();
+    return mgeWxDerivedB();
+}
+#endif // MGE_WX_PASS
+#endif // MGE_WX_STAGE
 #endif // !MGE_WX_VERTEX
 #endif
