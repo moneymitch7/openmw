@@ -1,5 +1,7 @@
 #include "mgeweatherpass.hpp"
 
+#include "vismask.hpp"
+
 #include <osg/BlendFunc>
 #include <osg/ClampColor>
 #include <osg/ColorMask>
@@ -62,6 +64,11 @@ namespace MWRender
     {
         setName("MGE Weather Pass");
         setCullingActive(false);
+        // Like the sky and water RTT cameras: drawn by the main view, but invisible to everything else that walks
+        // the scene, above all the activation/crosshair raycasts. Their intersection mask leaves out
+        // Mask_RenderToTexture; without it the ray hit the pass's clip-space quad a few units in front of the camera
+        // and objects could only be picked up from point-blank range.
+        setNodeMask(Mask_RenderToTexture);
         addCullCallback(new MainViewOncePerFrame);
 
         mTexture = new osg::Texture2D;
