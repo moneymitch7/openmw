@@ -1,5 +1,7 @@
 #include "occlusionculling.hpp"
 
+#include "vismask.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <queue>
@@ -495,50 +497,43 @@ namespace MWRender
     {
     }
 
-    const OccluderMesh& CellOcclusionCallback::getOccluderMesh(osg::Node* node)
+    CellOcclusionCallback::CachedMesh& CellOcclusionCallback::getOccluderEntry(osg::Node* node)
     {
-        // The mesh is built in world space, so it is only valid while the node is the same
-        // object (a deleted node's address can be reused by a new one) and has not moved
-        // (scripted statics, doors, large creatures).
+        // The mesh is built in world space once per node. If the node later moves or animates
+        // (its bounds change), it is marked dynamic instead of rebuilt every frame: from then on
+        // it is never an occluder and is tested with its live bounds. A deleted node's address
+        // can be reused by a new one, so the entry also checks it still refers to the same node.
         const osg::BoundingSphere& currentBound = node->getBound();
         auto it = mMeshCache.find(node);
         if (it != mMeshCache.end())
         {
-            const CachedMesh& cached = it->second;
             osg::ref_ptr<osg::Node> alive;
-            const bool sameNode = cached.mNode.lock(alive) && alive.get() == node;
-            const bool sameBound = (cached.mBound.center() - currentBound.center()).length2() < 1.f
-                && std::abs(cached.mBound.radius() - currentBound.radius()) < 1.f;
-            if (sameNode && sameBound)
-                return cached.mMesh;
+            if (it->second.mNode.lock(alive) && alive.get() == node)
+            {
+                CachedMesh& cached = it->second;
+                if (!cached.mDynamic
+                    && ((cached.mBound.center() - currentBound.center()).length2() >= 1.f
+                        || std::abs(cached.mBound.radius() - currentBound.radius()) >= 1.f))
+                    cached.mDynamic = true;
+                return cached;
+            }
             mMeshCache.erase(it);
         }
 
         int meshRes = mOccluderMeshResolution;
-        float radius = currentBound.radius();
+        const float radius = currentBound.radius();
         if (radius > mOccluderMinRadius && mOccluderMinRadius > 0)
         {
-            float scale = radius / mOccluderMinRadius;
+            const float scale = radius / mOccluderMinRadius;
             meshRes = std::clamp(
                 static_cast<int>(mOccluderMeshResolution * scale), mOccluderMeshResolution, mOccluderMaxMeshResolution);
-        }
-        OccluderMesh mesh = buildSimplifiedMesh(node, meshRes, mOccluderShrinkFactor);
-
-        if (mesh.indices.empty() && !mesh.aabb.valid())
-        {
-            Log(Debug::Verbose) << "OccMesh cached (no triangles): \"" << node->getName() << "\"";
-        }
-        else
-        {
-            Log(Debug::Verbose) << "OccMesh cached: \"" << node->getName() << "\" verts=" << mesh.vertices.size()
-                                << " tris=" << (mesh.indices.size() / 3) << " sphere=" << node->getBound().radius();
         }
 
         CachedMesh entry;
         entry.mNode = node;
         entry.mBound = currentBound;
-        entry.mMesh = std::move(mesh);
-        return mMeshCache.emplace(node, std::move(entry)).first->second.mMesh;
+        entry.mMesh = buildSimplifiedMesh(node, meshRes, mOccluderShrinkFactor);
+        return mMeshCache.emplace(node, std::move(entry)).first->second;
     }
 
     void CellOcclusionCallback::operator()(osg::Group* node, osgUtil::CullVisitor* cv)
@@ -562,14 +557,20 @@ namespace MWRender
         }
 
         const unsigned int numChildren = node->getNumChildren();
+        mHandledInFirstPass.assign(numChildren, 0);
 
-        // Pass 1: Large objects, test against terrain depth, optionally rasterize as occluders
+        // Pass 1: Large static objects, test against terrain depth, optionally rasterize as occluders.
+        // Everything else (small, moving or animated objects, actors) is left for pass 2.
         for (unsigned int i = 0; i < numChildren; ++i)
         {
             osg::Node* child = node->getChild(i);
             const osg::BoundingSphere& bs = child->getBound();
 
             if (!bs.valid() || bs.radius() < mOccluderMinRadius)
+                continue;
+
+            // Actors move and animate every frame: never occluders, tested with live bounds.
+            if ((child->getNodeMask() & (Mask_Actor | Mask_Player)) != 0)
                 continue;
 
             // Paged chunks and other oversized objects, test visibility, rasterize stored occluders
@@ -601,13 +602,17 @@ namespace MWRender
                 pageBB.expandBy(bs);
                 if (mCuller->testVisibleAABB(pageBB))
                     child->accept(*cv);
+                mHandledInFirstPass[i] = 1;
                 continue;
             }
 
-            // Get cached occluder mesh (with AABB for visibility test)
-            const OccluderMesh& mesh = getOccluderMesh(child);
-            if (!mesh.aabb.valid())
+            // Cached occluder mesh (with AABB for the visibility test). Dynamic objects and
+            // objects without usable geometry bounds go to pass 2 (never skipped untested).
+            const CachedMesh& entry = getOccluderEntry(child);
+            if (entry.mDynamic || !entry.mMesh.aabb.valid())
                 continue;
+            const OccluderMesh& mesh = entry.mMesh;
+            mHandledInFirstPass[i] = 1;
 
             if (mCuller->testVisibleAABB(mesh.aabb))
             {
@@ -644,9 +649,13 @@ namespace MWRender
             // else: occluded by terrain, skip entirely
         }
 
-        // Pass 2: Small objects, test against enriched depth buffer (terrain + buildings)
+        // Pass 2: everything pass 1 did not handle (small objects, actors, moving or animated
+        // objects), tested with live bounds against the enriched depth buffer (terrain + buildings)
         for (unsigned int i = 0; i < numChildren; ++i)
         {
+            if (mHandledInFirstPass[i])
+                continue;
+
             osg::Node* child = node->getChild(i);
             const osg::BoundingSphere& bs = child->getBound();
 
@@ -655,9 +664,6 @@ namespace MWRender
                 child->accept(*cv);
                 continue;
             }
-
-            if (bs.radius() >= mOccluderMinRadius)
-                continue; // Already handled in pass 1
 
             // Never occlude doors, they sit flush against building surfaces
             // and are easily falsely hidden by the parent building's AABB occluder
