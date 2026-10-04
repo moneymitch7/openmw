@@ -144,16 +144,18 @@ namespace MWRender
         void operator()(osg::Group* node, osgUtil::CullVisitor* cv);
 
     private:
-        /// Get cached occluder mesh (actual triangles + AABB) for a node.
-        /// Rebuilt when the node was replaced (address reuse) or has moved.
-        const OccluderMesh& getOccluderMesh(osg::Node* node);
-
         struct CachedMesh
         {
             osg::observer_ptr<osg::Node> mNode;
             osg::BoundingSphere mBound;
             OccluderMesh mMesh;
+            // Set once the node's bounds change (it moves or animates). A dynamic node is
+            // never an occluder and is tested with its live bounds; its mesh is not rebuilt.
+            bool mDynamic = false;
         };
+
+        /// Cached occluder mesh (actual triangles + AABB) for a node, built once per node.
+        CachedMesh& getOccluderEntry(osg::Node* node);
 
         osg::ref_ptr<SceneUtil::OcclusionCuller> mCuller;
         float mOccluderMinRadius;
@@ -167,6 +169,7 @@ namespace MWRender
         unsigned int mMaxTriangles;
 
         std::unordered_map<osg::Node*, CachedMesh> mMeshCache;
+        std::vector<char> mHandledInFirstPass; // scratch, reused across frames
     };
 }
 
