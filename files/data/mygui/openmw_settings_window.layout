@@ -456,6 +456,61 @@
                             <Property key="TextAlign" value="Right"/>
                         </Widget>
 
+                        <!-- OpenMGE XE lighting: weather fog density -->
+                        <Widget type="TextBox" skin="NormalText" position="0 178 352 18" align="Left Top" name="MgeStormFogText">
+                            <UserString key="ToolTipType" value="Layout"/>
+                            <UserString key="ToolTipLayout" value="TextToolTip"/>
+                            <UserString key="Caption_Text" value="#{OMWEngine:MgeStormFogTooltip}"/>
+                        </Widget>
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 200 352 18" align="HStretch Top">
+                            <Property key="Range" value="101"/>
+                            <Property key="Page" value="1"/>
+                            <Property key="WheelPage" value="5"/>
+                            <UserString key="SettingType" value="Slider"/>
+                            <UserString key="SettingCategory" value="Fog"/>
+                            <UserString key="SettingName" value="mge storm fog density"/>
+                            <UserString key="SettingValueType" value="Float"/>
+                            <UserString key="SettingMin" value="0"/>
+                            <UserString key="SettingMax" value="1"/>
+                            <UserString key="SettingLabelWidget" value="MgeStormFogText"/>
+                            <UserString key="SettingLabelCaption" value="MgeStormFogValue"/>
+                        </Widget>
+                        <Widget type="TextBox" skin="SandText" position="0 222 352 18" align="Left Top">
+                            <Property key="Caption" value="#{OMWEngine:MgeFogThin}"/>
+                            <Property key="TextAlign" value="Left"/>
+                        </Widget>
+                        <Widget type="TextBox" skin="SandText" position="0 222 352 18" align="Right Top">
+                            <Property key="Caption" value="#{OMWEngine:MgeFogFull}"/>
+                            <Property key="TextAlign" value="Right"/>
+                        </Widget>
+
+                        <Widget type="TextBox" skin="NormalText" position="0 252 352 18" align="Left Top" name="MgeWeatherFogText">
+                            <UserString key="ToolTipType" value="Layout"/>
+                            <UserString key="ToolTipLayout" value="TextToolTip"/>
+                            <UserString key="Caption_Text" value="#{OMWEngine:MgeWeatherFogTooltip}"/>
+                        </Widget>
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 274 352 18" align="HStretch Top">
+                            <Property key="Range" value="101"/>
+                            <Property key="Page" value="1"/>
+                            <Property key="WheelPage" value="5"/>
+                            <UserString key="SettingType" value="Slider"/>
+                            <UserString key="SettingCategory" value="Fog"/>
+                            <UserString key="SettingName" value="mge weather fog density"/>
+                            <UserString key="SettingValueType" value="Float"/>
+                            <UserString key="SettingMin" value="0"/>
+                            <UserString key="SettingMax" value="1"/>
+                            <UserString key="SettingLabelWidget" value="MgeWeatherFogText"/>
+                            <UserString key="SettingLabelCaption" value="MgeWeatherFogValue"/>
+                        </Widget>
+                        <Widget type="TextBox" skin="SandText" position="0 296 352 18" align="Left Top">
+                            <Property key="Caption" value="#{OMWEngine:MgeFogThin}"/>
+                            <Property key="TextAlign" value="Left"/>
+                        </Widget>
+                        <Widget type="TextBox" skin="SandText" position="0 296 352 18" align="Right Top">
+                            <Property key="Caption" value="#{OMWEngine:MgeFogFull}"/>
+                            <Property key="TextAlign" value="Right"/>
+                        </Widget>
+
                     </Widget>
                     <Widget type="TabItem">
                         <Property key="Caption" value=" #{OMWEngine:Water} "/>

@@ -57,6 +57,30 @@ namespace MWWorld
             }
             return stormDirection;
         }
+
+        // OpenMGE XE: the player's weather fog density ([Fog] mge storm fog density for ash, blight and blizzard
+        // storms, mge weather fog density for everything else). 1 keeps the weather's own distant fog (MGE XE's
+        // values), 0 makes it as clear as Clear weather. The fog factor (how far the fog reaches) is scaled
+        // geometrically, so every step of the setting multiplies visibility by the same amount; the near-fog offset
+        // is scaled linearly. Applied where the values are read, so Lua changes and setting changes both stay live.
+        struct DLFog
+        {
+            float mFactor;
+            float mOffset;
+        };
+
+        DLFog getDLFog(const Weather& weather)
+        {
+            const float density = weather.mIsStorm ? Settings::fog().mMgeStormFogDensity.get()
+                                                   : Settings::fog().mMgeWeatherFogDensity.get();
+            DLFog fog{ weather.mDL.FogFactor, weather.mDL.FogOffset };
+            if (density < 1.f && fog.mFactor > 0.f)
+            {
+                fog.mFactor = std::pow(fog.mFactor, density);
+                fog.mOffset *= density;
+            }
+            return fog;
+        }
     }
 
     template <typename T>
@@ -976,13 +1000,16 @@ namespace MWWorld
             // both endpoint weathers and lerp the derived values, so nonlinear
             // terms don't compress the visible change into a fraction of the
             // transition.
-            float ffCur = current != nullptr ? current->mDL.FogFactor : mResult.mDLFogFactor;
-            float foCur = (current != nullptr ? current->mDL.FogOffset : mResult.mDLFogOffset) / 100.0f;
+            const DLFog curFog
+                = current != nullptr ? getDLFog(*current) : DLFog{ mResult.mDLFogFactor, mResult.mDLFogOffset };
+            float ffCur = curFog.mFactor;
+            float foCur = curFog.mOffset / 100.0f;
             float ffNext = ffCur, foNext = foCur, fogBlend = 0.f;
             if (next != nullptr)
             {
-                ffNext = next->mDL.FogFactor;
-                foNext = next->mDL.FogOffset / 100.0f;
+                const DLFog nextFog = getDLFog(*next);
+                ffNext = nextFog.mFactor;
+                foNext = nextFog.mOffset / 100.0f;
                 fogBlend = 1.f - mTransitionFactor;
             }
             mRendering.setMgeWeather(niceWeather, mResult.mSkyColor, mResult.mDLFogFactor,
@@ -1375,8 +1402,9 @@ namespace MWWorld
         mResult.mSunColor = current.mSunColor.getValue(gameHour, mTimeSettings, "Sun");
         mResult.mSkyColor = current.mSkyColor.getValue(gameHour, mTimeSettings, "Sky");
         mResult.mNightFade = mNightFade.getValue(gameHour, mTimeSettings, "Stars");
-        mResult.mDLFogFactor = current.mDL.FogFactor;
-        mResult.mDLFogOffset = current.mDL.FogOffset;
+        const DLFog dlFog = getDLFog(current);
+        mResult.mDLFogFactor = dlFog.mFactor;
+        mResult.mDLFogOffset = dlFog.mOffset;
 
         WeatherSetting setting = mTimeSettings.getSetting("Sun");
         float preSunsetTime = setting.mPreSunsetTime;

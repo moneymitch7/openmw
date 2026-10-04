@@ -168,6 +168,16 @@ MaxLights: "Max Lights"
 MaxLightsValue: "Max Lights ({value, number, :: group-off})"
 MaxLightsTooltip: "Default: 16\nMaximum number of lights per object.\n\nA low number near default will cause light popping similar to what you would see in Morrowind."
 MenuHelpDelay: "Menu Help Delay"
+MgeFogFull: "MGE XE"
+MgeFogThin: "Clear"
+MgeStormFogValue: "Storm Fog ({value, number, percent})"
+MgeStormFogTooltip: |-
+    How thick ash, blight and blizzard storms are.
+    100% is MGE XE's storm fog (you see about one cell in a blight storm), 0% is as clear as Clear weather.
+MgeWeatherFogValue: "Weather Fog ({value, number, percent})"
+MgeWeatherFogTooltip: |-
+    How thick the fog is in every other weather: Foggy, Overcast, Rain, Thunderstorm, Snow and Cloudy.
+    100% is MGE XE's weather fog, 0% is as clear as Clear weather.
 MenuTransparency: "Menu Transparency"
 MouseAndKeyboard: "Mouse/Keyboard"
 MouseEmulationCursor: "Mouse Emulation Cursor"

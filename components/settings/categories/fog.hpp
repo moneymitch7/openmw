@@ -38,6 +38,12 @@ namespace Settings
         // MGE XE below-water fog envelope [cells]; both 0 = stock underwater fog
         SettingValue<float> mMgeUnderwaterFogStartCells{ mIndex, "Fog", "mge underwater fog start cells" };
         SettingValue<float> mMgeUnderwaterFogEndCells{ mIndex, "Fog", "mge underwater fog end cells" };
+        // MGE weather fog density: 1 = each weather's own distant fog (MGE XE), 0 = as clear as Clear weather.
+        // Storms are the ash, blight and blizzard storms; the other setting covers every other weather.
+        SettingValue<float> mMgeStormFogDensity{ mIndex, "Fog", "mge storm fog density",
+            makeClampSanitizerFloat(0, 1) };
+        SettingValue<float> mMgeWeatherFogDensity{ mIndex, "Fog", "mge weather fog density",
+            makeClampSanitizerFloat(0, 1) };
     };
 }
 
