@@ -655,6 +655,23 @@
                                 </Widget>
                             </Widget>
 
+                            <!-- Clamp Lighting (Actors Only) -->
+                            <Widget type="HBox" align="Stretch">
+                                <UserString key="HStretch" value="true"/>
+                                <UserString key="VStretch" value="false"/>
+                                <Widget type="AutoSizedButton" skin="MW_Button">
+                                    <UserString key="SettingCategory" value="Shaders"/>
+                                    <UserString key="SettingName" value="clamp lighting actors"/>
+                                    <UserString key="SettingType" value="CheckButton"/>
+                                </Widget>
+                                <Widget type="AutoSizedTextBox" skin="SandText">
+                                    <Property key="Caption" value="#{OMWEngine:ClampLightingActors}"/>
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ClampLightingActorsTooltip}"/>
+                                </Widget>
+                            </Widget>
+
                             <!-- Match Sunlight To Sun -->
                             <Widget type="HBox" align="Stretch">
                                 <UserString key="HStretch" value="true"/>

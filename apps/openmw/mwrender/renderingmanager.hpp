@@ -331,6 +331,7 @@ namespace MWRender
         osg::ref_ptr<osg::Uniform> mMgeOutscatterUniform;
         osg::ref_ptr<osg::Uniform> mMgeInscatterUniform;
         osg::ref_ptr<osg::Uniform> mMgeScatterOnUniform;
+        osg::ref_ptr<osg::Uniform> mClampActorsGateUniform;
         osg::ref_ptr<osg::Uniform> mMgeSunDirUniform;
         osg::ref_ptr<osg::Group> mRootNode;
         osg::ref_ptr<SceneUtil::LightManager> mSceneRoot;

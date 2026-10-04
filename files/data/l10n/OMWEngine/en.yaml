@@ -83,6 +83,10 @@ ClampLighting: "Clamp Lighting"
 ClampLightingTooltip: |-
     Cap lighting brightness at (1, 1, 1) to replicate Morrowind's rendering.
     Prevents overly bright or shifted colors but can dull lighting.
+ClampLightingActors: "Clamp Lighting (NPCs Only)"
+ClampLightingActorsTooltip: |-
+    Default: off
+    Cap lighting on NPCs, creatures and your own body so faces and armour keep their texture contrast at light peaks, while the world keeps the unclamped MGE XE curve. Only takes effect while Clamp Lighting is off.
 ClassicFalloff: "Classic Falloff"
 ClassicFalloffTooltip: |-
     Default: off

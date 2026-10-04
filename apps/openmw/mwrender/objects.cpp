@@ -101,6 +101,9 @@ namespace MWRender
     {
         insertBegin(ptr);
         ptr.getRefData().getBaseNode()->setNodeMask(Mask_Actor);
+        // OpenMGE XE: marks the actor for [Shaders] 'clamp lighting actors'
+        ptr.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(
+            new osg::Uniform("uClampLightingActor", 1.f));
 
         bool animated = true;
         std::string animationMesh
@@ -124,6 +127,9 @@ namespace MWRender
     {
         insertBegin(ptr);
         ptr.getRefData().getBaseNode()->setNodeMask(Mask_Actor);
+        // OpenMGE XE: marks the actor for [Shaders] 'clamp lighting actors'
+        ptr.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(
+            new osg::Uniform("uClampLightingActor", 1.f));
 
         if (ptr.getType() == ESM::REC_NPC_4)
         {

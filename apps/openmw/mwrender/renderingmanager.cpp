@@ -444,6 +444,14 @@ namespace MWRender
         mRootNode->getOrCreateStateSet()->addUniform(mMgeInscatterUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeScatterOnUniform);
         mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("mgeWeatherUniforms", 1.f));
+        // [Shaders] 'clamp lighting actors': actor roots carry uClampLightingActor = 1, this
+        // gate carries the live on/off switch. The explicit 0 default matters: actors and
+        // world objects share shader programs and GL keeps a program's last-set uniform
+        // value, so without it the clamp would leak onto geometry drawn after an actor.
+        mClampActorsGateUniform
+            = new osg::Uniform("uClampLightingActorsGate", Settings::shaders().mClampLightingActors ? 1.f : 0.f);
+        mRootNode->getOrCreateStateSet()->addUniform(mClampActorsGateUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("uClampLightingActor", 0.f));
         // MGE fog envelope from settings; the Distant Land Generator app is
         // the intended editor (game closed), so ctor-time read suffices
         mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform(
@@ -1267,6 +1275,8 @@ namespace MWRender
 
     void RenderingManager::renderPlayer(const MWWorld::Ptr& player)
     {
+        player.getRefData().getBaseNode()->getOrCreateStateSet()->addUniform(
+            new osg::Uniform("uClampLightingActor", 1.f));
         mPlayerAnimation = new NpcAnimation(player, player.getRefData().getBaseNode(), mResourceSystem, 0,
             NpcAnimation::VM_Normal, mFirstPersonFieldOfView);
 
@@ -1491,6 +1501,10 @@ namespace MWRender
             else if (it->first == "Water")
             {
                 mWater->processChangedSettings(changed);
+            }
+            else if (it->first == "Shaders" && it->second == "clamp lighting actors")
+            {
+                mClampActorsGateUniform->set(Settings::shaders().mClampLightingActors ? 1.f : 0.f);
             }
             else if (it->first == "Shaders" && it->second == "minimum interior brightness")
             {
