@@ -32,10 +32,14 @@ namespace Resource
 
         bool handle(const osgGA::GUIEventAdapter& ea, osgGA::GUIActionAdapter& aa) override;
 
+        // Keep collecting the engine's per-phase timings while the profiler is hidden (OpenMGE XE performance log).
+        void setAlwaysCollectEngineStats(bool value) { mAlwaysCollectEngineStats = value; }
+
     private:
         void setUpFonts();
 
         bool mInitFonts = false;
+        bool mAlwaysCollectEngineStats = false;
         bool mOfflineCollect;
         osg::ref_ptr<osgText::Font> mTextFont;
     };

@@ -1,8 +1,12 @@
 #include "engine.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
 #include <chrono>
+#include <fstream>
 #include <future>
+#include <iomanip>
 #include <system_error>
 
 #include <osgDB/ReaderWriter>
@@ -16,6 +20,7 @@
 #include <components/debug/gldebug.hpp>
 
 #include <components/misc/rng.hpp>
+#include <components/misc/timeconvert.hpp>
 
 #include <components/vfs/manager.hpp>
 #include <components/vfs/registerarchives.hpp>
@@ -67,6 +72,8 @@
 #include "mwsound/constants.hpp"
 #include "mwsound/soundmanagerimp.hpp"
 
+#include "mwworld/cell.hpp"
+#include "mwworld/cellstore.hpp"
 #include "mwworld/class.hpp"
 #include "mwworld/datetimemanager.hpp"
 #include "mwworld/worldimp.hpp"
@@ -79,6 +86,7 @@
 #include "mwdialogue/journalimp.hpp"
 #include "mwdialogue/scripttest.hpp"
 
+#include "mwmechanics/actorutil.hpp"
 #include "mwmechanics/mechanicsmanagerimp.hpp"
 
 #include "mwstate/statemanagerimp.hpp"
@@ -87,6 +95,158 @@
 
 namespace
 {
+    // OpenMGE XE: hidden performance log ([General] performance log). Every frame's F3 profiler numbers are added up,
+    // and once a second their averages, the second's worst frame and where the player is go to performance-log.csv next
+    // to openmw.log. Nothing is shown on screen.
+    class PerformanceLog
+    {
+    public:
+        PerformanceLog(const std::filesystem::path& path, osgViewer::Viewer& viewer)
+            : mFile(path, std::ios::out | std::ios::trunc)
+            , mViewer(viewer)
+        {
+            if (!mFile.is_open())
+            {
+                Log(Debug::Warning) << "Failed to open the performance log " << path;
+                return;
+            }
+            Log(Debug::Info) << "Performance log: " << path;
+            enableStats();
+            mFile << "time,cell,x,y,menu,fps,frame ms,worst frame ms";
+            for (const Column& column : mColumns)
+                mFile << ',' << column.mHeading;
+            mFile << '\n';
+            mFile.flush();
+        }
+
+        bool isOpen() const { return mFile.is_open(); }
+
+        void update(bool menu)
+        {
+            // Rendering stats arrive a few frames late, and loading screens draw several frames in one main loop
+            // iteration: read every frame the stats history still holds that hasn't been read yet.
+            const unsigned int frame = mViewer.getFrameStamp()->getFrameNumber();
+            if (frame < sStatsDelay + sStatsHistory)
+                return;
+            const unsigned int last = frame - sStatsDelay;
+            const unsigned int first = std::max(mLastFrame + 1, last - sStatsHistory);
+            const osg::Stats& stats = *mViewer.getViewerStats();
+            const osg::Stats& cameraStats = *mViewer.getCamera()->getStats();
+            for (unsigned int i = first; i <= last; ++i)
+            {
+                double value = 0.0;
+                if (stats.getAttribute(i, "Frame duration", value))
+                {
+                    mFrameTime.add(value * 1000.0);
+                    mWorstFrameMs = std::max(mWorstFrameMs, value * 1000.0);
+                }
+                for (Column& column : mColumns)
+                    if ((column.mCamera ? cameraStats : stats).getAttribute(i, column.mAttribute, value))
+                        column.mSum.add(value * column.mScale);
+            }
+            mLastFrame = last;
+
+            const auto now = std::chrono::steady_clock::now();
+            if (now < mNext)
+                return;
+            mNext = now + std::chrono::seconds(1);
+
+            // Closing the F3 or F4 pages switches some of these off again.
+            enableStats();
+
+            mFile << Misc::timeToString(std::chrono::system_clock::now(), "%H:%M:%S") << ',';
+            const MWWorld::Ptr player = MWMechanics::getPlayer();
+            if (!player.isEmpty() && player.isInCell())
+            {
+                std::string cell(player.getCell()->getCell()->getDescription());
+                std::replace(cell.begin(), cell.end(), ',', ' ');
+                std::replace(cell.begin(), cell.end(), '"', '\'');
+                const osg::Vec3f pos = player.getRefData().getPosition().asVec3();
+                mFile << '"' << cell << "\"," << static_cast<int>(pos.x()) << ',' << static_cast<int>(pos.y());
+            }
+            else
+                mFile << ",,";
+
+            const double frameMs = mFrameTime.take();
+            mFile << ',' << (menu ? 1 : 0) << std::fixed << std::setprecision(2) << ','
+                  << (frameMs > 0 ? 1000.0 / frameMs : -1.0) << ',' << frameMs << ',' << mWorstFrameMs;
+            mWorstFrameMs = 0.0;
+            for (Column& column : mColumns)
+                mFile << ',' << std::setprecision(column.mScale == 1.0 ? 0 : 2) << column.mSum.take();
+            mFile << '\n';
+            mFile.flush();
+        }
+
+    private:
+        static constexpr unsigned int sStatsDelay = 4;
+        static constexpr unsigned int sStatsHistory = 20;
+
+        struct Sum
+        {
+            double mTotal = 0.0;
+            unsigned int mCount = 0;
+
+            void add(double value)
+            {
+                mTotal += value;
+                ++mCount;
+            }
+
+            // The average since the last call, or -1 when nothing was recorded.
+            double take()
+            {
+                const double average = mCount > 0 ? mTotal / mCount : -1.0;
+                *this = Sum();
+                return average;
+            }
+        };
+
+        struct Column
+        {
+            const char* mHeading;
+            const char* mAttribute;
+            bool mCamera = false;
+            double mScale = 1000.0;
+            Sum mSum{};
+        };
+
+        void enableStats()
+        {
+            osg::Stats& stats = *mViewer.getViewerStats();
+            stats.collectStats("frame_rate", true);
+            stats.collectStats("resource", true);
+            osg::Stats& cameraStats = *mViewer.getCamera()->getStats();
+            cameraStats.collectStats("rendering", true);
+            cameraStats.collectStats("gpu", true);
+        }
+
+        std::ofstream mFile;
+        osgViewer::Viewer& mViewer;
+        std::chrono::steady_clock::time_point mNext;
+        unsigned int mLastFrame = 0;
+        Sum mFrameTime;
+        double mWorstFrameMs = 0.0;
+        std::array<Column, 17> mColumns{ {
+            { "input", "input_time_taken" },
+            { "sound", "sound_time_taken" },
+            { "luasync", "luasyncupdate_time_taken" },
+            { "state", "state_time_taken" },
+            { "script", "script_time_taken" },
+            { "mech", "mechanics_time_taken" },
+            { "phys", "physics_time_taken" },
+            { "phys async", "physicsworker_time_taken" },
+            { "world", "world_time_taken" },
+            { "gui", "gui_time_taken" },
+            { "focus", "focusobject_time_taken" },
+            { "lua", "lua_time_taken" },
+            { "cull", "Cull traversal time taken", true },
+            { "draw", "Draw traversal time taken", true },
+            { "gpu", "GPU draw time taken", true },
+            { "occlusion tested", "Occlusion Tested", false, 1.0 },
+            { "occlusion culled", "Occlusion Culled", false, 1.0 },
+        } };
+    };
+
     void checkSDLError(int ret)
     {
         if (ret != 0)
@@ -1033,6 +1193,15 @@ void OMW::Engine::go()
         mWindowManager->executeInConsole(mStartupScript);
     }
 
+    std::unique_ptr<PerformanceLog> performanceLog;
+    if (Settings::general().mPerformanceLog)
+    {
+        performanceLog = std::make_unique<PerformanceLog>(mCfgMgr.getLogPath() / "performance-log.csv", *mViewer);
+        if (!performanceLog->isOpen())
+            performanceLog.reset();
+    }
+    statsHandler->setAlwaysCollectEngineStats(performanceLog != nullptr);
+
     // Start the main rendering loop
     MWWorld::DateTimeManager& timeManager = *mWorld->getTimeManager();
     Misc::FrameRateLimiter frameRateLimiter = Misc::makeFrameRateLimiter(mEnvironment.getFrameRateLimit());
@@ -1074,6 +1243,9 @@ void OMW::Engine::go()
                     reportStats(i - statsReportDelay, *mViewer, stats);
             }
         }
+
+        if (performanceLog)
+            performanceLog->update(mWindowManager->isGuiMode());
 
         frameRateLimiter.limit();
     }
