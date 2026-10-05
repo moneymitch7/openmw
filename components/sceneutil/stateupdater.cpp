@@ -95,6 +95,7 @@ namespace SceneUtil
         stateset->addUniform(new osg::Uniform("useTreeAnim", false));
         stateset->addUniform(new osg::Uniform("viewerUnderwater", false));
         stateset->addUniform(new osg::Uniform("isRefraction", false));
+        stateset->addUniform(new osg::Uniform("sunShadowFade", 1.f));
     }
 
     void SharedUniformStateUpdater::apply(osg::StateSet* stateset, osg::NodeVisitor* nv)
@@ -106,6 +107,7 @@ namespace SceneUtil
         stateset->getUniform("windSpeed")->set(mWindSpeed);
         stateset->getUniform("playerPos")->set(mPlayerPos);
         stateset->getUniform("viewerUnderwater")->set(mViewerUnderwater);
+        stateset->getUniform("sunShadowFade")->set(mSunShadowFade);
     }
 
     void SharedUniformStateUpdater::setNear(float near)
@@ -136,6 +138,11 @@ namespace SceneUtil
     void SharedUniformStateUpdater::setViewerUnderwater(bool underwater)
     {
         mViewerUnderwater = underwater;
+    }
+
+    void SharedUniformStateUpdater::setSunShadowFade(float fade)
+    {
+        mSunShadowFade = fade;
     }
 
     void StateUpdater::setDefaults(osg::StateSet* stateset)

@@ -616,6 +616,13 @@ namespace MWRender
         return mSceneRoot.get();
     }
 
+    void RenderingManager::setSunShadowFade(float fade)
+    {
+        mSharedUniformStateUpdater->setSunShadowFade(fade);
+        if (mShadowManager)
+            mShadowManager->setSunShadowsSuppressed(fade <= 0.f);
+    }
+
     void RenderingManager::setNightEyeFactor(float factor)
     {
         if (factor != mNightEyeFactor)

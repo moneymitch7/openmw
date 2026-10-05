@@ -73,6 +73,9 @@ namespace SceneUtil
 
         void setViewerUnderwater(bool underwater);
 
+        /// 1 = sun shadows at full strength, 0 = none (the MGE shadow receiver, compat.glsl).
+        void setSunShadowFade(float fade);
+
     private:
         float mNear = 0.f;
         float mFar = 0.f;
@@ -81,6 +84,7 @@ namespace SceneUtil
         osg::Vec3f mPlayerPos;
         osg::Vec2f mScreenRes;
         bool mViewerUnderwater = false;
+        float mSunShadowFade = 1.f;
     };
 
     class StateUpdater : public StateSetUpdater

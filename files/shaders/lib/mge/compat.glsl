@@ -74,6 +74,10 @@ vec3 perObjectTonemap(vec3 c)
     return (((0.0548303 * c - 0.189786) * c - 0.154732) * c + 1.12969) * c;
 }
 
+// Sun shadow strength set by the engine each frame (SharedUniformStateUpdater): fades shadows out at night when
+// [Shadows] night shadows is off.
+uniform float sunShadowFade;
+
 // User option: the cloud-cover shadow fade. 0.25 = MGE XE behaviour
 // (cloud cover weakens shadows: overcast shadows run ~half of vanilla
 // OpenMW's depth), 1.0 = no fade (shadows keep near-vanilla strength in
@@ -99,7 +103,7 @@ vec3 mgeShadowMult(float shadowing, vec3 viewNormal)
     float x = lambert * dot(mgeSunDiffuse(), vec3(0.36, 0.53, 0.11));
     x *= MGE_CLOUD_SHADOW_FADE_FLOOR
         + (1.0 - MGE_CLOUD_SHADOW_FADE_FLOOR) * clamp(mgeSunSpecular().a, 0.0, 1.0);
-    float light = x / (0.4 + x);
+    float light = x / (0.4 + x) * sunShadowFade;
     return vec3(1.0) - (1.0 - shadowing) * light * vec3(1.0, 0.97, 0.81);
 }
 

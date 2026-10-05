@@ -51,6 +51,10 @@ namespace SceneUtil
 
         void updateCastingMasks(unsigned int outdoorMask, unsigned int indoorMask);
 
+        /// Stops drawing outdoor sun shadows while the sun shadow strength is zero (at night with [Shadows] night
+        /// shadows off), so their cull and draw cost goes too. Indoor shadows are unaffected.
+        void setSunShadowsSuppressed(bool suppressed);
+
     protected:
         static ShadowManager* sInstance;
 
@@ -62,6 +66,9 @@ namespace SceneUtil
 
         unsigned int mOutdoorShadowCastingMask;
         unsigned int mIndoorShadowCastingMask;
+
+        bool mIndoorMode = false;
+        bool mSunShadowsSuppressed = false;
     };
 }
 

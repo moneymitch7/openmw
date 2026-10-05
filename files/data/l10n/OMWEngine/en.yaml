@@ -248,6 +248,8 @@ Subtitles: "Subtitles"
 SunlightScattering: "Sunlight Scattering"
 ShadowSoftShadows: "Soft Shadows"
 ShadowSoftShadowsTooltip: "Smooth shadow edges. Decreases performance slightly but allows you to use a lower Shadow Map Resolution to compensate."
+ShadowNightShadows: "Night Shadows"
+ShadowNightShadowsTooltip: "Keep shadows at night, cast by the moonlight.\n\nWhen off, outdoor shadows fade out over the last half hour before night falls and back in over the first half hour after sunrise, and none are drawn at night. The night light comes in so low that every shadow stretches across the town, costing several milliseconds each frame and speckling the surfaces it grazes."
 ShadowUpdateInterval: "Shadow Temporal Reuse"
 ShadowUpdateIntervalTooltip: |-
     Reuse shadow maps across frames instead of recalculating every frame.

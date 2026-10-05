@@ -889,6 +889,8 @@ namespace MWWorld
             // MGE XE parity: interiors run linear palette fog (niceWeather=0,
             // isExterior=0), matching MGE's adjustFog interior branch.
             mRendering.setMgeWeather(0.f, mResult.mSkyColor, 1.f, 0.f, false);
+            // indoor shadows keep their strength whatever the hour outside
+            mRendering.setSunShadowFade(1.f);
             return;
         }
 
@@ -948,6 +950,21 @@ namespace MWWorld
             const osg::Vec3f sunDir(-400.f * orbit, 75.f, -100.f);
             mRendering.setSunDirection(sunDir);
             mRendering.setNight(isNight);
+
+            // OpenMGE XE: without night shadows, sun shadows fade out over the last half hour before night and back
+            // in over the first half hour after sunrise, and are not drawn at night. The night light is the moon's,
+            // so low that every shadow stretches across a town (several ms of cull and draw) and speckles the
+            // surfaces it grazes.
+            float shadowFade = 1.f;
+            if (!Settings::shadows().mNightShadows)
+            {
+                constexpr float fadeHours = 0.5f;
+                shadowFade = isNight ? 0.f
+                                     : std::clamp(std::min(adjustedNightStart - adjustedHour, adjustedHour - mSunriseTime)
+                                             / fadeHours,
+                                         0.f, 1.f);
+            }
+            mRendering.setSunShadowFade(shadowFade);
         }
 
         float underwaterFog = mUnderwaterFog.getValue(time.getHour(), mTimeSettings, "Fog");

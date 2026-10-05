@@ -222,17 +222,42 @@ namespace SceneUtil
 
     void ShadowManager::enableIndoorMode(const Settings::ShadowsCategory& settings)
     {
+        mIndoorMode = true;
         if (settings.mEnableIndoorShadows)
+        {
+            // outdoors they may have been switched off for the night
+            if (mEnableShadows && mSunShadowsSuppressed)
+                mShadowTechnique->enableShadows();
             mShadowSettings->setCastsShadowTraversalMask(mIndoorShadowCastingMask);
+        }
         else
             mShadowTechnique->disableShadows(true);
     }
 
     void ShadowManager::enableOutdoorMode()
     {
+        mIndoorMode = false;
         if (mEnableShadows)
-            mShadowTechnique->enableShadows();
+        {
+            if (mSunShadowsSuppressed)
+                mShadowTechnique->disableShadows(true);
+            else
+                mShadowTechnique->enableShadows();
+        }
         mShadowSettings->setCastsShadowTraversalMask(mOutdoorShadowCastingMask);
+    }
+
+    void ShadowManager::setSunShadowsSuppressed(bool suppressed)
+    {
+        if (suppressed == mSunShadowsSuppressed)
+            return;
+        mSunShadowsSuppressed = suppressed;
+        if (mIndoorMode || !mEnableShadows)
+            return;
+        if (suppressed)
+            mShadowTechnique->disableShadows(true);
+        else
+            mShadowTechnique->enableShadows();
     }
 
     void ShadowManager::updateCastingMasks(unsigned int outdoorMask, unsigned int indoorMask)

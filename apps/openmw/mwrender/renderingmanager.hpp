@@ -158,6 +158,9 @@ namespace MWRender
             float dlFogOffsetNext = 0.f, float dlFogBlend = 0.f);
         void setNight(bool isNight) { mNight = isNight; }
 
+        /// Sun shadow strength, 1 = full, 0 = none (and not drawn). Set by the weather each frame.
+        void setSunShadowFade(float fade);
+
         void configureAmbient(const MWWorld::Cell& cell);
         void configureFog(const MWWorld::Cell& cell);
         void configureFog(
