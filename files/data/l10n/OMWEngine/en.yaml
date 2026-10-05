@@ -178,6 +178,26 @@ MgeWeatherFogValue: "Weather Fog ({value, number, percent})"
 MgeWeatherFogTooltip: |-
     How thick the fog is in every other weather: Foggy, Overcast, Rain, Thunderstorm, Snow and Cloudy.
     100% is MGE XE's weather fog, 0% is as clear as Clear weather.
+WaveHeightValue: "Wave Height ({value, plural, =0 {off} other {#}})"
+WaveHeightTooltip: |-
+  OpenMGE XE 3D water: real waves on the water near you, height in game units in the windiest weather (calm weather has about a third of it, rain about two thirds).
+
+  0 = flat water. 20-40 looks natural; high values make docks and boats clip through the crests. Needs shader water.
+ReflectionUpdateIntervalValue: "Reflection Updates (every {value, plural, =1 {frame} other {# frames}})"
+ReflectionUpdateIntervalTooltip: |-
+  Draw the water reflection only every this many frames and reuse it in between. Saves drawing the scene a second time near water; reflections can trail slightly when turning fast.
+
+  Below about 25 frames per second the reflection is drawn every frame anyway.
+ReflectionStaticsDistanceValue: "Buildings in Reflections ({cells, plural, =0 {all} other {within # cells}})"
+ReflectionStaticsDistanceTooltip: |-
+  Leave distant buildings and other statics beyond this distance out of the water reflection; terrain and sky are still reflected. Cheaper reflections near water (Vivec, Ebonheart).
+
+  Takes effect after restarting the game.
+LuaDistantUpdateValue: "Distant Script Updates (every {value, plural, =1 {frame} other {# frames}})"
+LuaDistantUpdateTooltip: |-
+  Scripted objects more than about 44 m from you run their mods' per-frame updates only every this many frames (with the full elapsed time). Cuts the cost of Lua mods in busy towns.
+
+  Nearby objects, actors in combat and you always update every frame. Animations or effects that mods drive on distant NPCs can get choppier.
 MenuTransparency: "Menu Transparency"
 MouseAndKeyboard: "Mouse/Keyboard"
 MouseEmulationCursor: "Mouse Emulation Cursor"

@@ -511,6 +511,26 @@
                             <Property key="TextAlign" value="Right"/>
                         </Widget>
 
+                        <!-- OpenMGE XE: distant scripted objects' update rate -->
+                        <Widget type="TextBox" skin="NormalText" position="0 326 352 18" align="Left Top" name="LuaDistantUpdateText">
+                            <UserString key="ToolTipType" value="Layout"/>
+                            <UserString key="ToolTipLayout" value="TextToolTip"/>
+                            <UserString key="Caption_Text" value="#{OMWEngine:LuaDistantUpdateTooltip}"/>
+                        </Widget>
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 348 352 18" align="HStretch Top">
+                            <Property key="Range" value="4"/>
+                            <Property key="Page" value="1"/>
+                            <Property key="WheelPage" value="1"/>
+                            <UserString key="SettingType" value="Slider"/>
+                            <UserString key="SettingCategory" value="Lua"/>
+                            <UserString key="SettingName" value="distant update interval"/>
+                            <UserString key="SettingValueType" value="Integer"/>
+                            <UserString key="SettingMin" value="1"/>
+                            <UserString key="SettingMax" value="4"/>
+                            <UserString key="SettingLabelWidget" value="LuaDistantUpdateText"/>
+                            <UserString key="SettingLabelCaption" value="LuaDistantUpdateValue"/>
+                        </Widget>
+
                     </Widget>
                     <Widget type="TabItem">
                         <Property key="Caption" value=" #{OMWEngine:Water} "/>
@@ -632,6 +652,76 @@
                                     <Property key="AddItem" value="#{OMWEngine:RainRippleDetailDense}"/>
                                 </Widget>
                                 <Widget type="Spacer" />
+                            </Widget>
+
+                            <!-- OpenMGE XE: 3D water and cheaper reflections -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="WaveHeightText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:WaveHeightTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="151"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0"/>
+                                <UserString key="SettingMax" value="150"/>
+                                <UserString key="SettingCategory" value="Water"/>
+                                <UserString key="SettingName" value="wave height"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="WaveHeightText"/>
+                                <UserString key="SettingLabelCaption" value="WaveHeightValue"/>
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="ReflectionUpdateIntervalText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ReflectionUpdateIntervalTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="4"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="1"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="1"/>
+                                <UserString key="SettingMax" value="4"/>
+                                <UserString key="SettingCategory" value="Water"/>
+                                <UserString key="SettingName" value="reflection update interval"/>
+                                <UserString key="SettingValueType" value="Integer"/>
+                                <UserString key="SettingLabelWidget" value="ReflectionUpdateIntervalText"/>
+                                <UserString key="SettingLabelCaption" value="ReflectionUpdateIntervalValue"/>
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="ReflectionStaticsDistanceText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ReflectionStaticsDistanceTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="13"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="1"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0"/>
+                                <UserString key="SettingMax" value="49152"/>
+                                <UserString key="SettingCategory" value="Water"/>
+                                <UserString key="SettingName" value="reflection statics distance"/>
+                                <UserString key="SettingValueType" value="Cell"/>
+                                <UserString key="SettingLabelWidget" value="ReflectionStaticsDistanceText"/>
+                                <UserString key="SettingLabelCaption" value="ReflectionStaticsDistanceValue"/>
                             </Widget>
 
                         </Widget>

@@ -831,7 +831,37 @@ namespace MWRender
 
     void Water::processChangedSettings(const Settings::CategorySettingVector& settings)
     {
-        updateWaterMaterial();
+        // The OpenMGE XE sliders apply without rebuilding the water (a slider drag sends many changes); anything else,
+        // or waves being switched on or off (the shader changes), rebuilds it.
+        bool rebuild = false;
+        for (const auto& [category, name] : settings)
+        {
+            if (category != "Water")
+                continue;
+            if (name == "wave height")
+            {
+                const float height
+                    = Settings::water().mShader ? std::max(0.f, Settings::water().mWaveHeight.get()) : 0.f;
+                if ((height > 0.f) != (mWaveGrid != nullptr))
+                    rebuild = true;
+                else
+                    mWaveHeight = height;
+            }
+            else if (name == "reflection update interval")
+            {
+                if (mReflection)
+                    mReflection->setUpdateInterval(
+                        static_cast<unsigned int>(Settings::water().mReflectionUpdateInterval.get()));
+            }
+            else if (name == "reflection statics distance")
+            {
+                // read when distant chunks are built: takes effect after a restart
+            }
+            else
+                rebuild = true;
+        }
+        if (rebuild)
+            updateWaterMaterial();
     }
 
     Water::~Water()
