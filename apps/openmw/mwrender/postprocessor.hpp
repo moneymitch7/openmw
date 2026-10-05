@@ -192,6 +192,14 @@ namespace MWRender
 
         bool isEnabled() const { return mUsePostProcessing; }
 
+        /// Retakes the copy omw_GetBlended reads, from inside a later bin (the first-person one) so what it drew
+        /// counts too.
+        void resolveBlendedColor(osgUtil::RenderBin* bin, osg::RenderInfo& renderInfo)
+        {
+            if (mBlendedColorResolve)
+                mBlendedColorResolve->resolve(bin, renderInfo);
+        }
+
         void disable();
 
         void enable();

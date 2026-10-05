@@ -155,8 +155,9 @@ namespace MWRender
             = new TransparentDepthBinCallback(mRendering.getResourceSystem()->getSceneManager()->getShaderManager(),
                 Settings::postProcessing().mTransparentPostpass);
         mOpaqueColorResolve = new OpaqueColorBinCallback;
-        // Second copy of the frame, taken right after blended geometry and before first-person models and the sun
-        // glare: post-processing shaders get what blended geometry added as the difference of the two copies.
+        // Second copy of the frame, taken right after blended geometry (and again after first-person models, when
+        // they are drawn) but before the sun glare: post-processing shaders get what blended geometry added as the
+        // difference of the two copies.
         mBlendedColorResolve = new OpaqueColorBinCallback;
         mBlendedColorResolve->mMask = GL_COLOR_BUFFER_BIT;
         mTransparentDepthPostPass->mBlendedResolve = mBlendedColorResolve;

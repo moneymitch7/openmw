@@ -228,9 +228,10 @@ mat4 omw_InvProjectionMatrix()
 #endif
     }
 
-    // OpenMGE XE: the colour that blended (see-through) geometry - smoke, flames, rain, glass - added to the frame,
-    // without first-person models or the sun glare (which are drawn later). A shader that replaces the sky with its
-    // own adds this back on top, so torches and rain in front of the sky stay visible (OMW_BLENDED_COLOR).
+    // OpenMGE XE: the colour that blended (see-through) geometry - smoke, flames, rain, glass - and first-person
+    // models added to the frame, without the sun glare (drawn later). A shader that replaces the sky with its own
+    // adds this back where the depth buffer is empty, so torches, spells and rain in front of the sky stay visible
+    // (OMW_BLENDED_COLOR).
     vec4 omw_GetBlended(vec2 uv)
     {
 #if OMW_MULTIVIEW

@@ -3,6 +3,7 @@
 
 #include <array>
 #include <memory>
+#include <osg/ColorMask>
 #include <osg/FrameBufferObject>
 #include <osg/StateSet>
 
@@ -45,6 +46,7 @@ namespace MWRender
 
     private:
         osg::ref_ptr<osg::StateSet> mStateSet;
+        osg::ref_ptr<osg::ColorMask> mColorMaskOff;
         bool mPostPass;
         const Water* mWater = nullptr;
     };

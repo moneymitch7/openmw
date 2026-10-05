@@ -329,8 +329,14 @@ namespace MWRender
             mDepth = new SceneUtil::AutoDepth;
             mDepth->setWriteMask(true);
 
+            // The depth pass draws into the opaque copy's framebuffer, whose colour post-processing reads as the frame
+            // before blended geometry (omw_GetOpaque); first-person colour leaking in there showed up as inverted
+            // first-person effects in front of a post-processing sky. OVERRIDE so no first-person state turns colour
+            // back on, and applied up front (below) because a leaf that shares its state with the colour pass's last
+            // leaf is drawn without any state being applied.
+            mColorMaskOff = new osg::ColorMask(false, false, false, false);
             mStateSet = new osg::StateSet;
-            mStateSet->setAttributeAndModes(new osg::ColorMask(false, false, false, false), osg::StateAttribute::ON);
+            mStateSet->setAttributeAndModes(mColorMaskOff, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
         }
 
         void drawImplementation(
@@ -349,12 +355,17 @@ namespace MWRender
             // color accumulation pass
             bin->drawImplementation(renderInfo, previous);
 
+            // first-person effects (torch flame, spell glow on the hands) count as blended geometry for
+            // omw_GetBlended, so a shader that draws its own sky keeps them in front of it
+            postProcessor->resolveBlendedColor(bin, renderInfo);
+
             auto primaryFBO = postProcessor->getPrimaryFbo(frameId);
             primaryFBO->apply(*state);
 
             postProcessor->getFbo(PostProcessor::FBO_OpaqueDepth, frameId)->apply(*state);
 
             // depth accumulation pass
+            state->applyAttribute(mColorMaskOff);
             osg::ref_ptr<osg::StateSet> restore = bin->getStateSet();
             bin->setStateSet(mStateSet);
             bin->drawImplementation(renderInfo, previous);
@@ -366,6 +377,7 @@ namespace MWRender
         }
 
         osg::ref_ptr<osg::Depth> mDepth;
+        osg::ref_ptr<osg::ColorMask> mColorMaskOff;
         osg::ref_ptr<osg::StateSet> mStateSet;
     };
 
