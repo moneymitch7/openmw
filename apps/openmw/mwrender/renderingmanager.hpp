@@ -92,6 +92,7 @@ namespace Debug
 namespace MWRender
 {
     class IntersectionVisitorWithIgnoreList;
+    class RayKdTrees;
 
     class EffectManager;
     class ScreenshotManager;
@@ -323,6 +324,7 @@ namespace MWRender
             bool ignorePlayer, bool ignoreActors, bool ignoreTerrain, std::span<const MWWorld::Ptr> ignoreList = {});
 
         osg::ref_ptr<IntersectionVisitorWithIgnoreList> mIntersectionVisitor;
+        std::unique_ptr<RayKdTrees> mRayKdTrees;
 
         osg::ref_ptr<osgViewer::Viewer> mViewer;
         osg::ref_ptr<osg::Uniform> mMgeNiceWeatherUniform;

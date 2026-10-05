@@ -5,6 +5,7 @@
 
 #include <osg/ClipControl>
 #include <osg/ComputeBoundsVisitor>
+#include <osg/Geode>
 #include <osg/Group>
 #include <osg/Matrix>
 #include <osg/UserDataContainer>
@@ -82,6 +83,7 @@
 #include "occlusionculling.hpp"
 #include "pathgrid.hpp"
 #include "postprocessor.hpp"
+#include "raykdtrees.hpp"
 #include "recastmesh.hpp"
 #include "screenshotmanager.hpp"
 #include "sky.hpp"
@@ -1149,12 +1151,37 @@ namespace MWRender
             osgUtil::IntersectionVisitor::apply(transform);
         }
 
+        // Big static meshes the ray reaches get a search tree built in the background (RayKdTrees).
+        void apply(osg::Drawable& drawable) override
+        {
+            if (mKdTrees != nullptr && enter(drawable))
+                mKdTrees->visit(drawable, mWorkQueue);
+            osgUtil::IntersectionVisitor::apply(drawable);
+        }
+
+        void apply(osg::Geode& geode) override
+        {
+            if (mKdTrees != nullptr && enter(geode))
+            {
+                for (unsigned int i = 0; i < geode.getNumDrawables(); ++i)
+                    mKdTrees->visit(*geode.getDrawable(i), mWorkQueue);
+            }
+            osgUtil::IntersectionVisitor::apply(geode);
+        }
+
         void setIgnoreList(std::span<const MWWorld::Ptr> ignoreList) { mIgnoreList = ignoreList; }
         void setContainsPagedRefs(bool contains) { mContainsPagedRefs = contains; }
+        void setKdTrees(RayKdTrees* kdTrees, SceneUtil::WorkQueue* workQueue)
+        {
+            mKdTrees = kdTrees;
+            mWorkQueue = workQueue;
+        }
 
     private:
         std::span<const MWWorld::Ptr> mIgnoreList;
         bool mContainsPagedRefs = false;
+        RayKdTrees* mKdTrees = nullptr;
+        SceneUtil::WorkQueue* mWorkQueue = nullptr;
     };
 
     osg::ref_ptr<osgUtil::IntersectionVisitor> RenderingManager::getIntersectionVisitor(
@@ -1163,7 +1190,11 @@ namespace MWRender
     {
         if (!mIntersectionVisitor)
             mIntersectionVisitor = new IntersectionVisitorWithIgnoreList;
+        if (!mRayKdTrees)
+            mRayKdTrees = std::make_unique<RayKdTrees>();
 
+        mRayKdTrees->collect();
+        mIntersectionVisitor->setKdTrees(mRayKdTrees.get(), mWorkQueue.get());
         mIntersectionVisitor->setIgnoreList(ignoreList);
         mIntersectionVisitor->setContainsPagedRefs(false);
 
