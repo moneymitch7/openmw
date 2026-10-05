@@ -1,5 +1,7 @@
 #include "localscripts.hpp"
 
+#include <cstdint>
+
 #include "../mwbase/environment.hpp"
 #include "../mwbase/mechanicsmanager.hpp"
 #include "../mwmechanics/aicombat.hpp"
@@ -239,6 +241,8 @@ namespace MWLua
     LocalScripts::LocalScripts(LuaUtil::LuaState* lua, const LObject& obj, LuaUtil::ScriptTracker* tracker)
         : LuaUtil::ScriptsContainer(lua, "L" + obj.id().toString(), tracker, false)
         , mData(obj)
+        // spreads distant objects' throttled updates over frames
+        , mUpdatePhase(static_cast<unsigned>((reinterpret_cast<std::uintptr_t>(this) >> 4) * 2654435761u >> 8))
     {
         lua->protectedCall(
             [&](LuaUtil::LuaView& view) { addPackage("openmw.self", sol::make_object(view.sol(), &mData)); });

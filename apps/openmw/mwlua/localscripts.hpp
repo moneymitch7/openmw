@@ -6,6 +6,7 @@
 
 #include <components/lua/luastate.hpp>
 #include <components/lua/scriptscontainer.hpp>
+#include <components/lua/updatethrottle.hpp>
 
 #include "../mwbase/luamanager.hpp"
 #include "../mwmechanics/actorutil.hpp"
@@ -112,6 +113,10 @@ namespace MWLua
 
         void applyStatsCache();
 
+        // [Lua] distant update interval: onUpdate of distant objects runs every few frames (see LuaManager::update)
+        LuaUtil::UpdateThrottle& updateThrottle() { return mUpdateThrottle; }
+        unsigned updatePhase() const { return mUpdatePhase; }
+
         // Calls a lua interface on the player's scripts. This call is only meant for use in updating UI elements.
         template <typename T, typename... Args>
         static std::optional<T> callPlayerInterface(
@@ -127,6 +132,8 @@ namespace MWLua
 
     protected:
         SelfObject mData;
+        LuaUtil::UpdateThrottle mUpdateThrottle;
+        unsigned mUpdatePhase = 0;
 
     private:
         EngineHandlerList mOnActiveHandlers{ "onActive" };

@@ -32,8 +32,11 @@
 #include "../mwbase/windowmanager.hpp"
 #include "../mwbase/world.hpp"
 
+#include "../mwmechanics/aisequence.hpp"
+#include "../mwmechanics/creaturestats.hpp"
 #include "../mwrender/bonegroup.hpp"
 #include "../mwrender/postprocessor.hpp"
+#include "../mwworld/class.hpp"
 
 #include "../mwworld/datetimemanager.hpp"
 #include "../mwworld/esmstore.hpp"
@@ -326,8 +329,30 @@ namespace MWLua
             endPhase(Phase_EngineHandlers);
 
             float frameDuration = MWBase::Environment::get().getFrameDuration();
-            forEachActive(
-                mActiveLocalScripts, [&](LocalScripts* scripts) { scripts->update(isPaused ? 0 : frameDuration); });
+            const unsigned distantInterval
+                = isPaused ? 1u : static_cast<unsigned>(Settings::lua().mDistantUpdateInterval.get());
+            if (distantInterval <= 1)
+                forEachActive(
+                    mActiveLocalScripts, [&](LocalScripts* scripts) { scripts->update(isPaused ? 0 : frameDuration); });
+            else
+            {
+                // Objects far from the player run onUpdate every few frames (with the skipped time added up),
+                // spread over the frames; near ones, actors in combat and the player every frame.
+                ++mDistantUpdateFrame;
+                const osg::Vec3f playerPos = mPlayer.getRefData().getPosition().asVec3();
+                const float distance = Settings::lua().mDistantUpdateDistance;
+                const float maxDistanceSq = distance * distance;
+                forEachActive(mActiveLocalScripts, [&](LocalScripts* scripts) {
+                    const MWWorld::Ptr& ptr = scripts->getPtrOrEmpty();
+                    bool fullRate = ptr.isEmpty() || !ptr.isInCell() || ptr == mPlayer
+                        || (ptr.getRefData().getPosition().asVec3() - playerPos).length2() <= maxDistanceSq;
+                    if (!fullRate && ptr.getClass().isActor())
+                        fullRate = ptr.getClass().getCreatureStats(ptr).getAiSequence().isInCombat();
+                    if (const std::optional<float> dt = scripts->updateThrottle().next(
+                            frameDuration, fullRate, mDistantUpdateFrame, scripts->updatePhase(), distantInterval))
+                        scripts->update(*dt);
+                });
+            }
             endPhase(Phase_LocalUpdate);
             mGlobalScripts.update(isPaused ? 0 : frameDuration);
             endPhase(Phase_GlobalUpdate);

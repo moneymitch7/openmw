@@ -27,6 +27,10 @@ namespace Settings
         SettingValue<std::uint64_t> mInstructionLimitPerCall{ mIndex, "Lua", "instruction limit per call",
             makeMaxSanitizerUInt64(1001) };
         SettingValue<int> mGcStepsPerFrame{ mIndex, "Lua", "gc steps per frame", makeMaxSanitizerInt(0) };
+        SettingValue<int> mDistantUpdateInterval{ mIndex, "Lua", "distant update interval",
+            makeClampSanitizerInt(1, 8) };
+        SettingValue<float> mDistantUpdateDistance{ mIndex, "Lua", "distant update distance",
+            makeMaxSanitizerFloat(0) };
     };
 }
 

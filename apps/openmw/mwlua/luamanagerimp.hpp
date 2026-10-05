@@ -245,6 +245,7 @@ namespace MWLua
             double mFrameMs = 0;
         };
         std::map<std::string, QueuedChangeStats, std::less<>> mQueuedChangeStats; // by action name
+        std::uint64_t mDistantUpdateFrame = 0; // [Lua] distant update interval
         void addPhaseTime(ProfilePhase phase, std::chrono::steady_clock::time_point start);
         LuaUtil::ScriptsConfiguration mConfiguration;
         LuaUtil::LuaState mLua;

@@ -14,6 +14,7 @@ file(GLOB UNITTEST_SRC_FILES
     lua/testl10n.cpp
     lua/testlua.cpp
     lua/testscriptscontainer.cpp
+    lua/testupdatethrottle.cpp
     lua/testserialization.cpp
     lua/teststorage.cpp
     lua/testuicontent.cpp
