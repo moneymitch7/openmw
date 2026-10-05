@@ -273,6 +273,12 @@ namespace MWRender
                 node.mRootStateSet->setTextureAttribute(
                     PostProcessor::TextureUnits::Unit_Distortion, mTextureDistortion);
 
+            if (mTextureOpaque)
+                node.mRootStateSet->setTextureAttribute(PostProcessor::TextureUnits::Unit_Opaque, mTextureOpaque);
+
+            if (mTextureBlended)
+                node.mRootStateSet->setTextureAttribute(PostProcessor::TextureUnits::Unit_Blended, mTextureBlended);
+
             state.pushStateSet(node.mRootStateSet);
             state.apply();
 

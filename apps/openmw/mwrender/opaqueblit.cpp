@@ -33,7 +33,7 @@ namespace MWRender
         {
             if (!mMultiviewResolve[frameId])
                 mMultiviewResolve[frameId] = std::make_unique<Stereo::MultiviewFramebufferResolve>(
-                    msaaFbo ? msaaFbo : fbo, opaqueFbo, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    msaaFbo ? msaaFbo : fbo, opaqueFbo, mMask);
             else
             {
                 mMultiviewResolve[frameId]->setResolveFbo(opaqueFbo);
@@ -47,8 +47,7 @@ namespace MWRender
             opaqueFbo->apply(state, osg::FrameBufferObject::DRAW_FRAMEBUFFER);
             glReadBuffer(GL_COLOR_ATTACHMENT0_EXT);
             ext->glBlitFramebuffer(0, 0, colorTex->getTextureWidth(), colorTex->getTextureHeight(), 0, 0,
-                colorTex->getTextureWidth(), colorTex->getTextureHeight(), GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT,
-                GL_NEAREST);
+                colorTex->getTextureWidth(), colorTex->getTextureHeight(), mMask, GL_NEAREST);
         }
 
         (msaaFbo ? msaaFbo : fbo)->apply(state, osg::FrameBufferObject::DRAW_FRAMEBUFFER);

@@ -58,8 +58,8 @@ namespace MWRender
     class PostProcessor : public osg::Group
     {
     public:
-        using FBOArray = std::array<osg::ref_ptr<osg::FrameBufferObject>, 6>;
-        using TextureArray = std::array<osg::ref_ptr<osg::Texture>, 7>;
+        using FBOArray = std::array<osg::ref_ptr<osg::FrameBufferObject>, 7>;
+        using TextureArray = std::array<osg::ref_ptr<osg::Texture>, 8>;
         using TechniqueList = std::vector<std::shared_ptr<Fx::Technique>>;
 
         enum TextureIndex
@@ -71,6 +71,7 @@ namespace MWRender
             Tex_Normal,
             Tex_Distortion,
             Tex_OpaqueColor,
+            Tex_BlendedColor,
         };
 
         enum FBOIndex
@@ -81,6 +82,7 @@ namespace MWRender
             FBO_OpaqueDepth,
             FBO_Intercept,
             FBO_Distortion,
+            FBO_BlendedColor,
         };
 
         enum TextureUnits
@@ -91,6 +93,8 @@ namespace MWRender
             Unit_EyeAdaptation,
             Unit_Normals,
             Unit_Distortion,
+            Unit_Opaque,
+            Unit_Blended,
             Unit_NextFree
         };
 
@@ -273,6 +277,7 @@ namespace MWRender
         std::array<osg::ref_ptr<PingPongCanvas>, 2> mCanvases;
         osg::ref_ptr<TransparentDepthBinCallback> mTransparentDepthPostPass;
         osg::ref_ptr<OpaqueColorBinCallback> mOpaqueColorResolve;
+        osg::ref_ptr<OpaqueColorBinCallback> mBlendedColorResolve;
         osg::ref_ptr<DistortionCallback> mDistortionCallback;
 
         Fx::DispatchArray mTemplateData;

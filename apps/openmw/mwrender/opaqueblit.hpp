@@ -23,6 +23,8 @@ namespace MWRender
         osg::ref_ptr<osg::FrameBufferObject> mFbo[2];
         osg::ref_ptr<osg::FrameBufferObject> mMsaaFbo[2];
         osg::ref_ptr<osg::FrameBufferObject> mOpaqueFbo[2];
+        // What the copy takes: colour and depth for the opaque copy, colour only for the blended one.
+        GLbitfield mMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
         std::array<std::unique_ptr<Stereo::MultiviewFramebufferResolve>, 2> mMultiviewResolve;
     };
 }

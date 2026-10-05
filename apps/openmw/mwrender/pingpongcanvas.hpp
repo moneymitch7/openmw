@@ -54,6 +54,10 @@ namespace MWRender
 
         void setTextureDistortion(osg::ref_ptr<osg::Texture> tex) { mTextureDistortion = tex; }
 
+        void setTextureOpaque(osg::ref_ptr<osg::Texture> tex) { mTextureOpaque = tex; }
+
+        void setTextureBlended(osg::ref_ptr<osg::Texture> tex) { mTextureBlended = tex; }
+
         void setCalculateAvgLum(bool enabled) { mAvgLum = enabled; }
 
         void setPostProcessing(bool enabled) { mPostprocessing = enabled; }
@@ -76,6 +80,8 @@ namespace MWRender
         osg::ref_ptr<osg::Texture> mTextureDepth;
         osg::ref_ptr<osg::Texture> mTextureNormals;
         osg::ref_ptr<osg::Texture> mTextureDistortion;
+        osg::ref_ptr<osg::Texture> mTextureOpaque;
+        osg::ref_ptr<osg::Texture> mTextureBlended;
 
         mutable bool mDirty = false;
         mutable std::vector<Fx::Types::RenderTarget> mDirtyAttachments;

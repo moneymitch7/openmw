@@ -76,6 +76,8 @@ namespace Fx
 #define OMW_NORMALS @normals
 #define OMW_USE_BINDINGS @useBindings
 #define OMW_MULTIVIEW @multiview
+#define OMW_OPAQUE_COLOR 1
+#define OMW_BLENDED_COLOR 1
 #define omw_In @in
 #define omw_Out @out
 #define omw_Position @position
@@ -93,6 +95,8 @@ uniform @builtinSampler omw_SamplerLastPass;
 uniform @builtinSampler omw_SamplerDepth;
 uniform @builtinSampler omw_SamplerNormals;
 uniform @builtinSampler omw_SamplerDistortion;
+uniform @builtinSampler omw_SamplerOpaque;
+uniform @builtinSampler omw_SamplerBlended;
 
 uniform vec4 omw_PointLights[@pointLightCount];
 uniform int omw_PointLightsCount;
@@ -210,6 +214,31 @@ mat4 omw_InvProjectionMatrix()
 #else
         return omw_Sanitize(omw_Texture2D(omw_SamplerLastPass, uv));
 #endif
+    }
+
+    // OpenMGE XE: the scene as it was before blended (see-through) geometry was drawn - sky, opaque objects and
+    // anything under the water, without smoke, rain, glass or the water surface. omw_GetLastShader minus this is
+    // what blended geometry added, so a shader that replaces the sky can put it back on top (OMW_OPAQUE_COLOR).
+    vec4 omw_GetOpaque(vec2 uv)
+    {
+#if OMW_MULTIVIEW
+        return omw_Sanitize(omw_Texture2DArray(omw_SamplerOpaque, vec3(uv, gl_ViewID_OVR)));
+#else
+        return omw_Sanitize(omw_Texture2D(omw_SamplerOpaque, uv));
+#endif
+    }
+
+    // OpenMGE XE: the colour that blended (see-through) geometry - smoke, flames, rain, glass - added to the frame,
+    // without first-person models or the sun glare (which are drawn later). A shader that replaces the sky with its
+    // own adds this back on top, so torches and rain in front of the sky stay visible (OMW_BLENDED_COLOR).
+    vec4 omw_GetBlended(vec2 uv)
+    {
+#if OMW_MULTIVIEW
+        vec4 after = omw_Texture2DArray(omw_SamplerBlended, vec3(uv, gl_ViewID_OVR));
+#else
+        vec4 after = omw_Texture2D(omw_SamplerBlended, uv);
+#endif
+        return vec4(omw_Sanitize(after).rgb - omw_GetOpaque(uv).rgb, 0.0);
     }
 
     vec3 omw_GetNormals(vec2 uv)

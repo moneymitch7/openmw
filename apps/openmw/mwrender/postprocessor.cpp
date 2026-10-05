@@ -155,6 +155,11 @@ namespace MWRender
             = new TransparentDepthBinCallback(mRendering.getResourceSystem()->getSceneManager()->getShaderManager(),
                 Settings::postProcessing().mTransparentPostpass);
         mOpaqueColorResolve = new OpaqueColorBinCallback;
+        // Second copy of the frame, taken right after blended geometry and before first-person models and the sun
+        // glare: post-processing shaders get what blended geometry added as the difference of the two copies.
+        mBlendedColorResolve = new OpaqueColorBinCallback;
+        mBlendedColorResolve->mMask = GL_COLOR_BUFFER_BIT;
+        mTransparentDepthPostPass->mBlendedResolve = mBlendedColorResolve;
         osg::ref_ptr<osgUtil::RenderBin> opaqueResolveBin
             = new osgUtil::RenderBin(osgUtil::RenderBin::SORT_FRONT_TO_BACK);
         opaqueResolveBin->setDrawCallback(mOpaqueColorResolve);
@@ -164,6 +169,13 @@ namespace MWRender
         opaqueResolveNode->setCullingActive(false);
         opaqueResolveNode->getOrCreateStateSet()->setRenderBinDetails(RenderBin_OpaqueResolve, "OpaqueResolve");
         rootNode->addChild(opaqueResolveNode);
+
+        // Keeps the blended-geometry bin (and so its frame copy for omw_GetBlended) in every frame, even one with
+        // nothing see-through in view; otherwise post-processing would read a copy left over from an older frame.
+        osg::ref_ptr<osg::Node> blendedResolveNode = new osg::Node;
+        blendedResolveNode->setCullingActive(false);
+        blendedResolveNode->getOrCreateStateSet()->setRenderBinDetails(RenderBin_DepthSorted, "DepthSortedBin");
+        rootNode->addChild(blendedResolveNode);
 
         osg::ref_ptr<osgUtil::RenderBin> distortionRenderBin
             = new osgUtil::RenderBin(osgUtil::RenderBin::SORT_BACK_TO_FRONT);
@@ -322,6 +334,10 @@ namespace MWRender
         mCanvases[frameId]->setTextureScene(getTexture(Tex_Scene, frameId));
         mCanvases[frameId]->setTextureDepth(getTexture(Tex_OpaqueDepth, frameId));
         mCanvases[frameId]->setTextureDistortion(getTexture(Tex_Distortion, frameId));
+        // The frame as it was before blended (see-through) geometry was drawn: the copy the water takes for its
+        // refraction. Lets a shader that replaces the sky put smoke, rain or glass in front of it back on top.
+        mCanvases[frameId]->setTextureOpaque(getTexture(Tex_OpaqueColor, frameId));
+        mCanvases[frameId]->setTextureBlended(getTexture(Tex_BlendedColor, frameId));
 
         mTransparentDepthPostPass->mFbo[frameId] = mFbos[frameId][FBO_Primary];
         mTransparentDepthPostPass->mMsaaFbo[frameId] = mFbos[frameId][FBO_Multisample];
@@ -329,6 +345,9 @@ namespace MWRender
         mOpaqueColorResolve->mFbo[frameId] = mFbos[frameId][FBO_Primary];
         mOpaqueColorResolve->mMsaaFbo[frameId] = mFbos[frameId][FBO_Multisample];
         mOpaqueColorResolve->mOpaqueFbo[frameId] = mFbos[frameId][FBO_OpaqueDepth];
+        mBlendedColorResolve->mFbo[frameId] = mFbos[frameId][FBO_Primary];
+        mBlendedColorResolve->mMsaaFbo[frameId] = mFbos[frameId][FBO_Multisample];
+        mBlendedColorResolve->mOpaqueFbo[frameId] = mFbos[frameId][FBO_BlendedColor];
 
         mDistortionCallback->setFBO(mFbos[frameId][FBO_Distortion], frameId);
         mDistortionCallback->setOriginalFBO(mFbos[frameId][FBO_Primary], frameId);
@@ -517,6 +536,7 @@ namespace MWRender
         setupDepth(textures[Tex_OpaqueDepth]);
         textures[Tex_OpaqueDepth]->setName("opaqueTexMap");
         textures[Tex_OpaqueColor]->setName("opaqueTexColorMap");
+        textures[Tex_BlendedColor]->setName("blendedTexColorMap");
 
         auto& fbos = mFbos[frameId];
 
@@ -576,6 +596,10 @@ namespace MWRender
         fbos[FBO_OpaqueDepth]->setAttachment(osg::FrameBufferObject::BufferComponent::COLOR_BUFFER0,
             Stereo::createMultiviewCompatibleAttachment(textures[Tex_OpaqueColor]));
 
+        fbos[FBO_BlendedColor] = new osg::FrameBufferObject;
+        fbos[FBO_BlendedColor]->setAttachment(osg::FrameBufferObject::BufferComponent::COLOR_BUFFER0,
+            Stereo::createMultiviewCompatibleAttachment(textures[Tex_BlendedColor]));
+
         fbos[FBO_Distortion] = new osg::FrameBufferObject;
         fbos[FBO_Distortion]->setAttachment(osg::FrameBufferObject::BufferComponent::COLOR_BUFFER0,
             Stereo::createMultiviewCompatibleAttachment(textures[Tex_Distortion]));
@@ -632,6 +656,8 @@ namespace MWRender
             node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerLastPass", Unit_LastPass));
             node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerDepth", Unit_Depth));
             node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerDistortion", Unit_Distortion));
+            node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerOpaque", Unit_Opaque));
+            node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerBlended", Unit_Blended));
 
             if (mNormals)
                 node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerNormals", Unit_Normals));
