@@ -200,6 +200,9 @@ namespace LuaUtil
         // Profiler: wall-clock time of an outermost script call, added to the script's per-frame average.
         static void addCallTime(const ScriptId& scriptId, std::chrono::steady_clock::time_point start);
 
+        // Profiler: the script whose code is running right now (the innermost call), or empty when unknown.
+        std::string_view activeScriptPath() const;
+
     private:
         static void* trackingAllocator(void* ud, void* ptr, size_t osize, size_t nsize);
 

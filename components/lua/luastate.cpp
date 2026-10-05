@@ -88,6 +88,16 @@ namespace LuaUtil
         scriptId.mContainer->addCallTime(scriptId.mIndex, std::chrono::duration<float, std::micro>(elapsed).count());
     }
 
+    std::string_view LuaState::activeScriptPath() const
+    {
+        if (mActiveScriptIdStack.empty() || mConf == nullptr)
+            return {};
+        const int index = mActiveScriptIdStack.back().mIndex;
+        if (index < 0 || static_cast<std::size_t>(index) >= mConf->size())
+            return {};
+        return (*mConf)[index].mScriptPath.view();
+    }
+
     void* LuaState::trackingAllocator(void* ud, void* ptr, size_t osize, size_t nsize)
     {
         LuaState* self = static_cast<LuaState*>(ud);

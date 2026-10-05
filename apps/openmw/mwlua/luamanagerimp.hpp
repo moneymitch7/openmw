@@ -244,7 +244,8 @@ namespace MWLua
             int mFrameCount = 0;
             double mFrameMs = 0;
         };
-        std::map<std::string, QueuedChangeStats, std::less<>> mQueuedChangeStats; // by action name
+        std::map<std::string, QueuedChangeStats, std::less<>> mQueuedChangeStats; // by action name and script
+        std::string mQueuedChangeKey; // reused to look up mQueuedChangeStats without allocating
         std::uint64_t mDistantUpdateFrame = 0; // [Lua] distant update interval
         void addPhaseTime(ProfilePhase phase, std::chrono::steady_clock::time_point start);
         LuaUtil::ScriptsConfiguration mConfiguration;
@@ -290,11 +291,14 @@ namespace MWLua
             DelayedAction(LuaUtil::LuaState* state, std::function<void()> fn, std::string_view name);
             void apply() const;
             const std::string& name() const { return mName; }
+            // Profiler: the script that queued the change, when known.
+            const std::string& script() const { return mScript; }
 
         private:
             std::string mCallerTraceback;
             std::function<void()> mFn;
             std::string mName;
+            std::string mScript;
         };
         std::vector<DelayedAction> mActionQueue;
         std::optional<DelayedAction> mTeleportPlayerAction;

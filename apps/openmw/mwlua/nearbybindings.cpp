@@ -183,7 +183,8 @@ namespace MWLua
                     MWBase::Environment::get().getWorld()->castRenderingRay(res, from, to, false, false, false, ignore);
                     context.mLuaManager->queueCallback(
                         callback, sol::main_object(context.mLua->unsafeState(), sol::in_place, res));
-                });
+                },
+                "asyncCastRenderingRay");
         };
 
         api["getObjectByFormId"] = [](std::string_view formIdStr) -> LObject {

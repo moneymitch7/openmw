@@ -489,10 +489,15 @@ namespace MWLua
             {
                 action.apply();
                 const auto end = std::chrono::steady_clock::now();
-                const std::string_view name = action.name().empty() ? "(unnamed)" : std::string_view(action.name());
-                auto it = mQueuedChangeStats.find(name);
+                mQueuedChangeKey = action.name().empty() ? "(unnamed)" : action.name();
+                if (!action.script().empty())
+                {
+                    mQueuedChangeKey += "  from ";
+                    mQueuedChangeKey += action.script();
+                }
+                auto it = mQueuedChangeStats.find(mQueuedChangeKey);
                 if (it == mQueuedChangeStats.end())
-                    it = mQueuedChangeStats.emplace(std::string(name), QueuedChangeStats{}).first;
+                    it = mQueuedChangeStats.emplace(mQueuedChangeKey, QueuedChangeStats{}).first;
                 it->second.mFrameCount += 1;
                 it->second.mFrameMs += std::chrono::duration<double, std::milli>(end - actionStart).count();
                 actionStart = end;
@@ -1104,6 +1109,8 @@ namespace MWLua
     {
         if (Settings::lua().mLuaDebug)
             mCallerTraceback = state->debugTraceback();
+        if (LuaUtil::LuaState::isProfilerEnabled())
+            mScript = state->activeScriptPath();
     }
 
     void LuaManager::DelayedAction::apply() const
