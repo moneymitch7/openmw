@@ -182,6 +182,7 @@ namespace LuaUtil
         {
             float mAvgInstructionCount = 0; // averaged number of Lua instructions per frame
             int64_t mMemoryUsage = 0; // bytes
+            int64_t mInstances = 0; // number of loaded instances counted
         };
         void collectStats(std::vector<ScriptStats>& stats) const;
         static int64_t getInstanceCount() { return sInstanceCount; }

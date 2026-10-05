@@ -1,6 +1,7 @@
 #ifndef MWLUA_LUAMANAGERIMP_H
 #define MWLUA_LUAMANAGERIMP_H
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <set>
@@ -192,6 +193,10 @@ namespace MWLua
         void reportStats(unsigned int frameNumber, osg::Stats& stats) const;
         std::string formatResourceUsageStats() const override;
 
+        /// With [Lua] lua profiler on: the scripts sorted by Lua instructions per frame, written to lua-profile.txt
+        /// next to openmw.log every few seconds, so the heaviest scripts in a busy area can be read off afterwards.
+        void writeProfileReport() const;
+
         LuaUtil::InputAction::Registry& inputActions() { return mInputActions; }
         LuaUtil::InputTrigger::Registry& inputTriggers() { return mInputTriggers; }
 
@@ -214,6 +219,8 @@ namespace MWLua
         bool mNewGameStarted = false;
         bool mReloadAllScriptsRequested = false;
         bool mRunningSynchronizedUpdates = false;
+        std::filesystem::path mUserConfigPath; // where lua-profile.txt goes
+        std::chrono::steady_clock::time_point mNextProfileReport;
         LuaUtil::ScriptsConfiguration mConfiguration;
         LuaUtil::LuaState mLua;
         LuaUi::ResourceManager mUiResourceManager;

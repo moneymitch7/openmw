@@ -1,9 +1,12 @@
 #include "luamanagerimp.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iomanip>
 
 #include <MyGUI_InputManager.h>
 #include <osg/Stats>
@@ -210,6 +213,7 @@ namespace MWLua
 
     void LuaManager::loadPermanentStorage(const std::filesystem::path& userConfigPath)
     {
+        mUserConfigPath = userConfigPath;
         mPlayerStorage.setActive(true);
         mGlobalStorage.setActive(true);
         const auto globalPath = userConfigPath / "global_storage.bin";
@@ -356,6 +360,16 @@ namespace MWLua
             mGlobalScripts.newGameStarted();
         }
         BoolScopeGuard updateGuard(mRunningSynchronizedUpdates);
+
+        if (LuaUtil::LuaState::isProfilerEnabled() && !mUserConfigPath.empty())
+        {
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= mNextProfileReport)
+            {
+                mNextProfileReport = now + std::chrono::seconds(5);
+                writeProfileReport();
+            }
+        }
 
         MWBase::WindowManager* windowManager = MWBase::Environment::get().getWindowManager();
         PlayerScripts* playerScripts
@@ -1044,6 +1058,85 @@ namespace MWLua
     void LuaManager::reportStats(unsigned int frameNumber, osg::Stats& stats) const
     {
         stats.setAttribute(frameNumber, "Lua UsedMemory", static_cast<double>(mLua.getTotalMemoryUsage()));
+    }
+
+    void LuaManager::writeProfileReport() const
+    {
+        using Stats = LuaUtil::ScriptsContainer::ScriptStats;
+        std::vector<Stats> stats;
+        mGlobalScripts.collectStats(stats);
+        std::size_t containers = 0;
+        for (const LuaUtil::ScriptsContainerWeakPtr& ptr : mActiveLocalScripts)
+        {
+            if (LocalScripts* scripts = asLocal(ptr))
+            {
+                scripts->collectStats(stats);
+                ++containers;
+            }
+        }
+        stats.resize(mConfiguration.size());
+
+        std::vector<std::size_t> order(stats.size());
+        for (std::size_t i = 0; i < order.size(); ++i)
+            order[i] = i;
+        std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+            return stats[a].mAvgInstructionCount > stats[b].mAvgInstructionCount;
+        });
+        double totalOps = 0;
+        for (const Stats& s : stats)
+            totalOps += s.mAvgInstructionCount;
+
+        std::ofstream out(mUserConfigPath / "lua-profile.txt", std::ios::trunc);
+        if (!out)
+            return;
+        const MWWorld::Ptr player = mPlayer;
+        out << "OpenMW Lua profile: Lua instructions per frame (averaged), scripts active now";
+        if (!player.isEmpty() && player.isInCell())
+            out << ", player in " << player.getCell()->getCell()->getDescription();
+        out << "\n";
+        out << "Total " << static_cast<int64_t>(totalOps) << " instructions per frame, " << containers
+            << " objects with local scripts in the scene, Lua memory " << (mLua.getTotalMemoryUsage() / (1024 * 1024))
+            << " MB\n";
+        out << "Instructions don't include time spent inside engine calls (raycasts, object queries), so a script\n"
+               "calling those a lot costs more than its share here.\n\n";
+        out << "  instr/frame  share  instances  script  (attached to)\n";
+        for (std::size_t i : order)
+        {
+            const Stats& s = stats[i];
+            if (s.mAvgInstructionCount < 1.f)
+                break;
+            const ESM::LuaScriptCfg& cfg = mConfiguration[i];
+            out << std::setw(13) << static_cast<int64_t>(s.mAvgInstructionCount) << std::setw(6)
+                << static_cast<int>(totalOps > 0 ? 100.0 * s.mAvgInstructionCount / totalOps + 0.5 : 0.0) << "%"
+                << std::setw(11) << s.mInstances << "  " << cfg.mScriptPath.value() << "  (";
+            const char* separator = "";
+            auto flag = [&](ESM::LuaScriptCfg::Flags f, const char* name) {
+                if (cfg.mFlags & f)
+                {
+                    out << separator << name;
+                    separator = " ";
+                }
+            };
+            flag(ESM::LuaScriptCfg::sGlobal, "GLOBAL");
+            flag(ESM::LuaScriptCfg::sMenu, "MENU");
+            flag(ESM::LuaScriptCfg::sPlayer, "PLAYER");
+            flag(ESM::LuaScriptCfg::sCustom, "CUSTOM");
+            for (uint32_t type : cfg.mTypes)
+            {
+                std::string name;
+                for (int b = 0; b < 4; ++b)
+                {
+                    const char c = static_cast<char>((type >> (8 * b)) & 0xff);
+                    if (c != '_' && c != '\0')
+                        name += c;
+                }
+                out << separator << name;
+                separator = " ";
+            }
+            if (!cfg.mRecords.empty() || !cfg.mRefs.empty())
+                out << separator << "specific objects";
+            out << ")\n";
+        }
     }
 
     std::string LuaManager::formatResourceUsageStats() const

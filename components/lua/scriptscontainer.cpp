@@ -856,6 +856,7 @@ namespace LuaUtil
             {
                 stats[id].mAvgInstructionCount += decayedInstructionCount(script);
                 stats[id].mMemoryUsage += script.mStats.mMemoryUsage;
+                ++stats[id].mInstances;
             }
         }
         for (auto& [id, mem] : mRemovedScriptsMemoryUsage)
