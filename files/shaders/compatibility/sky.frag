@@ -80,8 +80,12 @@ void paintClouds(inout vec4 color)
     // instead of dark clouds cutting in right above them.
     // mgeSkyFogH is raise-aware and ff-gated: in Clear/Cloudy the band is
     // the stock XE rim and this mix is a no-op above it.
+    // Only the low sky, though: solid below ~4 degrees (where the XE dome is solid fog colour too), gone by ~11.
+    // Following the dome's own blend (which reaches the zenith colour only at ~32 degrees) faded rain and fog
+    // clouds out across most of the sky seen from the ground, leaving one flat colour that the water then
+    // reflected as a glow.
     float wDenseCloud = mgeDerivedFog().wDense;
-    float band = (1.0 - mgeSkyFogH(skyWorldDir().z)) * wDenseCloud;
+    float band = (1.0 - smoothstep(0.075, 0.2, skyWorldDir().z)) * wDenseCloud;
     color.xyz = mix(color.xyz, horizonCol, band);
 
     color = mix(vec4(horizonCol, color.a), color, passColor.a);
