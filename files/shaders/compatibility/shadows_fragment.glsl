@@ -12,38 +12,25 @@
         uniform sampler2DShadow shadowTexture@shadow_texture_unit_index;
         varying vec4 shadowSpaceCoords@shadow_texture_unit_index;
 
-#if @softShadows
-        uniform mat4 shadowSpaceMatrix@shadow_texture_unit_index;
-#endif
-
 #if @perspectiveShadowMaps
         varying vec4 shadowRegionCoords@shadow_texture_unit_index;
 #endif
     @endforeach
 
 // ============================================================================
-// Soft Shadow Filtering (8-tap spiral disc with PCSS penumbra)
+// Soft Shadow Filtering (8-tap spiral disc, receiver plane depth)
 // ============================================================================
 #if @softShadows
 
-#define SHADOWMAP_RES (@shadowMapResolution * 0.5)
-
-// Minimum texels the filter should span (prevents undersampling at distance)
-#ifndef FILTER_MIN_TEXELS
-#define FILTER_MIN_TEXELS 1.3
+// Filter radius in shadow map texels. Kept in texels (not world units) so each cascade is sampled evenly.
+#ifndef SOFT_SHADOW_RADIUS_TEXELS
+#define SOFT_SHADOW_RADIUS_TEXELS 5.2
 #endif
 
-// Penumbra width scaling (pseudo-PCSS)
-#ifndef PENUMBRA_NEAR
-#define PENUMBRA_NEAR 1
-#endif
-
-#ifndef PENUMBRA_FAR
-#define PENUMBRA_FAR 3.0
-#endif
-
-#ifndef PENUMBRA_SCALING
-#define PENUMBRA_SCALING 1
+// Steepest receiver plane slope (shadow depth per shadow map UV) the taps follow. Steeper surfaces are nearly
+// parallel to the light and get no direct light anyway; the clamp only keeps the maths finite.
+#ifndef SOFT_SHADOW_MAX_SLOPE
+#define SOFT_SHADOW_MAX_SLOPE 16.0
 #endif
 
 // Interleaved Gradient Noise - smooth spatial variation for rotation
@@ -66,61 +53,35 @@ const vec2 spiralDisc[8] = vec2[8](
     vec2( 0.1250,  0.0000)
 );
 
-float getFilteredShadowing(sampler2DShadow tex, vec4 coord, mat4 matrix)
+// Receiver plane depth slope: how the surface's shadow map depth changes per unit of shadow map UV, from the
+// screen-space derivatives of its shadow coordinates (projected, so this is exact for perspective shadow maps too).
+// Each filter tap compares against the surface's own depth at that tap, so a wide filter doesn't shadow the surface
+// with itself.
+vec2 receiverPlaneDepthSlope(vec3 uvzDx, vec3 uvzDy)
 {
-    vec3 shadowUV = coord.xyz / coord.w;
-    float texelScale = coord.w / SHADOWMAP_RES;
+    float det = uvzDx.x * uvzDy.y - uvzDx.y * uvzDy.x;
+    // degenerate (surface seen edge-on): plain filter
+    if (abs(det) <= 1e-4 * length(uvzDx.xy) * length(uvzDy.xy))
+        return vec2(0.0);
+    vec2 slope = vec2(uvzDy.y * uvzDx.z - uvzDx.y * uvzDy.z, uvzDx.x * uvzDy.z - uvzDy.x * uvzDx.z) / det;
+    return clamp(slope, vec2(-SOFT_SHADOW_MAX_SLOPE), vec2(SOFT_SHADOW_MAX_SLOPE));
+}
 
-    // ---- Compute filter directions aligned to surface plane ----
-#if PER_PIXEL_LIGHTING
-    // Use surface normal to derive tangent frame in shadow space
-    vec3 viewNormal = normalize(gl_NormalMatrix * passNormal);
-    vec3 viewTangent = cross(viewNormal, normalize(vec3(0.9153, -0.0115, -0.5141)));
-    vec3 viewBitangent = cross(viewNormal, viewTangent);
-
-    // Transform tangents to shadow space and find resulting UV directions
-    vec3 shadowTangent = normalize((matrix * vec4(viewTangent, 0.0)).xyz);
-    vec3 shadowBitangent = normalize((matrix * vec4(viewBitangent, 0.0)).xyz);
-    vec4 tangentCoord = coord + vec4(shadowTangent, 0.0);
-    vec4 bitangentCoord = coord + vec4(shadowBitangent, 0.0);
-    vec3 filterX = normalize((tangentCoord.xyz / tangentCoord.w) - shadowUV);
-    vec3 filterY = normalize((bitangentCoord.xyz / bitangentCoord.w) - shadowUV);
-#else
-    // Fallback: use screen-space derivatives
-    vec3 filterX = normalize(dFdx(shadowUV));
-    vec3 filterY = normalize(dFdy(shadowUV));
-#endif
-
-    // Enforce orthogonality between filter axes
-    filterY = normalize(cross(filterX, cross(filterX, filterY)));
-
-    // Build offset vectors (scaled to shadow map texels)
-    vec4 offs_x = vec4(filterX, 0.0) * texelScale;
-    vec4 offs_y = vec4(filterY, 0.0) * texelScale;
-
-    // ---- Ensure minimum texel coverage (prevents undersampling at distance) ----
-    float minSize = texelScale * FILTER_MIN_TEXELS;
-    offs_x *= max(1.0, minSize / length(offs_x.xy));
-    offs_y *= max(1.0, minSize / length(offs_y.xy));
-
-#if PENUMBRA_SCALING
-    // ---- Pseudo-PCSS: widen penumbra based on depth in shadow ----
-    float penumbra = mix(float(PENUMBRA_NEAR), float(PENUMBRA_FAR), clamp(shadowUV.z, 0.0, 1.0));
-    offs_x *= penumbra;
-    offs_y *= penumbra;
-#endif
+float getFilteredShadowing(sampler2DShadow tex, vec3 uvz, vec2 depthSlope)
+{
+    float radius = float(SOFT_SHADOW_RADIUS_TEXELS) / @shadowMapResolution;
 
     // ---- Sample shadow map with rotated spiral disc ----
     float rotation = getIGNRotation();
-    float c = cos(rotation);
-    float s = sin(rotation);
+    float c = cos(rotation) * radius;
+    float s = sin(rotation) * radius;
 
     float shadow = 0.0;
     for (int i = 0; i < 8; i++)
     {
         vec2 p = spiralDisc[i];
-        vec2 rotated = vec2(p.x * c - p.y * s, p.x * s + p.y * c);
-        shadow += shadow2DProj(tex, coord + offs_x * rotated.x + offs_y * rotated.y).r;
+        vec2 offset = vec2(p.x * c - p.y * s, p.x * s + p.y * c);
+        shadow += shadow2D(tex, vec3(uvz.xy + offset, uvz.z + dot(depthSlope, offset))).r;
     }
 
     return shadow * 0.125;
@@ -136,6 +97,14 @@ float unshadowedLightRatio(float distance)
 {
     float shadowing = 1.0;
 #if SHADOWS
+#if @softShadows
+    // The receiver planes of every cascade, here in uniform control flow: derivatives taken inside the cascade
+    // branches below would be undefined wherever neighbouring pixels pick different cascades.
+    @foreach shadow_texture_unit_index @shadow_texture_unit_list
+        vec3 softUvz@shadow_texture_unit_index = shadowSpaceCoords@shadow_texture_unit_index.xyz / shadowSpaceCoords@shadow_texture_unit_index.w;
+        vec2 softSlope@shadow_texture_unit_index = receiverPlaneDepthSlope(dFdx(softUvz@shadow_texture_unit_index), dFdy(softUvz@shadow_texture_unit_index));
+    @endforeach
+#endif
 #if @limitShadowMapDistance
     float fade = clamp((distance - shadowFadeStart) / (maximumShadowMapDistance - shadowFadeStart), 0.0, 1.0);
     if (fade == 1.0)
@@ -152,11 +121,8 @@ float unshadowedLightRatio(float distance)
             if (all(lessThan(shadowXYZ.xy, vec2(1.0, 1.0))) && all(greaterThan(shadowXYZ.xy, vec2(0.0, 0.0))))
             {
 #if @softShadows
-                shadowing = min(getFilteredShadowing(
-                    shadowTexture@shadow_texture_unit_index,
-                    shadowSpaceCoords@shadow_texture_unit_index,
-                    shadowSpaceMatrix@shadow_texture_unit_index
-                ), shadowing);
+                shadowing = min(getFilteredShadowing(shadowTexture@shadow_texture_unit_index,
+                    softUvz@shadow_texture_unit_index, softSlope@shadow_texture_unit_index), shadowing);
 #else
                 shadowing = min(shadow2DProj(shadowTexture@shadow_texture_unit_index, shadowSpaceCoords@shadow_texture_unit_index).r, shadowing);
 #endif
@@ -174,7 +140,6 @@ float unshadowedLightRatio(float distance)
 #endif // SHADOWS
     return shadowing;
 }
-
 void applyShadowDebugOverlay()
 {
 #if SHADOWS && @useShadowDebugOverlay
