@@ -75,6 +75,7 @@ namespace MWRender
         float mMinSize;
         float mMinSizeMergeFactor;
         float mMinSizeCostMultiplier;
+        float mReflectionStaticsDistance; // [Water] reflection statics distance, 0 = no limit
 
         std::mutex mRefTrackerMutex;
         struct RefTracker

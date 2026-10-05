@@ -13,6 +13,7 @@
 #include <osgAnimation/BasicAnimationManager>
 #include <osgParticle/ParticleProcessor>
 #include <osgParticle/ParticleSystemUpdater>
+#include <osgUtil/CullVisitor>
 #include <osgUtil/IncrementalCompileOperation>
 
 #include <components/esm/path.hpp>
@@ -29,6 +30,7 @@
 #include <components/esm4/loadfurn.hpp>
 #include <components/esm4/loadstat.hpp>
 #include <components/esm4/loadtree.hpp>
+#include <components/misc/constants.hpp>
 #include <components/misc/pathhelpers.hpp>
 #include <components/misc/resourcehelpers.hpp>
 #include <components/misc/rng.hpp>
@@ -60,6 +62,40 @@ namespace MWRender
 
     namespace
     {
+        /// OpenMGE XE: keeps a distant chunk out of the water reflection beyond [Water] reflection statics distance
+        /// (the reflection inherits the main view's view point, so this is the distance from the player's view).
+        class ReflectionDistanceCallback
+            : public SceneUtil::NodeCallback<ReflectionDistanceCallback, osg::Node*, osgUtil::CullVisitor*>
+        {
+        public:
+            explicit ReflectionDistanceCallback(float distance)
+                : mDistance(distance)
+            {
+            }
+
+            void operator()(osg::Node* node, osgUtil::CullVisitor* cv)
+            {
+                const osg::Camera* camera = cv->getCurrentCamera();
+                if (camera != mLastCamera)
+                {
+                    mLastCamera = camera;
+                    mIsReflection = camera != nullptr && camera->getName() == Constants::ReflectionCamera;
+                }
+                if (mIsReflection)
+                {
+                    const osg::BoundingSphere& bs = node->getBound();
+                    if (bs.valid() && cv->getDistanceToViewPoint(bs.center(), false) - bs.radius() > mDistance)
+                        return;
+                }
+                traverse(node, cv);
+            }
+
+        private:
+            float mDistance;
+            const osg::Camera* mLastCamera = nullptr;
+            bool mIsReflection = false;
+        };
+
         bool typeFilter(int type, bool far)
         {
             switch (type)
@@ -463,6 +499,7 @@ namespace MWRender
         , mMinSize(Settings::terrain().mObjectPagingMinSize)
         , mMinSizeMergeFactor(Settings::terrain().mObjectPagingMinSizeMergeFactor)
         , mMinSizeCostMultiplier(Settings::terrain().mObjectPagingMinSizeCostMultiplier)
+        , mReflectionStaticsDistance(Settings::water().mReflectionStaticsDistance)
         , mRefTrackerLocked(false)
     {
     }
@@ -969,6 +1006,9 @@ namespace MWRender
         }
         for (const auto& ref : templateRefs)
             SceneUtil::addTemplateRef(*group, ref.get());
+
+        if (!activeGrid && mReflectionStaticsDistance > 0.f)
+            group->addCullCallback(new ReflectionDistanceCallback(mReflectionStaticsDistance));
 
         // Every chunk gets the occlusion callback: the whole-chunk visibility test needs no occluder
         // data, so even building-less chunks are skipped when fully hidden. Active-grid chunks are

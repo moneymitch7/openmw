@@ -265,6 +265,7 @@ namespace MWRender
         {
             setInterior(isInterior);
             setDepthBufferInternalFormat(GL_DEPTH32F_STENCIL8);
+            setUpdateInterval(static_cast<unsigned int>(Settings::water().mReflectionUpdateInterval.get()));
             mClipCullNode = new ClipCullNode;
         }
 
@@ -272,7 +273,7 @@ namespace MWRender
         {
             camera->setReferenceFrame(osg::Camera::RELATIVE_RF);
             camera->setSmallFeatureCullingPixelSize(Settings::water().mSmallFeatureCullingPixelSize);
-            camera->setName("ReflectionCamera");
+            camera->setName(Constants::ReflectionCamera);
             camera->addCullCallback(new InheritViewPointCallback);
 
             // Inform the shader that we're in a reflection

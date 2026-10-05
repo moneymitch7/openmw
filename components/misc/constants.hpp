@@ -45,6 +45,8 @@ namespace Constants
 
     // Identifier for main scene camera
     const std::string SceneCamera = "SceneCam";
+    // Name of the water reflection camera
+    const std::string ReflectionCamera = "ReflectionCamera";
 
 }
 

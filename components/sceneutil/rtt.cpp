@@ -54,6 +54,18 @@ namespace SceneUtil
         auto* vdd = getViewDependentData(cv);
         if (frameNumber > vdd->mFrameNumber)
         {
+            // With an update interval, keep a recent frame's texture instead of rendering it again
+            const double time = cv->getFrameStamp()->getReferenceTime();
+            if (mUpdateInterval > 1 && vdd->mRendered && frameNumber - vdd->mLastRenderFrame < mUpdateInterval
+                && time - vdd->mLastRenderTime < 0.040)
+            {
+                vdd->mFrameNumber = frameNumber;
+                return;
+            }
+            vdd->mLastRenderFrame = frameNumber;
+            vdd->mLastRenderTime = time;
+            vdd->mRendered = true;
+
             apply(vdd->mCamera);
             if (Stereo::getStereo())
             {

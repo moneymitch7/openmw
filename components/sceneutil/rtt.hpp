@@ -44,6 +44,10 @@ namespace SceneUtil
             osg::ref_ptr<osg::Texture> mColorTexture;
             osg::ref_ptr<osg::Texture> mDepthTexture;
             unsigned int mFrameNumber = 0;
+            // last render, for the update interval
+            unsigned int mLastRenderFrame = 0;
+            double mLastRenderTime = 0.0;
+            bool mRendered = false;
         };
 
         using ViewDependentDataMap = std::map<osgUtil::CullVisitor*, std::shared_ptr<ViewDependentData>>;
@@ -91,6 +95,10 @@ namespace SceneUtil
         void setColorBufferInternalFormat(GLint internalFormat);
         void setDepthBufferInternalFormat(GLint internalFormat);
 
+        /// Render only every `interval` frames and reuse the texture in between, unless it would get older than
+        /// 40 ms (low frame rate). 1 = every frame.
+        void setUpdateInterval(unsigned int interval) { mUpdateInterval = interval < 1 ? 1 : interval; }
+
         /// Returns view dependent data
         /// @note This is not thread safe and is only going to be safe to use when threading is stopped
         const ViewDependentDataMap& getViewDependentDataMap() const { return mViewDependentDataMap; }
@@ -108,6 +116,7 @@ namespace SceneUtil
         ViewDependentData* getViewDependentData(osgUtil::CullVisitor* cv);
 
         ViewDependentDataMap mViewDependentDataMap;
+        unsigned int mUpdateInterval = 1;
         uint32_t mTextureWidth;
         uint32_t mTextureHeight;
         uint32_t mSamples;
