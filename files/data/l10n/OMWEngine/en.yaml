@@ -178,6 +178,16 @@ MgeWeatherFogValue: "Weather Fog ({value, number, percent})"
 MgeWeatherFogTooltip: |-
     How thick the fog is in every other weather: Foggy, Overcast, Rain, Thunderstorm, Snow and Cloudy.
     100% is MGE XE's weather fog, 0% is as clear as Clear weather.
+MgeFogStartValue: "Fog Start ({value, plural, one {# cell} other {# cells}})"
+MgeFogStartTooltip: |-
+    Where the haze begins in clear weather, in cells (1 cell is about 115 m). Every other weather pulls it closer.
+
+    MGE XE's default is 2. Changes apply immediately.
+MgeFogEndValue: "Fog End ({value, plural, one {# cell} other {# cells}})"
+MgeFogEndTooltip: |-
+    Where the world disappears into the fog in clear weather. Every other weather pulls it closer.
+
+    MGE XE's default is 5. Keep it close to your View Distance: lower and the game draws land you can't see, higher and the edge of the world shows.
 WaveHeightValue: "Wave Height ({value, plural, =0 {off} other {#}})"
 WaveHeightTooltip: |-
   OpenMGE XE 3D water: real waves on the water near you, height in game units in the windiest weather (calm weather has about a third of it, rain about two thirds).

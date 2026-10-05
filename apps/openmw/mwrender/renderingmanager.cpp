@@ -159,6 +159,20 @@ namespace
     }
 }
 
+namespace
+{
+    // [Fog] mge fog start/end cells as the shader's mgeFogRange. 0 keeps the shader's built-in MGE defaults
+    // (start 2, end 5); the end is kept at least half a cell past the start so the fog curve stays valid.
+    osg::Vec2f getMgeFogRange()
+    {
+        const float start = Settings::fog().mMgeFogStartCells;
+        float end = Settings::fog().mMgeFogEndCells;
+        if (start > 0.f && end > 0.f)
+            end = std::max(end, start + 0.5f);
+        return osg::Vec2f(start, end);
+    }
+}
+
 namespace MWRender
 {
     class PreloadCommonAssetsWorkItem : public SceneUtil::WorkItem
@@ -460,10 +474,9 @@ namespace MWRender
             = new osg::Uniform("uClampLightingActorsGate", Settings::shaders().mClampLightingActors ? 1.f : 0.f);
         mRootNode->getOrCreateStateSet()->addUniform(mClampActorsGateUniform);
         mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("uClampLightingActor", 0.f));
-        // MGE fog envelope from settings; the Distant Land Generator app is
-        // the intended editor (game closed), so ctor-time read suffices
-        mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform(
-            "mgeFogRange", osg::Vec2f(Settings::fog().mMgeFogStartCells, Settings::fog().mMgeFogEndCells)));
+        // MGE fog envelope from settings ([Fog] mge fog start/end cells, Options > Detail Level); updated live
+        mMgeFogRangeUniform = new osg::Uniform("mgeFogRange", getMgeFogRange());
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeFogRangeUniform);
 
         mSky = std::make_unique<SkyManager>(
             sceneRoot, mRootNode, mViewer->getCamera(), resourceSystem->getSceneManager(), mSkyBlending);
@@ -1530,6 +1543,10 @@ namespace MWRender
             else if (it->first == "Water")
             {
                 mWater->processChangedSettings(changed);
+            }
+            else if (it->first == "Fog" && (it->second == "mge fog start cells" || it->second == "mge fog end cells"))
+            {
+                mMgeFogRangeUniform->set(getMgeFogRange());
             }
             else if (it->first == "Shaders" && it->second == "clamp lighting actors")
             {
