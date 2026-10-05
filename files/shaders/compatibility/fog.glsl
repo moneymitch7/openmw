@@ -245,7 +245,14 @@ void computeFog(vec3 pos, float euclideanDist, float linearDist, float near, flo
     if (!cameraBelowWater && fog.depth < 0.0 && length(pos) > 0.0 && mgeWeatherUniforms > 0.5)
     {
         vec3 dirWorld = normalize((osg_ViewMatrixInverse * vec4(normalize(pos), 0.0)).xyz);
-        vec4 f = mgeFogColour(pos, far, mgeSampleSkyCol(), mgeSkyBehind(dirWorld));
+        // Geometry under the water seen from above takes the atmosphere only for the stretch of the view through
+        // the air, as the stock branch below does (dist -= waterDepth); the water-depth murk covers the rest. The
+        // whole distance turned rocks and seabed under the surface into bright fog-coloured shapes showing through
+        // the water in dense weather.
+        vec3 fogPos = pos;
+        if (useWaterDepthFog && dist > 0.0)
+            fogPos = pos * max(1.0 - waterDepth / dist, 0.001);
+        vec4 f = mgeFogColour(fogPos, far, mgeSampleSkyCol(), mgeSkyBehind(dirWorld));
         colorScale = f.a;
 #ifdef ADDITIVE_BLENDING
         colorOffset = vec3(0.0);
