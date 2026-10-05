@@ -8,6 +8,8 @@
 
 #include <osgUtil/RenderBin>
 
+#include "opaqueblit.hpp"
+
 namespace Shader
 {
     class ShaderManager;
@@ -37,6 +39,9 @@ namespace MWRender
         std::array<osg::ref_ptr<osg::FrameBufferObject>, 2> mOpaqueFbo;
 
         std::array<std::unique_ptr<Stereo::MultiviewFramebufferResolve>, 2> mMultiviewResolve;
+
+        // Copies the frame right after blended geometry (see PostProcessor, omw_GetBlended).
+        osg::ref_ptr<OpaqueColorBinCallback> mBlendedResolve;
 
     private:
         osg::ref_ptr<osg::StateSet> mStateSet;

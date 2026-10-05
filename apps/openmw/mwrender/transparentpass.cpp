@@ -4,6 +4,7 @@
 
 #include <osg/AlphaFunc>
 #include <osg/BlendFunc>
+#include <osg/ColorMask>
 #include <osg/Texture2D>
 #include <osg/Texture2DArray>
 
@@ -40,6 +41,9 @@ namespace MWRender
         Stereo::shaderStereoDefines(defines);
 
         mStateSet->setAttributeAndModes(new osg::BlendFunc, modeOff);
+        // Depth only. The post-pass draws into the opaque copy's framebuffer, whose colour post-processing reads as
+        // the scene before blended geometry; a shader that writes no colour still leaves undefined colour there.
+        mStateSet->setAttribute(new osg::ColorMask(false, false, false, false), osg::StateAttribute::OVERRIDE);
         mStateSet->setAttributeAndModes(shaderManager.getProgram("depthclipped", defines), modeOn);
         mStateSet->setAttributeAndModes(new SceneUtil::AutoDepth, modeOn);
     }
@@ -74,6 +78,10 @@ namespace MWRender
 
         // draws scene into primary attachments
         bin->drawImplementation(renderInfo, previous);
+
+        // the frame with blended geometry but before first-person models and the sun glare; restores the draw FBO
+        if (mBlendedResolve)
+            mBlendedResolve->resolve(bin, renderInfo);
 
         if (!mPostPass)
             return;
