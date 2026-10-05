@@ -183,6 +183,7 @@ namespace LuaUtil
             float mAvgInstructionCount = 0; // averaged number of Lua instructions per frame
             int64_t mMemoryUsage = 0; // bytes
             int64_t mInstances = 0; // number of loaded instances counted
+            float mAvgTimeUs = 0; // averaged wall-clock time per frame in calls into the script, microseconds
         };
         void collectStats(std::vector<ScriptStats>& stats) const;
         static int64_t getInstanceCount() { return sInstanceCount; }
@@ -290,6 +291,7 @@ namespace LuaUtil
 
         friend class LuaState;
         void addInstructionCount(int scriptId, int64_t instructionCount);
+        void addCallTime(int scriptId, float microseconds);
         void addMemoryUsage(int scriptId, int64_t memoryDelta);
 
         // Add to container without calling onInit/onLoad.
@@ -350,6 +352,9 @@ namespace LuaUtil
         int64_t mStatsFrame = 0;
 
         float decayedInstructionCount(const Script& script) const;
+        float decayedCallTime(const Script& script) const;
+        // Applies the deferred decay of the script's per-frame averages up to the current frame.
+        void bringStatsUpToDate(Script& script) const;
         ScriptsContainerLifetime mThis; // used by LuaState to track ownership of memory allocations
 
         ScriptTracker* mTracker;

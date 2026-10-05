@@ -49,6 +49,9 @@
 
 namespace MWLua
 {
+
+    static constexpr float profileAvgCoef = 1.0f / 30; // averaging over approximately 30 frames
+
     namespace
     {
         struct BoolScopeGuard
@@ -261,6 +264,15 @@ namespace MWLua
             MWBase::Environment::get().getWorldModel()->registerPtr(mPlayer);
         }
 
+        const bool profiling = LuaUtil::LuaState::isProfilerEnabled();
+        auto phaseStart = std::chrono::steady_clock::now();
+        auto endPhase = [&](ProfilePhase phase) {
+            if (!profiling)
+                return;
+            addPhaseTime(phase, phaseStart);
+            phaseStart = std::chrono::steady_clock::now();
+        };
+
         mObjectLists.update();
 
         for (const LuaUtil::ScriptsContainerWeakPtr& ptr : mQueuedAutoStartedScripts)
@@ -276,6 +288,7 @@ namespace MWLua
         });
 
         mGlobalScripts.statsNextFrame();
+        mMenuScripts.statsNextFrame(); // its averages decay per frame too
         forEachActive(mActiveLocalScripts, [](LocalScripts* scripts) { scripts->statsNextFrame(); });
 
         mLuaEvents.finalizeEventBatch();
@@ -286,6 +299,8 @@ namespace MWLua
         double simulationTime = timeManager.isPaused() ? 0 : timeManager.getSimulationTime();
         double gameTime = timeManager.isPaused() ? 0 : timeManager.getGameTime();
 
+        endPhase(Phase_ObjectLists);
+
         // Always process real-time timers (runs even when paused), but only process game/simulation timers when not
         // paused
         mMenuScripts.processTimers(simulationTime, gameTime, realTime);
@@ -293,8 +308,11 @@ namespace MWLua
         forEachActive(mActiveLocalScripts,
             [&](LocalScripts* scripts) { scripts->processTimers(simulationTime, gameTime, realTime); });
 
+        endPhase(Phase_Timers);
+
         // Run event handlers for events that were sent before `finalizeEventBatch`.
         mLuaEvents.callEventHandlers();
+        endPhase(Phase_Events);
 
         mLua.protectedCall([&](LuaUtil::LuaView& lua) {
             // Run queued callbacks
@@ -305,11 +323,14 @@ namespace MWLua
             // Run engine handlers
             mEngineEvents.callEngineHandlers();
             bool isPaused = timeManager.isPaused();
+            endPhase(Phase_EngineHandlers);
 
             float frameDuration = MWBase::Environment::get().getFrameDuration();
             forEachActive(
                 mActiveLocalScripts, [&](LocalScripts* scripts) { scripts->update(isPaused ? 0 : frameDuration); });
+            endPhase(Phase_LocalUpdate);
             mGlobalScripts.update(isPaused ? 0 : frameDuration);
+            endPhase(Phase_GlobalUpdate);
 
             mScriptTracker.unloadInactiveScripts(lua);
         });
@@ -374,6 +395,8 @@ namespace MWLua
         MWBase::WindowManager* windowManager = MWBase::Environment::get().getWindowManager();
         PlayerScripts* playerScripts
             = mPlayer.isEmpty() ? nullptr : dynamic_cast<PlayerScripts*>(mPlayer.getRefData().getLuaScripts());
+        const bool profiling = LuaUtil::LuaState::isProfilerEnabled();
+        const auto syncStart = std::chrono::steady_clock::now();
         // We apply input events in `synchronizedUpdate` rather than in `update` in order to reduce input latency.
         {
             BoolScopeGuard processingGuard(mProcessingInputEvents);
@@ -396,6 +419,9 @@ namespace MWLua
             if (playerScripts)
                 playerScripts->onFrame(frameDuration);
         }
+
+        if (profiling)
+            addPhaseTime(Phase_SyncInputAndFrame, syncStart);
 
         for (const auto& [message, mode] : mUIMessages)
             windowManager->messageBox(message, mode);
@@ -424,8 +450,37 @@ namespace MWLua
     void LuaManager::applyDelayedActions()
     {
         BoolScopeGuard applyingGuard(mApplyingDelayedActions);
-        for (DelayedAction& action : mActionQueue)
-            action.apply();
+        if (!LuaUtil::LuaState::isProfilerEnabled())
+        {
+            for (DelayedAction& action : mActionQueue)
+                action.apply();
+        }
+        else
+        {
+            // Profiler: time per kind of queued change
+            const auto start = std::chrono::steady_clock::now();
+            auto actionStart = start;
+            for (DelayedAction& action : mActionQueue)
+            {
+                action.apply();
+                const auto end = std::chrono::steady_clock::now();
+                const std::string_view name = action.name().empty() ? "(unnamed)" : std::string_view(action.name());
+                auto it = mQueuedChangeStats.find(name);
+                if (it == mQueuedChangeStats.end())
+                    it = mQueuedChangeStats.emplace(std::string(name), QueuedChangeStats{}).first;
+                it->second.mFrameCount += 1;
+                it->second.mFrameMs += std::chrono::duration<double, std::milli>(end - actionStart).count();
+                actionStart = end;
+            }
+            for (auto& [name, stats] : mQueuedChangeStats)
+            {
+                stats.mAvgCount += (stats.mFrameCount - stats.mAvgCount) * profileAvgCoef;
+                stats.mAvgMs += (static_cast<float>(stats.mFrameMs) - stats.mAvgMs) * profileAvgCoef;
+                stats.mFrameCount = 0;
+                stats.mFrameMs = 0;
+            }
+            addPhaseTime(Phase_SyncQueuedChanges, start);
+        }
         mActionQueue.clear();
 
         if (mTeleportPlayerAction)
@@ -1060,6 +1115,12 @@ namespace MWLua
         stats.setAttribute(frameNumber, "Lua UsedMemory", static_cast<double>(mLua.getTotalMemoryUsage()));
     }
 
+    void LuaManager::addPhaseTime(ProfilePhase phase, std::chrono::steady_clock::time_point start)
+    {
+        const float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
+        mPhaseAvgMs[phase] += (ms - mPhaseAvgMs[phase]) * profileAvgCoef;
+    }
+
     void LuaManager::writeProfileReport() const
     {
         using Stats = LuaUtil::ScriptsContainer::ScriptStats;
@@ -1074,41 +1135,85 @@ namespace MWLua
                 ++containers;
             }
         }
+        if (const LocalScripts* playerScripts
+            = mPlayer.isEmpty() ? nullptr : dynamic_cast<const LocalScripts*>(mPlayer.getRefData().getLuaScripts()))
+        {
+            // the player is usually among the active local scripts; counted again only if not
+            if (std::find_if(mActiveLocalScripts.begin(), mActiveLocalScripts.end(),
+                    [&](const LuaUtil::ScriptsContainerWeakPtr& ptr) { return asLocal(ptr) == playerScripts; })
+                == mActiveLocalScripts.end())
+                playerScripts->collectStats(stats);
+        }
+        mMenuScripts.collectStats(stats);
         stats.resize(mConfiguration.size());
 
         std::vector<std::size_t> order(stats.size());
         for (std::size_t i = 0; i < order.size(); ++i)
             order[i] = i;
         std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+            if (stats[a].mAvgTimeUs != stats[b].mAvgTimeUs)
+                return stats[a].mAvgTimeUs > stats[b].mAvgTimeUs;
             return stats[a].mAvgInstructionCount > stats[b].mAvgInstructionCount;
         });
+        double totalUs = 0;
         double totalOps = 0;
         for (const Stats& s : stats)
+        {
+            totalUs += s.mAvgTimeUs;
             totalOps += s.mAvgInstructionCount;
+        }
 
         std::ofstream out(mUserConfigPath / "lua-profile.txt", std::ios::trunc);
         if (!out)
             return;
-        const MWWorld::Ptr player = mPlayer;
-        out << "OpenMW Lua profile: Lua instructions per frame (averaged), scripts active now";
-        if (!player.isEmpty() && player.isInCell())
-            out << ", player in " << player.getCell()->getCell()->getDescription();
-        out << "\n";
-        out << "Total " << static_cast<int64_t>(totalOps) << " instructions per frame, " << containers
-            << " objects with local scripts in the scene, Lua memory " << (mLua.getTotalMemoryUsage() / (1024 * 1024))
-            << " MB\n";
-        out << "Instructions don't include time spent inside engine calls (raycasts, object queries), so a script\n"
-               "calling those a lot costs more than its share here.\n\n";
-        out << "  instr/frame  share  instances  script  (attached to)\n";
+        out << std::fixed << std::setprecision(2);
+        out << "OpenMW Lua profile (averages over the last ~30 frames, rewritten every 5 seconds)";
+        if (!mPlayer.isEmpty() && mPlayer.isInCell())
+            out << "\nPlayer in " << mPlayer.getCell()->getCell()->getDescription();
+        out << "\n"
+            << containers << " objects with local scripts in the scene, Lua memory "
+            << (mLua.getTotalMemoryUsage() / (1024 * 1024)) << " MB\n\n";
+
+        const auto& p = mPhaseAvgMs;
+        out << "Main thread, at the start of every frame (adds directly to the frame time):\n";
+        out << std::setw(8) << p[Phase_SyncInputAndFrame]
+            << " ms  input handlers, onFrame of player and menu scripts\n";
+        out << std::setw(8) << p[Phase_SyncQueuedChanges]
+            << " ms  applying the changes scripts queued last frame (UI, objects, stats):\n";
+        std::vector<std::pair<std::string, QueuedChangeStats>> changes(
+            mQueuedChangeStats.begin(), mQueuedChangeStats.end());
+        std::sort(changes.begin(), changes.end(),
+            [](const auto& a, const auto& b) { return a.second.mAvgMs > b.second.mAvgMs; });
+        for (const auto& [name, change] : changes)
+        {
+            if (change.mAvgCount < 0.05f && change.mAvgMs < 0.005f)
+                continue;
+            out << "            " << std::setw(8) << change.mAvgMs << " ms  " << std::setw(7) << change.mAvgCount
+                << " per frame  " << name << "\n";
+        }
+        out << "Lua thread, in parallel with drawing the frame (adds to the frame time only when it takes longer):\n";
+        out << std::setw(8) << p[Phase_ObjectLists] << " ms  nearby object lists, script bookkeeping\n";
+        out << std::setw(8) << p[Phase_Timers] << " ms  timers\n";
+        out << std::setw(8) << p[Phase_Events] << " ms  events\n";
+        out << std::setw(8) << p[Phase_EngineHandlers] << " ms  engine handlers (onActive, onActivated, ...)\n";
+        out << std::setw(8) << p[Phase_LocalUpdate] << " ms  onUpdate of scripted objects\n";
+        out << std::setw(8) << p[Phase_GlobalUpdate] << " ms  onUpdate of global scripts\n\n";
+
+        out << "Per script, slowest first. time: wall-clock time in calls into the script, including the engine\n"
+               "calls it makes (raycasts, object queries, ...); instr: Lua instructions; instances: objects the\n"
+               "script runs on. Totals: "
+            << totalUs / 1000.0 << " ms, " << static_cast<int64_t>(totalOps) << " instructions per frame.\n\n";
+        out << "   time ms  share   instr/frame  instances  script  (attached to)\n";
         for (std::size_t i : order)
         {
             const Stats& s = stats[i];
-            if (s.mAvgInstructionCount < 1.f)
+            if (s.mAvgTimeUs < 1.f && s.mAvgInstructionCount < 1.f)
                 break;
             const ESM::LuaScriptCfg& cfg = mConfiguration[i];
-            out << std::setw(13) << static_cast<int64_t>(s.mAvgInstructionCount) << std::setw(6)
-                << static_cast<int>(totalOps > 0 ? 100.0 * s.mAvgInstructionCount / totalOps + 0.5 : 0.0) << "%"
-                << std::setw(11) << s.mInstances << "  " << cfg.mScriptPath.value() << "  (";
+            out << std::setw(10) << s.mAvgTimeUs / 1000.f << std::setw(6)
+                << static_cast<int>(totalUs > 0 ? 100.0 * s.mAvgTimeUs / totalUs + 0.5 : 0.0) << "%" << std::setw(14)
+                << static_cast<int64_t>(s.mAvgInstructionCount) << std::setw(11) << s.mInstances << "  "
+                << cfg.mScriptPath.value() << "  (";
             const char* separator = "";
             auto flag = [&](ESM::LuaScriptCfg::Flags f, const char* name) {
                 if (cfg.mFlags & f)

@@ -803,6 +803,24 @@ namespace LuaUtil
         return decayed < 5 ? 0 : decayed; // speeding up converge to zero if newValue is zero
     }
 
+    float ScriptsContainer::decayedCallTime(const Script& script) const
+    {
+        constexpr float decayPerFrame = 1 - instructionCountAvgCoef;
+        const int64_t frames = mStatsFrame - script.mStatsFrame;
+        if (frames <= 0 || script.mStats.mAvgTimeUs == 0)
+            return script.mStats.mAvgTimeUs;
+        const float decay = frames == 1 ? decayPerFrame : std::pow(decayPerFrame, static_cast<float>(frames));
+        const float decayed = script.mStats.mAvgTimeUs * decay;
+        return decayed < 0.01f ? 0 : decayed;
+    }
+
+    void ScriptsContainer::bringStatsUpToDate(Script& script) const
+    {
+        script.mStats.mAvgInstructionCount = decayedInstructionCount(script);
+        script.mStats.mAvgTimeUs = decayedCallTime(script);
+        script.mStatsFrame = mStatsFrame;
+    }
+
     void ScriptsContainer::addInstructionCount(int scriptId, int64_t instructionCount)
     {
         if (LoadedData* data = std::get_if<LoadedData>(&mData))
@@ -811,9 +829,22 @@ namespace LuaUtil
             if (it != data->mScripts.end())
             {
                 Script& script = it->second;
-                script.mStats.mAvgInstructionCount = decayedInstructionCount(script);
-                script.mStatsFrame = mStatsFrame;
+                bringStatsUpToDate(script);
                 script.mStats.mAvgInstructionCount += instructionCount * instructionCountAvgCoef;
+            }
+        }
+    }
+
+    void ScriptsContainer::addCallTime(int scriptId, float microseconds)
+    {
+        if (LoadedData* data = std::get_if<LoadedData>(&mData))
+        {
+            auto it = data->mScripts.find(scriptId);
+            if (it != data->mScripts.end())
+            {
+                Script& script = it->second;
+                bringStatsUpToDate(script);
+                script.mStats.mAvgTimeUs += microseconds * instructionCountAvgCoef;
             }
         }
     }
@@ -855,6 +886,7 @@ namespace LuaUtil
             for (auto& [id, script] : data->mScripts)
             {
                 stats[id].mAvgInstructionCount += decayedInstructionCount(script);
+                stats[id].mAvgTimeUs += decayedCallTime(script);
                 stats[id].mMemoryUsage += script.mStats.mMemoryUsage;
                 ++stats[id].mInstances;
             }

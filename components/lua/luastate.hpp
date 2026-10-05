@@ -1,6 +1,7 @@
 #ifndef COMPONENTS_LUA_LUASTATE_H
 #define COMPONENTS_LUA_LUASTATE_H
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <typeinfo>
@@ -194,6 +195,12 @@ namespace LuaUtil
 
         sol::function loadScriptAndCache(const VFS::Path::Normalized& path);
         static void countHook(lua_State* state, lua_Debug* ar);
+
+    public:
+        // Profiler: wall-clock time of an outermost script call, added to the script's per-frame average.
+        static void addCallTime(const ScriptId& scriptId, std::chrono::steady_clock::time_point start);
+
+    private:
         static void* trackingAllocator(void* ud, void* ptr, size_t osize, size_t nsize);
 
         static LuaStatePtr createLuaRuntime(LuaState* luaState);
@@ -256,29 +263,39 @@ namespace LuaUtil
     sol::protected_function_result call(ScriptId scriptId, const sol::protected_function& fn, Args&&... args)
     {
         LuaState* luaState = nullptr;
+        // Only the outermost call is timed: a nested call's time belongs to the script that made it.
+        bool timed = false;
+        std::chrono::steady_clock::time_point start;
         if (LuaState::sProfilerEnabled && scriptId.mContainer)
         {
             (void)lua_getallocf(fn.lua_state(), reinterpret_cast<void**>(&luaState));
+            timed = luaState->mActiveScriptIdStack.empty();
             luaState->mActiveScriptIdStack.push_back(scriptId);
             luaState->mWatchdogInstructionCounter = 0;
+            if (timed)
+                start = std::chrono::steady_clock::now();
         }
+        auto finish = [&] {
+            if (!luaState)
+                return;
+            luaState->mActiveScriptIdStack.pop_back();
+            if (timed)
+                LuaState::addCallTime(scriptId, start);
+        };
         try
         {
             auto res = LuaState::throwIfError(fn(std::forward<Args>(args)...));
-            if (luaState)
-                luaState->mActiveScriptIdStack.pop_back();
+            finish();
             return res;
         }
         catch (std::exception&)
         {
-            if (luaState)
-                luaState->mActiveScriptIdStack.pop_back();
+            finish();
             throw;
         }
         catch (...)
         {
-            if (luaState)
-                luaState->mActiveScriptIdStack.pop_back();
+            finish();
             throw std::runtime_error("Unknown error");
         }
     }

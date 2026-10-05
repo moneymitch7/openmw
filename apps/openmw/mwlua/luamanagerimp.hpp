@@ -1,6 +1,7 @@
 #ifndef MWLUA_LUAMANAGERIMP_H
 #define MWLUA_LUAMANAGERIMP_H
 
+#include <array>
 #include <chrono>
 #include <filesystem>
 #include <map>
@@ -221,6 +222,30 @@ namespace MWLua
         bool mRunningSynchronizedUpdates = false;
         std::filesystem::path mUserConfigPath; // where lua-profile.txt goes
         std::chrono::steady_clock::time_point mNextProfileReport;
+
+        // Profiler: where Lua's frame time goes, per-frame averages in milliseconds.
+        enum ProfilePhase
+        {
+            Phase_ObjectLists, // worker: nearby object lists, script bookkeeping
+            Phase_Timers,
+            Phase_Events,
+            Phase_EngineHandlers, // queued callbacks and engine handlers (onActive, onActivated, ...)
+            Phase_LocalUpdate, // onUpdate of every scripted object in the scene
+            Phase_GlobalUpdate,
+            Phase_SyncInputAndFrame, // main thread: input handlers, onFrame of player and menu scripts
+            Phase_SyncQueuedChanges, // main thread: applying the world/UI changes scripts queued last frame
+            Phase_Count
+        };
+        std::array<float, Phase_Count> mPhaseAvgMs{};
+        struct QueuedChangeStats
+        {
+            float mAvgCount = 0; // per frame
+            float mAvgMs = 0;
+            int mFrameCount = 0;
+            double mFrameMs = 0;
+        };
+        std::map<std::string, QueuedChangeStats, std::less<>> mQueuedChangeStats; // by action name
+        void addPhaseTime(ProfilePhase phase, std::chrono::steady_clock::time_point start);
         LuaUtil::ScriptsConfiguration mConfiguration;
         LuaUtil::LuaState mLua;
         LuaUi::ResourceManager mUiResourceManager;
@@ -263,6 +288,7 @@ namespace MWLua
         public:
             DelayedAction(LuaUtil::LuaState* state, std::function<void()> fn, std::string_view name);
             void apply() const;
+            const std::string& name() const { return mName; }
 
         private:
             std::string mCallerTraceback;

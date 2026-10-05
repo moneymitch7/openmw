@@ -82,6 +82,12 @@ namespace LuaUtil
         }
     }
 
+    void LuaState::addCallTime(const ScriptId& scriptId, std::chrono::steady_clock::time_point start)
+    {
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        scriptId.mContainer->addCallTime(scriptId.mIndex, std::chrono::duration<float, std::micro>(elapsed).count());
+    }
+
     void* LuaState::trackingAllocator(void* ud, void* ptr, size_t osize, size_t nsize)
     {
         LuaState* self = static_cast<LuaState*>(ud);
