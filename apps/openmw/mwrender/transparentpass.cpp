@@ -43,7 +43,8 @@ namespace MWRender
         mStateSet->setAttributeAndModes(new osg::BlendFunc, modeOff);
         // Depth only. The post-pass draws into the opaque copy's framebuffer, whose colour post-processing reads as
         // the scene before blended geometry; a shader that writes no colour still leaves undefined colour there.
-        mStateSet->setAttribute(new osg::ColorMask(false, false, false, false), osg::StateAttribute::OVERRIDE);
+        mColorMaskOff = new osg::ColorMask(false, false, false, false);
+        mStateSet->setAttribute(mColorMaskOff, osg::StateAttribute::OVERRIDE);
         mStateSet->setAttributeAndModes(shaderManager.getProgram("depthclipped", defines), modeOn);
         mStateSet->setAttributeAndModes(new SceneUtil::AutoDepth, modeOn);
     }
@@ -79,7 +80,8 @@ namespace MWRender
         // draws scene into primary attachments
         bin->drawImplementation(renderInfo, previous);
 
-        // the frame with blended geometry but before first-person models and the sun glare; restores the draw FBO
+        // the frame with blended geometry but before the sun glare (first-person models retake it); restores the
+        // draw FBO
         if (mBlendedResolve)
             mBlendedResolve->resolve(bin, renderInfo);
 
@@ -96,6 +98,8 @@ namespace MWRender
         unsigned int insertStateSetPosition = state.getStateSetStackSize() - numToPop;
 
         state.insertStateSet(insertStateSetPosition, mStateSet);
+        // a first leaf sharing its state with the last leaf drawn is rendered without any state being applied
+        state.applyAttribute(mColorMaskOff);
         for (auto rit = bin->getRenderLeafList().begin(); rit != bin->getRenderLeafList().end(); rit++)
         {
             osgUtil::RenderLeaf* rl = *rit;
