@@ -389,6 +389,7 @@ namespace MWRender
         // water goes after terrain for correct waterculling order
         mWater = std::make_unique<Water>(
             sceneRoot->getParent(0), sceneRoot, mResourceSystem, mViewer->getIncrementalCompileOperation());
+        mWater->setTerrainStorage(mTerrainStorage.get()); // 3D water: shallow-water map
         mPostProcessor->setupTransparentBin(mWater.get());
 
         mCamera = std::make_unique<Camera>(mViewer->getCamera());
@@ -890,6 +891,7 @@ namespace MWRender
             float windSpeed = mSky->getBaseWindSpeed();
             mSharedUniformStateUpdater->setWindSpeed(windSpeed);
             mSharedUniformStateUpdater->setPlayerPos(playerPos);
+            mWater->updateWaves(playerPos, windSpeed);
         }
 
         updateNavMesh();

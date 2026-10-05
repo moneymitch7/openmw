@@ -4,9 +4,12 @@
 #include <memory>
 #include <vector>
 
+#include <osg/Vec2f>
 #include <osg/Vec3d>
 #include <osg/Vec3f>
 #include <osg/ref_ptr>
+
+#include <components/esm/refid.hpp>
 
 #include <components/settings/settings.hpp>
 #include <components/vfs/pathutil.hpp>
@@ -19,6 +22,13 @@ namespace osg
     class Geometry;
     class Node;
     class Callback;
+    class Image;
+    class Texture2D;
+}
+
+namespace ESMTerrain
+{
+    class Storage;
 }
 
 namespace osgUtil
@@ -76,6 +86,23 @@ namespace MWRender
         osg::Callback* mCullCallback;
         osg::ref_ptr<osg::Callback> mShaderWaterStateSetUpdater;
 
+        // OpenMGE XE 3D water ([Water] wave height): a dense grid around the camera displaced by the water shader,
+        // the big flat plane is cut out under it. Waves flatten in shallow water (from a map of the water depth
+        // over the terrain around the player), in interiors and at the grid's edge.
+        osg::ref_ptr<osg::Geometry> mWaveGrid;
+        osg::ref_ptr<osg::Image> mWaveDepthImage;
+        osg::ref_ptr<osg::Texture2D> mWaveDepthMap;
+        osg::Vec2f mWaveDepthMapOrigin; // world xy of the map's corner
+        float mWaveDepthMapWaterLevel = 0.f;
+        bool mWaveDepthMapValid = false;
+        ESMTerrain::Storage* mTerrainStorage = nullptr;
+        ESM::RefId mWorldspace;
+        float mWaveHeight = 0.f; // setting: peak height in the windiest weather, 0 = flat water
+        float mWaveAmplitude = 0.f; // current peak height (weather-scaled)
+
+        void createWaveGrid();
+        void rebuildWaveDepthMap(const osg::Vec2f& center);
+
         osg::Vec3f getSceneNodeCoordinates(int gridX, int gridY);
         void updateVisible();
 
@@ -117,6 +144,15 @@ namespace MWRender
         void setRainIntensity(const float rainIntensity);
 
         void update(float dt, bool paused);
+
+        /// 3D water: weather (base wind speed, 0..1) and the player's position, once per frame.
+        void updateWaves(const osg::Vec3f& playerPos, float windSpeed);
+        void setTerrainStorage(ESMTerrain::Storage* storage) { mTerrainStorage = storage; }
+
+        /// For the water shader's state set updater.
+        float getWaveAmplitude() const { return mWaveAmplitude; }
+        osg::Vec2f getWaveDepthMapOrigin() const { return mWaveDepthMapOrigin; }
+        osg::Texture2D* getWaveDepthMap() const { return mWaveDepthMap.get(); }
 
         osg::Vec3d getPosition() const;
 

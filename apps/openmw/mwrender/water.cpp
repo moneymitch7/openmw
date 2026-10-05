@@ -1,6 +1,11 @@
 #include "water.hpp"
 
+#include <algorithm>
+#include <climits>
+#include <cmath>
+#include <span>
 #include <sstream>
+#include <tuple>
 
 #include <osg/ClipNode>
 #include <osg/Depth>
@@ -8,7 +13,9 @@
 #include <osg/FrontFace>
 #include <osg/Geometry>
 #include <osg/Group>
+#include <osg/Image>
 #include <osg/PositionAttitudeTransform>
+#include <osg/Texture2D>
 #include <osg/ViewportIndexed>
 
 #include <osgUtil/CullVisitor>
@@ -32,7 +39,10 @@
 
 #include <components/shader/shadermanager.hpp>
 
+#include <components/esm/util.hpp>
 #include <components/esm3/loadcell.hpp>
+#include <components/esm3/loadland.hpp>
+#include <components/esmterrain/storage.hpp>
 
 #include <components/fallback/fallback.hpp>
 
@@ -48,6 +58,18 @@
 
 namespace MWRender
 {
+
+    namespace
+    {
+        // OpenMGE XE 3D water
+        constexpr int sWaveGridQuads = 256; // per side
+        constexpr float sWaveGridSpacing = 48.f;
+        constexpr float sWaveGridHalfSize = sWaveGridQuads * sWaveGridSpacing / 2; // 6144
+        constexpr int sWaveDepthMapSize = 128; // texels per side
+        constexpr float sWaveDepthMapTexel = 128.f; // one terrain vertex: the map covers 16384 units
+        constexpr float sWaveFullDepth = 192.f; // water depth at which waves reach their full height
+        constexpr int sWaveDepthMapUnit = 5;
+    }
 
     // --------------------------------------------------------------------------------------------------------------------------------
 
@@ -436,6 +458,17 @@ namespace MWRender
         mWaterGeom->setStateSet(nullptr);
         mWaterGeom->setUpdateCallback(nullptr);
 
+        if (mWaveGrid)
+        {
+            mWaterNode->removeChild(mWaveGrid);
+            mWaveGrid = nullptr;
+        }
+        mWaveHeight = Settings::water().mShader ? std::max(0.f, Settings::water().mWaveHeight.get()) : 0.f;
+        if (mWaveHeight > 0.f)
+            createWaveGrid();
+        else
+            mWaveAmplitude = 0.f;
+
         if (Settings::water().mShader)
         {
             const unsigned int rttSize = Settings::water().mRttSize;
@@ -459,8 +492,161 @@ namespace MWRender
             createSimpleWaterStateSet(mWaterGeom, Fallback::Map::getFloat("Water_World_Alpha"));
 
         mResourceSystem->getSceneManager()->setUpNormalsRTForStateSet(mWaterGeom->getOrCreateStateSet(), true);
+        if (mWaveGrid)
+            mResourceSystem->getSceneManager()->setUpNormalsRTForStateSet(mWaveGrid->getOrCreateStateSet(), true);
 
         updateVisible();
+    }
+
+    void Water::createWaveGrid()
+    {
+        const int n = sWaveGridQuads;
+        osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
+        vertices->reserve(static_cast<std::size_t>((n + 1) * (n + 1)));
+        for (int y = 0; y <= n; ++y)
+            for (int x = 0; x <= n; ++x)
+                vertices->push_back(osg::Vec3f((x - n / 2) * sWaveGridSpacing, (y - n / 2) * sWaveGridSpacing, 0.f));
+
+        // Triangles from the outermost ring of quads inwards. Water doesn't write depth, so with the camera near the
+        // middle this draws the far waves before the near ones and a near crest covers the trough behind it.
+        std::vector<std::tuple<int, int, int>> quads; // ring, x, y
+        quads.reserve(static_cast<std::size_t>(n * n));
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+            {
+                const int dx = x < n / 2 ? n / 2 - 1 - x : x - n / 2;
+                const int dy = y < n / 2 ? n / 2 - 1 - y : y - n / 2;
+                quads.emplace_back(std::max(dx, dy), x, y);
+            }
+        std::stable_sort(
+            quads.begin(), quads.end(), [](const auto& a, const auto& b) { return std::get<0>(a) > std::get<0>(b); });
+        osg::ref_ptr<osg::DrawElementsUInt> indices = new osg::DrawElementsUInt(GL_TRIANGLES);
+        indices->reserve(quads.size() * 6);
+        for (const auto& [ring, x, y] : quads)
+        {
+            const unsigned int i00 = static_cast<unsigned int>(y * (n + 1) + x);
+            const unsigned int i10 = i00 + 1;
+            const unsigned int i01 = i00 + static_cast<unsigned int>(n + 1);
+            const unsigned int i11 = i01 + 1;
+            indices->push_back(i00);
+            indices->push_back(i10);
+            indices->push_back(i11);
+            indices->push_back(i00);
+            indices->push_back(i11);
+            indices->push_back(i01);
+        }
+
+        mWaveGrid = new osg::Geometry;
+        mWaveGrid->setVertexArray(vertices);
+        osg::ref_ptr<osg::Vec3Array> normal = new osg::Vec3Array;
+        normal->push_back(osg::Vec3f(0, 0, 1));
+        mWaveGrid->setNormalArray(normal, osg::Array::BIND_OVERALL);
+        mWaveGrid->addPrimitiveSet(indices);
+        mWaveGrid->setUseDisplayList(false);
+        mWaveGrid->setUseVertexBufferObjects(true);
+        // the shader moves it along with the camera: never culled by its (origin-centred) bounds
+        mWaveGrid->setCullingActive(false);
+        mWaveGrid->setDrawCallback(new DepthClampCallback);
+        mWaveGrid->setNodeMask(0); // shown by updateWaves while there are waves
+        mWaveGrid->setDataVariance(osg::Object::STATIC);
+        mWaveGrid->setName("Water Wave Grid");
+        mWaveGrid->getOrCreateStateSet()->addUniform(new osg::Uniform("waveSurface", true));
+        mWaterNode->addChild(mWaveGrid);
+
+        if (!mWaveDepthMap)
+        {
+            mWaveDepthImage = new osg::Image;
+            mWaveDepthImage->allocateImage(sWaveDepthMapSize, sWaveDepthMapSize, 1, GL_LUMINANCE, GL_UNSIGNED_BYTE);
+            std::fill_n(mWaveDepthImage->data(), sWaveDepthMapSize * sWaveDepthMapSize, 255);
+            mWaveDepthImage->setInternalTextureFormat(GL_LUMINANCE8);
+            mWaveDepthMap = new osg::Texture2D(mWaveDepthImage);
+            mWaveDepthMap->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+            mWaveDepthMap->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+            mWaveDepthMap->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
+            mWaveDepthMap->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
+            mWaveDepthMap->setResizeNonPowerOfTwoHint(false);
+            mWaveDepthMap->setUnRefImageDataAfterApply(false);
+            mWaveDepthMap->setDataVariance(osg::Object::DYNAMIC);
+            mWaveDepthMapValid = false;
+        }
+    }
+
+    void Water::rebuildWaveDepthMap(const osg::Vec2f& center)
+    {
+        const float extent = sWaveDepthMapSize * sWaveDepthMapTexel;
+        const osg::Vec2f origin(std::floor((center.x() - extent / 2) / sWaveDepthMapTexel) * sWaveDepthMapTexel,
+            std::floor((center.y() - extent / 2) / sWaveDepthMapTexel) * sWaveDepthMapTexel);
+        unsigned char* data = mWaveDepthImage->data();
+
+        const float cellSize = static_cast<float>(ESM::getCellSize(mWorldspace));
+        int cachedCellX = INT_MIN;
+        int cachedCellY = INT_MIN;
+        std::shared_ptr<const ESMTerrain::LandObject> land;
+        const ESM::LandData* landData = nullptr;
+        for (int y = 0; y < sWaveDepthMapSize; ++y)
+        {
+            for (int x = 0; x < sWaveDepthMapSize; ++x)
+            {
+                const float wx = origin.x() + (x + 0.5f) * sWaveDepthMapTexel;
+                const float wy = origin.y() + (y + 0.5f) * sWaveDepthMapTexel;
+                float height = ESM::Land::DEFAULT_HEIGHT;
+                if (mTerrainStorage != nullptr)
+                {
+                    const int cellX = static_cast<int>(std::floor(wx / cellSize));
+                    const int cellY = static_cast<int>(std::floor(wy / cellSize));
+                    if (cellX != cachedCellX || cellY != cachedCellY)
+                    {
+                        land = mTerrainStorage->getLand(ESM::ExteriorCellLocation(cellX, cellY, mWorldspace));
+                        landData = land ? land->getData(ESM::Land::DATA_VHGT) : nullptr;
+                        cachedCellX = cellX;
+                        cachedCellY = cellY;
+                    }
+                    if (landData != nullptr)
+                    {
+                        // bilinear over the cell's height grid
+                        const int landSize = landData->getLandSize();
+                        const std::span<const float> heights = landData->getHeights();
+                        const float fx = std::clamp((wx - cellX * cellSize) / cellSize, 0.f, 1.f) * (landSize - 1);
+                        const float fy = std::clamp((wy - cellY * cellSize) / cellSize, 0.f, 1.f) * (landSize - 1);
+                        const int x0 = std::min(static_cast<int>(fx), landSize - 2);
+                        const int y0 = std::min(static_cast<int>(fy), landSize - 2);
+                        const float tx = fx - x0;
+                        const float ty = fy - y0;
+                        const float h00 = heights[y0 * landSize + x0];
+                        const float h10 = heights[y0 * landSize + x0 + 1];
+                        const float h01 = heights[(y0 + 1) * landSize + x0];
+                        const float h11 = heights[(y0 + 1) * landSize + x0 + 1];
+                        height = (h00 * (1 - tx) + h10 * tx) * (1 - ty) + (h01 * (1 - tx) + h11 * tx) * ty;
+                    }
+                }
+                const float depth = std::clamp((mTop - height) / sWaveFullDepth, 0.f, 1.f);
+                data[y * sWaveDepthMapSize + x] = static_cast<unsigned char>(depth * 255.f + 0.5f);
+            }
+        }
+        mWaveDepthImage->dirty();
+        mWaveDepthMapOrigin = origin;
+        mWaveDepthMapWaterLevel = mTop;
+        mWaveDepthMapValid = true;
+    }
+
+    void Water::updateWaves(const osg::Vec3f& playerPos, float windSpeed)
+    {
+        if (!mWaveGrid)
+            return;
+        // calm (clear, foggy) about a third of the height, rain about two thirds, storms full
+        const float weather = 0.3f + 0.7f * std::clamp(windSpeed / 0.6f, 0.f, 1.f);
+        mWaveAmplitude = mInterior ? 0.f : mWaveHeight * weather;
+        mWaveGrid->setNodeMask(mWaveAmplitude > 0.f ? Mask_Water : 0u);
+        if (mWaveAmplitude <= 0.f)
+            return;
+
+        // Keep the depth map centred near the player; the grid (half size 6144) stays inside it while the player
+        // is within 1536 of its centre (half size 8192, a little extra for the third-person camera).
+        const float extent = sWaveDepthMapSize * sWaveDepthMapTexel;
+        const osg::Vec2f center = mWaveDepthMapOrigin + osg::Vec2f(extent / 2, extent / 2);
+        if (!mWaveDepthMapValid || mWaveDepthMapWaterLevel != mTop
+            || std::max(std::abs(playerPos.x() - center.x()), std::abs(playerPos.y() - center.y())) > 1536.f)
+            rebuildWaveDepthMap(osg::Vec2f(playerPos.x(), playerPos.y()));
     }
 
     osg::Vec3d Water::getPosition() const
@@ -555,6 +741,17 @@ namespace MWRender
                 stateset->addUniform(new osg::Uniform("rippleMap", 4));
             }
             stateset->addUniform(new osg::Uniform("nodePosition", osg::Vec3f(mWater->getPosition())));
+
+            // 3D water (the wave grid's own state set sets waveSurface)
+            stateset->addUniform(new osg::Uniform("waveSurface", false));
+            stateset->addUniform(new osg::Uniform("waveGridOffset", osg::Vec2f()));
+            stateset->addUniform(new osg::Uniform("waveAmplitude", 0.f));
+            stateset->addUniform(new osg::Uniform("waveDepthMapRect", osg::Vec4f()));
+            if (osg::Texture2D* depthMap = mWater->getWaveDepthMap())
+            {
+                stateset->setTextureAttribute(sWaveDepthMapUnit, depthMap, osg::StateAttribute::ON);
+                stateset->addUniform(new osg::Uniform("waveDepthMap", sWaveDepthMapUnit));
+            }
         }
 
         void apply(osg::StateSet* stateset, osg::NodeVisitor* nv) override
@@ -573,6 +770,16 @@ namespace MWRender
                 stateset->setTextureAttribute(4, mRipples->getColorTexture(), osg::StateAttribute::ON);
             }
             stateset->getUniform("nodePosition")->set(osg::Vec3f(mWater->getPosition()));
+
+            // The wave grid follows the camera in whole grid steps, so its vertices stay put in the world.
+            const osg::Vec3f eye = cv->getEyeLocal();
+            const osg::Vec2f gridOffset(std::floor(eye.x() / sWaveGridSpacing + 0.5f) * sWaveGridSpacing,
+                std::floor(eye.y() / sWaveGridSpacing + 0.5f) * sWaveGridSpacing);
+            stateset->getUniform("waveGridOffset")->set(gridOffset);
+            stateset->getUniform("waveAmplitude")->set(mWater->getWaveAmplitude());
+            const osg::Vec2f mapOrigin = mWater->getWaveDepthMapOrigin();
+            stateset->getUniform("waveDepthMapRect")
+                ->set(osg::Vec4f(mapOrigin.x(), mapOrigin.y(), 1.f / (sWaveDepthMapSize * sWaveDepthMapTexel), 0.f));
         }
 
     private:
@@ -597,6 +804,9 @@ namespace MWRender
         defineMap["rippleMapSize"] = std::to_string(RipplesSurface::sRTTSize) + ".0";
         defineMap["sunlightScattering"] = Settings::water().mSunlightScattering ? "1" : "0";
         defineMap["wobblyShores"] = Settings::water().mWobblyShores ? "1" : "0";
+        defineMap["waves"] = mWaveGrid ? "1" : "0";
+        defineMap["waveGridHalfSize"] = std::to_string(sWaveGridHalfSize);
+        defineMap["waveFullDepth"] = std::to_string(sWaveFullDepth);
 
         Stereo::shaderStereoDefines(defineMap);
 
@@ -662,6 +872,11 @@ namespace MWRender
     {
         bool isInterior = !store->getCell()->isExterior();
         bool wasInterior = mInterior;
+        if (mWorldspace != store->getCell()->getWorldSpace())
+        {
+            mWorldspace = store->getCell()->getWorldSpace();
+            mWaveDepthMapValid = false;
+        }
         if (!isInterior)
         {
             mWaterNode->setPosition(

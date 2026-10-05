@@ -66,6 +66,14 @@ varying float linearDepth;
 
 uniform sampler2D normalMap;
 
+#if @waves
+// OpenMGE XE 3D water (see water.vert)
+uniform bool waveSurface;
+uniform vec2 waveGridOffset;
+uniform float waveAmplitude;
+varying vec3 waveNormal;
+#endif
+
 uniform float osg_SimulationTime;
 
 uniform float near;
@@ -108,6 +116,17 @@ bool hasOpaqueGeometry(vec2 coords)
 
 void main(void)
 {
+#if @waves
+    // Under the wave grid the big flat plane steps aside. The grid's outer quads are flat and overlap the plane by
+    // one quad, where both draw the same thing.
+    if (!waveSurface && waveAmplitude > 0.0)
+    {
+        vec2 fromGrid = abs(position.xy - waveGridOffset);
+        if (max(fromGrid.x, fromGrid.y) < @waveGridHalfSize - 48.0)
+            discard;
+    }
+#endif
+
     vec2 UV = worldPos.xy / (8192.0*5.0) * 3.0;
 
     float shadow = unshadowedLightRatio(linearDepth);
@@ -146,6 +165,11 @@ void main(void)
     vec3 normal = (normal0 * bigWaves.x + normal1 * bigWaves.y + normal2 * midWaves.x +
                    normal3 * midWaves.y + normal4 * smallWaves.x + normal5 * smallWaves.y + rippleAdd);
     normal = normalize(vec3(-normal.x * bump, -normal.y * bump, normal.z));
+#if @waves
+    // the waves' slope under the detail normals
+    vec3 waveN = normalize(waveNormal);
+    normal = normalize(vec3(normal.xy + waveN.xy, normal.z * waveN.z));
+#endif
 
     vec3 sunWorldDir = normalize((gl_ModelViewMatrixInverse * sun.position).xyz);
     vec3 cameraPos = (gl_ModelViewMatrixInverse * vec4(0,0,0,1)).xyz;

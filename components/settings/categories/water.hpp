@@ -27,6 +27,7 @@ namespace Settings
             makeMaxStrictSanitizerFloat(0) };
         SettingValue<bool> mSunlightScattering{ mIndex, "Water", "sunlight scattering" };
         SettingValue<bool> mWobblyShores{ mIndex, "Water", "wobbly shores" };
+        SettingValue<float> mWaveHeight{ mIndex, "Water", "wave height", makeClampSanitizerFloat(0, 150) };
     };
 }
 
