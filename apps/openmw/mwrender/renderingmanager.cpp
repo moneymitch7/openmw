@@ -404,7 +404,7 @@ namespace MWRender
 
         mSharedUniformStateUpdater = new SceneUtil::SharedUniformStateUpdater(Settings::fog().mSkyBlendingStart);
         mSharedUniformStateUpdater->setPointLightTuning(
-            Settings::shaders().mLightBrightness, Settings::shaders().mLightFalloff);
+            Settings::shaders().mLightBrightness, Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce);
         rootNode->addUpdateCallback(mSharedUniformStateUpdater);
 
         mPerViewUniformStateUpdater = new SceneUtil::PerViewUniformStateUpdater(mResourceSystem->getSceneManager(),
@@ -1638,10 +1638,18 @@ namespace MWRender
             {
                 mClampActorsGateUniform->set(Settings::shaders().mClampLightingActors ? 1.f : 0.f);
             }
-            else if (it->first == "Shaders" && (it->second == "light brightness" || it->second == "light falloff"))
+            else if (it->first == "Shaders"
+                && (it->second == "light brightness" || it->second == "light falloff" || it->second == "light bounce"))
             {
-                mSharedUniformStateUpdater->setPointLightTuning(
-                    Settings::shaders().mLightBrightness, Settings::shaders().mLightFalloff);
+                mSharedUniformStateUpdater->setPointLightTuning(Settings::shaders().mLightBrightness,
+                    Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce);
+            }
+            else if (it->first == "Shaders"
+                && (it->second == "held light brightness" || it->second == "held light reach"
+                    || it->second == "held light softness"))
+            {
+                if (mPlayerAnimation)
+                    mPlayerAnimation->retuneExtraLight();
             }
             else if (it->first == "Shaders"
                 && (it->second == "minimum interior brightness" || it->second == "interior ambient"))

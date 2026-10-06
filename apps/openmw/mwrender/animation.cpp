@@ -56,6 +56,7 @@
 #include "../mwworld/containerstore.hpp"
 #include "../mwworld/esmstore.hpp"
 
+#include "../mwmechanics/actorutil.hpp"
 #include "../mwmechanics/character.hpp" // FIXME: for MWMechanics::Priority
 #include "../mwmechanics/weapontype.hpp"
 
@@ -1694,12 +1695,38 @@ namespace MWRender
         }
     }
 
+    namespace
+    {
+        // The held light settings, for the light the player carries; other actors' lights are left as they are.
+        SceneUtil::LightTuning getCarriedLightTuning(const MWWorld::Ptr& ptr)
+        {
+            // (lights placed in the world aren't actors, and may be set up before the player is)
+            if (!ptr.getClass().isActor() || ptr != MWMechanics::getPlayer())
+                return {};
+            SceneUtil::LightTuning tuning;
+            tuning.mBrightness = Settings::shaders().mHeldLightBrightness;
+            tuning.mReach = Settings::shaders().mHeldLightReach;
+            tuning.mSoftness = Settings::shaders().mHeldLightSoftness;
+            return tuning;
+        }
+    }
+
     void Animation::addExtraLight(osg::ref_ptr<osg::Group> parent, const SceneUtil::LightCommon& esmLight)
     {
         bool exterior = mPtr.isInCell() && mPtr.getCell()->getCell()->isExterior();
 
-        mExtraLightSource = SceneUtil::addLight(parent, esmLight, Mask_Lighting, exterior);
+        mExtraLightSource = SceneUtil::addLight(parent, esmLight, Mask_Lighting, exterior, getCarriedLightTuning(mPtr));
         mExtraLightSource->setActorFade(mActorFade);
+        mExtraLightData = esmLight;
+        mExtraLightExterior = exterior;
+    }
+
+    void Animation::retuneExtraLight()
+    {
+        if (!mExtraLightSource || !mExtraLightData)
+            return;
+        SceneUtil::retuneLightSource(
+            *mExtraLightSource, *mExtraLightData, mExtraLightExterior, getCarriedLightTuning(mPtr));
     }
 
     void Animation::addEffect(std::string_view model, std::string_view effectId, bool loop, std::string_view bonename,

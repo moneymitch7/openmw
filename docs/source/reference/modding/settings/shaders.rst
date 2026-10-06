@@ -221,6 +221,19 @@ Shaders Settings
    full colour. The radius fade is unchanged, so lights end where they did.
 
 .. omw-setting::
+   :title: light bounce
+   :type: float32
+   :range: 0.0-1.0
+   :default: 0.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Each point light also lights the room around it softly in its own colour,
+   standing in for light reflected off walls, floor and ceiling.
+   It falls off much more gently than the light itself and reaches the sides of objects facing away from the light,
+   so lamps shape a room instead of only lighting spots, without raising the room's base light.
+   0.0 is off; 0.2-0.4 is subtle.
+
+.. omw-setting::
    :title: interior ambient
    :type: float32
    :range: 0.0-2.0
@@ -229,6 +242,38 @@ Shaders Settings
 
    Scales the base lighting of interiors: the cell's ambient and directional light.
    Lower values make point lights stand out more against the room.
+
+.. omw-setting::
+   :title: held light brightness
+   :type: float32
+   :range: 0.1-2.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Scales the strength of the light the player carries (a torch or lantern).
+   Other actors' lights and lights placed in the world are left alone.
+
+.. omw-setting::
+   :title: held light reach
+   :type: float32
+   :range: 0.5-3.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Scales how far the light the player carries reaches before it ends,
+   without changing how bright it is at a given distance.
+
+.. omw-setting::
+   :title: held light softness
+   :type: float32
+   :range: 0.0-1.0
+   :default: 0.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Flattens the light the player carries: dims the bright spot right around the light and brightens it further out,
+   keeping it the same at the distance where it reaches its full colour
+   (a third of its radius with the usual attenuation settings).
+   At 1.0 the brightest point is capped at about 4/3 of the full colour.
 
 .. omw-setting::
    :title: antialias alpha test

@@ -42,24 +42,45 @@ float specularIntensity(vec3 viewNormal, vec3 viewDir, float shininess, vec3 lig
     return 0.0;
 }
 
-// [Shaders] light brightness and light falloff, stored as offsets from 1 (SharedUniformStateUpdater):
-// x = brightness - 1, y = falloff - 1. Zero, which is also what a program drawn outside the scene root reads,
-// leaves point lights unchanged.
-uniform vec2 pointLightTuning;
+// [Shaders] light brightness, light falloff and light bounce (SharedUniformStateUpdater): x = brightness - 1,
+// y = falloff - 1, z = bounce. Zero, which is also what a program drawn outside the scene root reads, leaves point
+// lights unchanged.
+uniform vec3 pointLightTuning;
+
+// The light's own distance curve, as the game data and attenuation settings make it.
+float calcBaseAttenuation(PointLight light, float dist) {
+    return 1.0 / (light.constant + light.linear * dist + light.quadratic * dist * dist);
+}
+
+float calcRadiusFade(PointLight light, float dist) {
+    #if !@classicFalloff || @lightingMethodClustered
+        // Fade illumination out to 0 when reaching the lights radius
+        return 1.0 - fade((dist / light.radius - 0.75) / 0.25);
+    #else
+        return 1.0;
+    #endif
+}
 
 float calcAttenuation(PointLight light, float dist) {
-    float attenuation = 1.0 / (light.constant + light.linear * dist + light.quadratic * dist * dist);
+    float attenuation = calcBaseAttenuation(light, dist);
     // Falloff raises the distance curve to a power: above 1 it brightens where the light is past full strength
     // (close to the source) and darkens where it is below, so pools of light get tighter and more contrasted.
     // The radius fade below is left as is, so lights still end where they did.
     if (pointLightTuning.y != 0.0)
         attenuation = pow(attenuation, 1.0 + pointLightTuning.y);
     attenuation *= 1.0 + pointLightTuning.x;
-    #if !@classicFalloff || @lightingMethodClustered
-        // Fade illumination out to 0 when reaching the lights radius
-        attenuation *= 1.0 - fade((dist / light.radius - 0.75) / 0.25);
-    #endif
-    return attenuation;
+    return attenuation * calcRadiusFade(light, dist);
+}
+
+// Light bounce: the light a lamp sends onto the walls, floor and ceiling around it and that reaches everything else
+// from there. Stood in for by a soft fill in the light's colour: no brighter than the light at full strength, falling
+// off far more gently than its direct light (the square root of its distance curve, whatever the falloff) and lighting
+// the sides facing away from it at half the strength of the side facing it. It adds to the ambient term, so it brings
+// out a room's shapes in the light's colour rather than raising the room's base light.
+vec3 calcPointLightBounce(PointLight light, float dist, vec3 lightDir, vec3 viewNormal) {
+    float bounce = sqrt(min(calcBaseAttenuation(light, dist), 1.0)) * calcRadiusFade(light, dist);
+    float wrap = 0.5 + 0.25 * (1.0 + dot(viewNormal, lightDir));
+    return light.diffuse.xyz * (pointLightTuning.z * (1.0 + pointLightTuning.x) * bounce * wrap);
 }
 
 int getClusterTileIndex(vec2 screenRes, vec3 gridSize, float near, vec2 screenCoord, float viewSpaceZ) {
@@ -104,6 +125,8 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
 
     diffuseLight += light.diffuse.xyz * lambert(viewNormal, lightDir, viewDir) * attenuation;
     ambientLight += light.ambient.xyz * attenuation;
+    if (pointLightTuning.z > 0.0)
+        ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius);
     specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * attenuation;
 }
 

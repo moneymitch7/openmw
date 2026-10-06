@@ -12,6 +12,7 @@
 #include <components/misc/strings/algorithm.hpp>
 #include <components/sceneutil/animblendrules.hpp>
 #include <components/sceneutil/controller.hpp>
+#include <components/sceneutil/lightcommon.hpp>
 #include <components/sceneutil/nodecallback.hpp>
 #include <components/sceneutil/textkeymap.hpp>
 #include <components/sceneutil/util.hpp>
@@ -242,6 +243,10 @@ namespace MWRender
         osg::ref_ptr<SceneUtil::GlowUpdater> mGlowUpdater;
         osg::ref_ptr<TransparencyUpdater> mTransparencyUpdater;
         osg::ref_ptr<SceneUtil::LightSource> mExtraLightSource;
+        // The game data of the extra light, kept so the player's carried light can be tuned again when its settings
+        // change.
+        std::optional<SceneUtil::LightCommon> mExtraLightData;
+        bool mExtraLightExterior = false;
 
         float mAlpha;
         float mActorFade;
@@ -339,6 +344,9 @@ namespace MWRender
         /// @see SceneUtil::Skeleton::setActive
         /// 0 = Inactive, 1 = Active in place, 2 = Active
         void setActive(int active);
+
+        /// Applies the held light settings to the light this actor carries again, if it is the player's.
+        void retuneExtraLight();
 
         osg::Group* getOrCreateObjectRoot();
 

@@ -92,15 +92,15 @@ namespace SceneUtil
         light->setQuadraticAttenuation(quadraticAttenuation);
     }
 
-    osg::ref_ptr<LightSource> addLight(
-        osg::Group* node, const SceneUtil::LightCommon& esmLight, unsigned int lightMask, bool isExterior)
+    osg::ref_ptr<LightSource> addLight(osg::Group* node, const SceneUtil::LightCommon& esmLight, unsigned int lightMask,
+        bool isExterior, const LightTuning& tuning)
     {
         SceneUtil::FindByNameVisitor visitor("AttachLight");
         node->accept(visitor);
 
         osg::Group* attachTo = visitor.mFoundNode ? visitor.mFoundNode : node;
         osg::ref_ptr<LightSource> lightSource
-            = createLightSource(esmLight, lightMask, isExterior, osg::Vec4f(0, 0, 0, 1));
+            = createLightSource(esmLight, lightMask, isExterior, osg::Vec4f(0, 0, 0, 1), tuning);
         attachTo->addChild(lightSource);
 
         CheckEmptyLightVisitor emptyVisitor;
@@ -111,31 +111,87 @@ namespace SceneUtil
         return lightSource;
     }
 
-    osg::ref_ptr<LightSource> createLightSource(
-        const SceneUtil::LightCommon& esmLight, unsigned int lightMask, bool isExterior, const osg::Vec4f& ambient)
+    namespace
+    {
+        struct TunedLight
+        {
+            float mRadius;
+            osg::Vec4f mDiffuse;
+            osg::Vec4f mSpecular;
+        };
+
+        // Radius, attenuation and colours of a light from its game data and tuning. Sets the attenuation of light.
+        TunedLight tuneLight(
+            Light& light, const SceneUtil::LightCommon& esmLight, bool isExterior, const LightTuning& tuning)
+        {
+            // The minimum scene light radius is 16 in Morrowind
+            const float radius = std::max(esmLight.mRadius, 16.f);
+            configureLight(&light, radius, isExterior);
+
+            float colourScale = tuning.mBrightness;
+            if (tuning.mSoftness > 0.f)
+            {
+                // The attenuation's distance terms at the light's radius and at the third of it where it reaches its
+                // full colour (with the usual settings). Adding a share of the former as a constant term caps the
+                // brightness close to the light; the colour is raised to keep the brightness at the pivot as it was,
+                // so the light gets flatter rather than just dimmer.
+                const float linear = light.getLinearAttenuation();
+                const float quadratic = light.getQuadraticAttenuation();
+                const float atRadius = linear * radius + quadratic * radius * radius;
+                const float pivot = radius / 3.f;
+                const float atPivot = light.getConstantAttenuation() + linear * pivot + quadratic * pivot * pivot;
+                if (atRadius > 0.f && atPivot > 0.f)
+                {
+                    const float constant = tuning.mSoftness * atRadius;
+                    light.setConstantAttenuation(light.getConstantAttenuation() + constant);
+                    colourScale *= (atPivot + constant) / atPivot;
+                }
+            }
+
+            TunedLight result;
+            result.mRadius = radius * tuning.mReach;
+            result.mDiffuse = esmLight.mColor;
+            result.mSpecular = esmLight.mColor; // ESM format doesn't provide specular
+            if (esmLight.mNegative)
+            {
+                result.mDiffuse *= -1;
+                result.mDiffuse.a() = 1;
+                // Using specular lighting for negative lights is unreasonable
+                result.mSpecular = osg::Vec4f();
+            }
+            for (int i = 0; i < 3; ++i)
+            {
+                result.mDiffuse[i] *= colourScale;
+                result.mSpecular[i] *= colourScale;
+            }
+            return result;
+        }
+
+        LightController* findLightController(LightSource& lightSource)
+        {
+            for (osg::Callback* callback = lightSource.getUpdateCallback(); callback != nullptr;
+                 callback = callback->getNestedCallback())
+            {
+                if (auto* controller = dynamic_cast<LightController*>(callback))
+                    return controller;
+            }
+            return nullptr;
+        }
+    }
+
+    osg::ref_ptr<LightSource> createLightSource(const SceneUtil::LightCommon& esmLight, unsigned int lightMask,
+        bool isExterior, const osg::Vec4f& ambient, const LightTuning& tuning)
     {
         osg::ref_ptr<SceneUtil::LightSource> lightSource(new SceneUtil::LightSource);
         osg::ref_ptr<SceneUtil::Light> light(new SceneUtil::Light);
         lightSource->setNodeMask(lightMask);
 
-        // The minimum scene light radius is 16 in Morrowind
-        const float radius = std::max(esmLight.mRadius, 16.f);
-        lightSource->setRadius(radius);
+        const TunedLight tuned = tuneLight(*light, esmLight, isExterior, tuning);
+        lightSource->setRadius(tuned.mRadius);
 
-        configureLight(light, radius, isExterior);
-
-        osg::Vec4f diffuse = esmLight.mColor;
-        osg::Vec4f specular = esmLight.mColor; // ESM format doesn't provide specular
-        if (esmLight.mNegative)
-        {
-            diffuse *= -1;
-            diffuse.a() = 1;
-            // Using specular lighting for negative lights is unreasonable
-            specular = osg::Vec4f();
-        }
-        light->setDiffuse(diffuse);
+        light->setDiffuse(tuned.mDiffuse);
         light->setAmbient(ambient);
-        light->setSpecular(specular);
+        light->setSpecular(tuned.mSpecular);
 
         lightSource->setLight(light);
 
@@ -154,5 +210,27 @@ namespace SceneUtil
         lightSource->addUpdateCallback(ctrl);
 
         return lightSource;
+    }
+
+    void retuneLightSource(
+        LightSource& lightSource, const SceneUtil::LightCommon& esmLight, bool isExterior, const LightTuning& tuning)
+    {
+        // Both of the light's frame buffers: the light controller sets the colours of the frame being prepared every
+        // frame, but nothing else sets the attenuation.
+        TunedLight tuned{};
+        for (std::size_t frame = 0; frame < 2; ++frame)
+        {
+            Light& light = *lightSource.getLight(frame);
+            tuned = tuneLight(light, esmLight, isExterior, tuning);
+            light.setDiffuse(tuned.mDiffuse);
+            light.setSpecular(tuned.mSpecular);
+        }
+        lightSource.setRadius(tuned.mRadius);
+
+        if (LightController* controller = findLightController(lightSource))
+        {
+            controller->setDiffuse(tuned.mDiffuse);
+            controller->setSpecular(tuned.mSpecular);
+        }
     }
 }

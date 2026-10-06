@@ -70,6 +70,8 @@ namespace MWGui
 
         // controls
         MyGUI::ScrollView* mControlsBox;
+        MyGUI::ScrollView* mLightsScroll;
+        MyGUI::Widget* mLightsBox;
         MyGUI::Button* mResetControlsButton;
         MyGUI::Button* mKeyboardSwitch;
         MyGUI::Button* mControllerSwitch;
@@ -132,6 +134,8 @@ namespace MWGui
         MyGUI::TextBox* getSliderLabel(MyGUI::ScrollBar* scroller) const;
 
         void layoutControlsBox();
+        void layoutLightsBox();
+        void onLightsMouseWheel(MyGUI::Widget* sender, int rel);
         void renderScriptSettings();
 
         void computeMinimumWindowSize();

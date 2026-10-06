@@ -45,7 +45,13 @@ namespace Settings
         SettingValue<float> mLightBrightness{ mIndex, "Shaders", "light brightness",
             makeClampSanitizerFloat(0.1f, 4) };
         SettingValue<float> mLightFalloff{ mIndex, "Shaders", "light falloff", makeClampSanitizerFloat(0.25f, 3) };
+        SettingValue<float> mLightBounce{ mIndex, "Shaders", "light bounce", makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mInteriorAmbient{ mIndex, "Shaders", "interior ambient", makeClampSanitizerFloat(0, 2) };
+        SettingValue<float> mHeldLightBrightness{ mIndex, "Shaders", "held light brightness",
+            makeClampSanitizerFloat(0.1f, 2) };
+        SettingValue<float> mHeldLightReach{ mIndex, "Shaders", "held light reach", makeClampSanitizerFloat(0.5f, 3) };
+        SettingValue<float> mHeldLightSoftness{ mIndex, "Shaders", "held light softness",
+            makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };
         SettingValue<bool> mSoftParticles{ mIndex, "Shaders", "soft particles" };

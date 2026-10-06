@@ -1,5 +1,6 @@
 #include "settingswindow.hpp"
 
+#include <algorithm>
 #include <array>
 
 #include <unicode/locid.h>
@@ -28,6 +29,7 @@
 #include <components/settings/values.hpp>
 #include <components/vfs/manager.hpp>
 #include <components/vfs/recursivedirectoryiterator.hpp>
+#include <components/widgets/box.hpp>
 #include <components/widgets/sharedstatebutton.hpp>
 
 #include "../mwbase/environment.hpp"
@@ -295,6 +297,8 @@ namespace MWGui
         getWidget(mTextureFilteringButton, "TextureFilteringButton");
         getWidget(mAnisotropy, "Anisotropy");
         getWidget(mControlsBox, "ControlsBox");
+        getWidget(mLightsScroll, "LightsScroll");
+        getWidget(mLightsBox, "LightsBox");
         getWidget(mResetControlsButton, "ResetControlsButton");
         getWidget(mKeyboardSwitch, "KeyboardButton");
         getWidget(mControllerSwitch, "ControllerButton");
@@ -342,6 +346,21 @@ namespace MWGui
             += MyGUI::newDelegate(this, &SettingsWindow::onWindowResize);
 
         mSettingsTab->eventTabChangeSelect += MyGUI::newDelegate(this, &SettingsWindow::onTabChanged);
+
+        // The lights page scrolls when the window is too short for it. Its labels and buttons pass the mouse wheel
+        // on to the page; sliders and lists keep it, as elsewhere.
+        std::vector<MyGUI::Widget*> lightsWidgets{ mLightsBox };
+        while (!lightsWidgets.empty())
+        {
+            MyGUI::Widget* widget = lightsWidgets.back();
+            lightsWidgets.pop_back();
+            if (widget->castType<MyGUI::ScrollBar>(false) || widget->castType<MyGUI::ComboBox>(false))
+                continue;
+            widget->eventMouseWheel += MyGUI::newDelegate(this, &SettingsWindow::onLightsMouseWheel);
+            for (size_t i = 0; i < widget->getChildCount(); ++i)
+                lightsWidgets.push_back(widget->getChildAt(i));
+        }
+        layoutLightsBox();
         mOkButton->eventMouseButtonClick += MyGUI::newDelegate(this, &SettingsWindow::onOkButtonClicked);
         mTextureFilteringButton->eventComboChangePosition
             += MyGUI::newDelegate(this, &SettingsWindow::onTextureFilteringChanged);
@@ -707,7 +726,11 @@ namespace MWGui
         Settings::shaders().mMinimumInteriorBrightness.reset();
         Settings::shaders().mLightBrightness.reset();
         Settings::shaders().mLightFalloff.reset();
+        Settings::shaders().mLightBounce.reset();
         Settings::shaders().mInteriorAmbient.reset();
+        Settings::shaders().mHeldLightBrightness.reset();
+        Settings::shaders().mHeldLightReach.reset();
+        Settings::shaders().mHeldLightSoftness.reset();
         Settings::shaders().mMaxLights.reset();
         Settings::shaders().mClusteredLighting.reset();
 
@@ -1062,6 +1085,32 @@ namespace MWGui
         mControlsBox->setVisibleVScroll(true);
     }
 
+    void SettingsWindow::layoutLightsBox()
+    {
+        const MyGUI::IntCoord view = mLightsScroll->getViewCoord();
+        if (view.width <= 0 || view.height <= 0)
+            return;
+
+        int height = view.height;
+        if (auto* box = dynamic_cast<Gui::AutoSizedWidget*>(mLightsBox))
+            height = std::max(box->getRequestedSize().height, height);
+        // a little room between the page and the scroll bar
+        const int width = view.width - 4;
+        mLightsBox->setCoord(0, 0, width, height);
+
+        // as for the controls box: the canvas size is expressed with the scroll bar hidden
+        mLightsScroll->setVisibleVScroll(false);
+        mLightsScroll->setCanvasSize(width, height);
+        mLightsScroll->setVisibleVScroll(true);
+    }
+
+    void SettingsWindow::onLightsMouseWheel(MyGUI::Widget* /*sender*/, int rel)
+    {
+        const int maxOffset = std::max(0, mLightsScroll->getCanvasSize().height - mLightsScroll->getViewCoord().height);
+        const int top = std::clamp(static_cast<int>(mLightsScroll->getViewOffset().top + rel * 0.3f), -maxOffset, 0);
+        mLightsScroll->setViewOffset(MyGUI::IntPoint(0, top));
+    }
+
     void SettingsWindow::renderScriptSettings()
     {
         mScriptAdapter->detach();
@@ -1171,6 +1220,7 @@ namespace MWGui
         highlightCurrentResolution();
         updateControlsBox();
         updateLightSettings();
+        layoutLightsBox();
         updateWindowModeSettings();
         updateVSyncModeSettings();
         resetScrollbars();
@@ -1189,6 +1239,7 @@ namespace MWGui
     void SettingsWindow::onWindowResize(MyGUI::Window* /*sender*/)
     {
         layoutControlsBox();
+        layoutLightsBox();
     }
 
     void SettingsWindow::computeMinimumWindowSize()
