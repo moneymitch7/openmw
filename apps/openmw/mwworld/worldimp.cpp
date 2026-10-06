@@ -1,5 +1,7 @@
 #include "worldimp.hpp"
 
+#include <chrono>
+
 #include <charconv>
 #include <vector>
 
@@ -1684,8 +1686,15 @@ namespace MWWorld
     {
         try
         {
+            // OpenMGE XE: name the object and the step when picking what is under the crosshair stalls a frame
+            const auto start = std::chrono::steady_clock::now();
+            const auto msSince = [](std::chrono::steady_clock::time_point since) {
+                return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - since).count();
+            };
+
             // inform the GUI about focused object
             MWWorld::Ptr object = getFocusObject();
+            const double rayMs = msSince(start);
 
             // retrieve the object's top point's screen position so we know where to place the floating label
             if (!object.isEmpty())
@@ -1703,6 +1712,13 @@ namespace MWWorld
             }
 
             MWBase::Environment::get().getWindowManager()->setFocusObject(object);
+
+            const double totalMs = msSince(start);
+            if (totalMs >= 50.0)
+                Log(Debug::Warning) << "Slow focus update: " << static_cast<int>(totalMs) << " ms (ray "
+                                    << static_cast<int>(rayMs) << " ms) on "
+                                    << (object.isEmpty() ? std::string("nothing")
+                                                         : object.getCellRef().getRefId().toDebugString());
         }
         catch (std::exception& e)
         {

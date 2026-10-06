@@ -8,6 +8,7 @@
 #include <fstream>
 #include <future>
 #include <iomanip>
+#include <sstream>
 #include <system_error>
 
 #include <osg/ContextData>
@@ -213,14 +214,18 @@ namespace
             for (unsigned int i = first; i <= last; ++i)
             {
                 double value = 0.0;
+                double frameMs = 0.0;
                 if (stats.getAttribute(i, "Frame duration", value))
                 {
-                    mFrameTime.add(value * 1000.0);
-                    mWorstFrameMs = std::max(mWorstFrameMs, value * 1000.0);
+                    frameMs = value * 1000.0;
+                    mFrameTime.add(frameMs);
+                    mWorstFrameMs = std::max(mWorstFrameMs, frameMs);
                 }
                 for (Column& column : mColumns)
                     if ((column.mCamera ? cameraStats : stats).getAttribute(i, column.mAttribute, value))
                         column.mSum.add(value * column.mScale);
+                if (frameMs >= sSlowFrameMs)
+                    logSlowFrame(frameMs, i, stats, cameraStats, menu);
             }
             mLastFrame = last;
 
@@ -261,6 +266,35 @@ namespace
         }
 
     private:
+        // A stutter while playing: what that one frame spent its time on (the timed parts over 5 ms), and where the
+        // player was, so single hitches can be told apart from the per-second averages in the CSV.
+        static constexpr double sSlowFrameMs = 150.0;
+
+        void logSlowFrame(
+            double frameMs, unsigned int frame, const osg::Stats& stats, const osg::Stats& cameraStats, bool menu)
+        {
+            std::ostringstream parts;
+            parts << std::fixed << std::setprecision(0);
+            for (const Column& column : mColumns)
+            {
+                double value = 0.0;
+                if (column.mScale == 1.0
+                    || !(column.mCamera ? cameraStats : stats).getAttribute(frame, column.mAttribute, value))
+                    continue;
+                value *= column.mScale;
+                if (value >= 5.0)
+                    parts << ", " << column.mHeading << ' ' << value;
+            }
+            std::string where;
+            const MWWorld::Ptr player = MWMechanics::getPlayer();
+            if (!player.isEmpty() && player.isInCell())
+                where = " in " + std::string(player.getCell()->getCell()->getDescription());
+            Log(Debug::Warning) << "Slow frame: " << static_cast<int>(frameMs) << " ms" << where
+                                << (menu ? " (a menu is open)" : "")
+                                << (parts.str().empty() ? std::string(", none of the timed parts over 5 ms")
+                                                        : parts.str());
+        }
+
         // Every 5 seconds: each post-processing shader's GPU time over those seconds, slowest first.
         void writeFxProfile(bool menu)
         {
