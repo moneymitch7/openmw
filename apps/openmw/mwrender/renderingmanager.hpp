@@ -340,6 +340,9 @@ namespace MWRender
         osg::ref_ptr<osg::Uniform> mMgeScatterOnUniform;
         osg::ref_ptr<osg::Uniform> mClampActorsGateUniform;
         osg::ref_ptr<osg::Uniform> mMgeFogRangeUniform; // [Fog] mge fog start/end cells, live
+        // The MGE XE exponential fog envelope of the current weather in world units (start, end), for post-processing
+        // shaders; 0 outside exteriors.
+        osg::Vec2f mMgeFogEnvelope;
         osg::ref_ptr<osg::Uniform> mMgeSunDirUniform;
         osg::ref_ptr<osg::Group> mRootNode;
         osg::ref_ptr<SceneUtil::LightManager> mSceneRoot;

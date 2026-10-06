@@ -81,6 +81,12 @@ namespace Fx
 
         void setPointLightRadiusMultiplier(float multiplier) { mData.get<PointLightRadiusMultiplier>() = multiplier; }
 
+        void setMgeFogRange(float start, float end)
+        {
+            mData.get<MgeFogStart>() = start;
+            mData.get<MgeFogEnd>() = end;
+        }
+
         void setFov(float fov) { mData.get<Fov>() = fov; }
 
         void setGameHour(float hour) { mData.get<GameHour>() = hour; }
@@ -290,11 +296,24 @@ namespace Fx
             static constexpr std::string_view sName = "pointLightRadiusMultiplier";
         };
 
+        // The OpenMGE XE exponential fog of the current weather, above water in exteriors (0 elsewhere): it starts at
+        // mgeFogStart and is about 98% complete at mgeFogEnd (transmittance exp(-4 * (d - start) / (end - start))), in
+        // world units (OMW_MGE_FOG). omw.fogNear and omw.fogFar keep the engine's own fog range.
+        struct MgeFogStart : Std140::Float
+        {
+            static constexpr std::string_view sName = "mgeFogStart";
+        };
+
+        struct MgeFogEnd : Std140::Float
+        {
+            static constexpr std::string_view sName = "mgeFogEnd";
+        };
+
         using UniformData = Std140::UBO<ProjectionMatrix, InvProjectionMatrix, ViewMatrix, PrevViewMatrix,
             InvViewMatrix, EyePos, EyeVec, FogColor, AmbientColor, SkyColor, SunColor, SunPos, SunVec, Resolution,
             RcpResolution, FogNear, FogFar, Near, Far, Fov, GameHour, SunVis, WaterHeight, IsWaterEnabled,
             SimulationTime, DeltaSimulationTime, FrameNumber, WindSpeed, WeatherTransition, WeatherID, NextWeatherID,
-            IsUnderwater, IsInterior, PointLightRadiusMultiplier>;
+            IsUnderwater, IsInterior, PointLightRadiusMultiplier, MgeFogStart, MgeFogEnd>;
 
         UniformData mData;
         bool mUseUBO;

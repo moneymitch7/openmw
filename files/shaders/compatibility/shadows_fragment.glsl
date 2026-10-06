@@ -22,9 +22,12 @@
 // ============================================================================
 #if @softShadows
 
-// Filter radius in shadow map texels. Kept in texels (not world units) so each cascade is sampled evenly.
+// Filter radius in shadow map texels. Kept in texels (not world units) so each cascade is sampled evenly. 5.2 texels
+// at a 1024 shadow map, scaled with the map size so the softening keeps the same width on the ground: a 512 map's
+// texels are twice as wide, so it gets 2.6 rather than a blur twice as wide. Held between 2.5 texels, below which the
+// filter stops hiding the texels, and 8, beyond which 8 taps sample the disc too sparsely.
 #ifndef SOFT_SHADOW_RADIUS_TEXELS
-#define SOFT_SHADOW_RADIUS_TEXELS 5.2
+#define SOFT_SHADOW_RADIUS_TEXELS clamp(5.2 * @shadowMapResolution / 1024.0, 2.5, 8.0)
 #endif
 
 // Steepest receiver plane slope (shadow depth per shadow map UV) the taps follow. Steeper surfaces are nearly

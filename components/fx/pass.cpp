@@ -79,6 +79,7 @@ namespace Fx
 #define OMW_OPAQUE_COLOR 1
 #define OMW_BLENDED_COLOR 1
 #define OMW_POINT_LIGHT_RADIUS_MULTIPLIER 1
+#define OMW_MGE_FOG 1
 #define omw_In @in
 #define omw_Out @out
 #define omw_Position @position

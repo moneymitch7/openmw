@@ -1,4 +1,5 @@
 #include "renderingmanager.hpp"
+#include <algorithm>
 #include <cmath>
 
 #include <cstdlib>
@@ -172,6 +173,25 @@ namespace
         if (start > 0.f && end > 0.f)
             end = std::max(end, start + 0.5f);
         return osg::Vec2f(start, end);
+    }
+
+    // The scene shaders' MGE XE fog envelope for one weather (mge_fog.glsl, mgeDeriveFogAt), in world units: x = where
+    // the exponential fog starts, y = its end (transmittance exp(-4), about 98% fogged). The fog in between is
+    // transmittance = exp(-4 * (distance - x) / (y - x)), before the shaders' near-range fit, height layer and floor.
+    // ff and fo are the weather's distant land fog factor and offset (0-1).
+    osg::Vec2f deriveMgeFogEnvelope(float ff, float fo, const osg::Vec2f& range)
+    {
+        constexpr float cell = 8192.f;
+        constexpr float expFogDistScale = 4.f; // MGE_SCATTER_ERA_2020
+        const float awStart = range.x() > 0.f ? range.x() : 2.f;
+        const float awEnd = range.y() > 0.f ? range.y() : 5.f;
+        const float fogEnd = std::max(0.875f, ff * awEnd);
+        const float lg = std::log(std::max(1.f - 0.25f * fo, 0.05f));
+        float fogStart = ff * awStart + (lg / (1.f + lg)) * fogEnd;
+        // dense weather pulls the start in by up to 35%
+        const float pullIn = std::clamp((0.9f - ff) / 0.2f, 0.f, 1.f);
+        fogStart *= 1.f + (0.65f - 1.f) * pullIn;
+        return osg::Vec2f(fogStart * cell / expFogDistScale, fogEnd * cell);
     }
 }
 
@@ -732,6 +752,19 @@ namespace MWRender
         mMgeFogParamsCurUniform->set(
             osg::Vec4f(dlFogFactorCur, dlFogOffsetCur, dlFogFactorCur >= 0.f ? 1.f : 0.f, 0.f));
         mMgeFogParamsNextUniform->set(osg::Vec4f(dlFogFactorNext, dlFogOffsetNext, dlFogBlend, 0.f));
+
+        // The same envelope the shaders derive (mgeDerivedFog): at both ends of a weather transition, then blended.
+        mMgeFogEnvelope = osg::Vec2f();
+        if (isExterior && dlFogFactorCur >= 0.f)
+        {
+            const osg::Vec2f range = getMgeFogRange();
+            const osg::Vec2f current = deriveMgeFogEnvelope(dlFogFactorCur, dlFogOffsetCur, range);
+            const osg::Vec2f next = deriveMgeFogEnvelope(dlFogFactorNext, dlFogOffsetNext, range);
+            const float t = std::clamp(dlFogBlend, 0.f, 1.f);
+            const osg::Vec2f envelope = current + (next - current) * t;
+            if (std::isfinite(envelope.x()) && std::isfinite(envelope.y()) && envelope.y() > envelope.x())
+                mMgeFogEnvelope = envelope;
+        }
     }
 
     void RenderingManager::setMgeScattering(const osg::Vec4f& outScatter, const osg::Vec4f& inScatter, bool enable)
@@ -964,6 +997,7 @@ namespace MWRender
         const auto& stateUpdater = mPostProcessor->getStateUpdater();
 
         stateUpdater->setFogRange(fogStart, fogEnd);
+        stateUpdater->setMgeFogRange(mMgeFogEnvelope.x(), mMgeFogEnvelope.y());
         stateUpdater->setNearFar(mNearClip, mViewDistance);
         stateUpdater->setIsUnderwater(isUnderwater);
         stateUpdater->setFogColor(fogColor);
