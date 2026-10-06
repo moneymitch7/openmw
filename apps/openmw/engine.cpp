@@ -84,6 +84,7 @@
 #include "mwworld/datetimemanager.hpp"
 #include "mwworld/worldimp.hpp"
 
+#include "mwrender/fxtimings.hpp"
 #include "mwrender/vismask.hpp"
 
 #include "mwclass/classes.hpp"
@@ -177,6 +178,7 @@ namespace
             : mFile(path, std::ios::out | std::ios::trunc)
             , mViewer(viewer)
         {
+            mFxProfilePath = path.parent_path() / "postprocess-profile.txt";
             if (!mFile.is_open())
             {
                 Log(Debug::Warning) << "Failed to open the performance log " << path;
@@ -186,6 +188,7 @@ namespace
             enableStats();
             if (osg::GraphicsContext* context = viewer.getCamera()->getGraphicsContext())
                 context->add(new GpuMemoryProbe);
+            MWRender::FxTimings::setEnabled(true);
             mFile << "time,cell,x,y,menu,fps,frame ms,worst frame ms";
             for (const Column& column : mColumns)
                 mFile << ',' << column.mHeading;
@@ -252,9 +255,40 @@ namespace
                   << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load();
             mFile << '\n';
             mFile.flush();
+
+            if (++mSeconds % 5 == 0)
+                writeFxProfile(menu);
         }
 
     private:
+        // Every 5 seconds: each post-processing shader's GPU time over those seconds, slowest first.
+        void writeFxProfile(bool menu)
+        {
+            const std::vector<MWRender::FxTimings::Entry> entries = MWRender::FxTimings::take();
+            std::ofstream out(mFxProfilePath, std::ios::out | std::ios::trunc);
+            if (!out.is_open())
+                return;
+            out << "OpenMW post-processing GPU time per shader (averages over the last ~5 seconds, rewritten every 5 "
+                   "seconds)\n";
+            const MWWorld::Ptr player = MWMechanics::getPlayer();
+            if (!player.isEmpty() && player.isInCell())
+                out << "Player in " << player.getCell()->getCell()->getDescription() << (menu ? " (menu open)" : "")
+                    << '\n';
+            out << "\n   avg ms  worst ms  frames  shader\n";
+            double total = 0.0;
+            for (const MWRender::FxTimings::Entry& entry : entries)
+            {
+                out << std::fixed << std::setprecision(2) << std::setw(9) << entry.mAverageMs << std::setw(10)
+                    << entry.mWorstMs << std::setw(8) << entry.mFrames << "  " << entry.mTechnique << '\n';
+                total += entry.mAverageMs;
+            }
+            out << "\n" << std::fixed << std::setprecision(2) << std::setw(9) << total
+                << "  total (shaders in the chain that ran; timed every 4th frame)\n";
+        }
+
+        std::filesystem::path mFxProfilePath;
+        unsigned int mSeconds = 0;
+
         static constexpr unsigned int sStatsDelay = 4;
         static constexpr unsigned int sStatsHistory = 20;
 

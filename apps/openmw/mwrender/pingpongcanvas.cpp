@@ -8,6 +8,7 @@
 
 #include <osg/Texture2DArray>
 
+#include "fxtimings.hpp"
 #include "postprocessor.hpp"
 
 namespace MWRender
@@ -88,6 +89,51 @@ namespace MWRender
 
             cache.insert(uniformMap.extract(it++));
         }
+    }
+
+    PingPongCanvas::GpuTimerFrame* PingPongCanvas::beginGpuTiming(osg::State& state, std::size_t techniques) const
+    {
+        if (!FxTimings::isEnabled())
+            return nullptr;
+        osg::GLExtensions* ext = state.get<osg::GLExtensions>();
+        if (ext == nullptr || !ext->isTimerQuerySupported || ext->glQueryCounter == nullptr
+            || ext->glGetQueryObjectui64v == nullptr || ext->glGenQueries == nullptr)
+            return nullptr;
+
+        const unsigned int contextId = state.getContextID();
+        if (mGpuTimers.size() <= contextId)
+            mGpuTimers.resize(contextId + 1);
+        GpuTimer& timer = mGpuTimers[contextId];
+        GpuTimerFrame& frame = timer.mFrames[timer.mIndex++ % timer.mFrames.size()];
+
+        if (frame.mPending)
+        {
+            // Read back the frame these queries timed, once the GPU is done with it; if it is not, skip timing now.
+            GLint available = 0;
+            ext->glGetQueryObjectiv(frame.mQueries[frame.mTechniques.size()], GL_QUERY_RESULT_AVAILABLE, &available);
+            if (!available)
+                return nullptr;
+            GLuint64 previous = 0;
+            ext->glGetQueryObjectui64v(frame.mQueries[0], GL_QUERY_RESULT, &previous);
+            for (std::size_t i = 0; i < frame.mTechniques.size(); ++i)
+            {
+                GLuint64 next = 0;
+                ext->glGetQueryObjectui64v(frame.mQueries[i + 1], GL_QUERY_RESULT, &next);
+                if (frame.mTechniques[i] != nullptr && next >= previous)
+                    FxTimings::record(frame.mTechniques[i]->getName(), static_cast<double>(next - previous) / 1.0e6);
+                previous = next;
+            }
+            frame.mPending = false;
+        }
+
+        if (frame.mQueries.size() < techniques + 1)
+        {
+            const std::size_t first = frame.mQueries.size();
+            frame.mQueries.resize(techniques + 1);
+            ext->glGenQueries(static_cast<GLsizei>(frame.mQueries.size() - first), frame.mQueries.data() + first);
+        }
+        frame.mTechniques.clear();
+        return &frame;
     }
 
     void PingPongCanvas::drawImplementation(osg::RenderInfo& renderInfo) const
@@ -256,9 +302,17 @@ namespace MWRender
             }
         }
 
+        GpuTimerFrame* gpuTiming = beginGpuTiming(state, filtered.size());
+
         for (const size_t& index : filtered)
         {
             const auto& node = mPasses[index];
+
+            if (gpuTiming)
+            {
+                ext->glQueryCounter(gpuTiming->mQueries[gpuTiming->mTechniques.size()], GL_TIMESTAMP);
+                gpuTiming->mTechniques.push_back(node.mHandle.get());
+            }
 
             node.mRootStateSet->setTextureAttribute(PostProcessor::Unit_Depth, mTextureDepth);
 
@@ -361,6 +415,12 @@ namespace MWRender
             }
 
             state.popStateSet();
+        }
+
+        if (gpuTiming)
+        {
+            ext->glQueryCounter(gpuTiming->mQueries[gpuTiming->mTechniques.size()], GL_TIMESTAMP);
+            gpuTiming->mPending = true;
         }
 
         if (Stereo::getMultiview())
