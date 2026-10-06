@@ -224,6 +224,11 @@ namespace MWPhysics
         RayCastingResult castSphere(const osg::Vec3f& from, const osg::Vec3f& to, float radius,
             int mask = CollisionType_Default, int group = 0xff) const override;
 
+        /// OpenMGE XE light occlusion: whether a wall, floor, door or other large solid lies between the two points.
+        /// Collision shapes whose bounds hold either point (the lamp's own mesh, the lit object, a room shell around
+        /// both) are ignored, as are small ones (crates, pillars, furniture) that would hide light too eagerly.
+        bool isLightBlocked(const osg::Vec3f& from, const osg::Vec3f& to) const;
+
         /// Return true if actor1 can see actor2.
         bool getLineOfSight(const MWWorld::ConstPtr& actor1, const MWWorld::ConstPtr& actor2) const override;
 

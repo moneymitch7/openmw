@@ -217,6 +217,14 @@ namespace SceneUtil
 
     class LightManagerCullCallback;
 
+    /// OpenMGE XE light occlusion: whether solid world geometry (walls, floors, doors) lies between two world-space
+    /// points. Implemented by the game with the physics world.
+    class LightOcclusionTest : public osg::Referenced
+    {
+    public:
+        virtual bool isBlocked(const osg::Vec3f& from, const osg::Vec3f& to) = 0;
+    };
+
     /// @brief Decorator node implementing the rendering of any number of LightSources that can be anywhere in the
     /// subgraph.
     class LightManager : public osg::Group
@@ -236,6 +244,17 @@ namespace SceneUtil
         };
 
         using LightList = std::vector<const LightSourceViewBound*>;
+
+        /// What one lit object last found out about one light (LightListCallback keeps one per light it saw).
+        struct OcclusionCacheEntry
+        {
+            const LightSource* mLight = nullptr;
+            osg::Vec3f mLightPos;
+            osg::Vec3f mObjectPos;
+            size_t mFrame = 0;
+            bool mBlocked = false;
+        };
+        using OcclusionCache = std::vector<OcclusionCacheEntry>;
         using SupportedMethods = std::array<bool, 3>;
 
         META_Node(SceneUtil, LightManager)
@@ -267,6 +286,17 @@ namespace SceneUtil
         /// same lights always in the same order, so equal lists share a state set), not getLightsInViewSpace's.
         void getLightsIntersecting(osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix, size_t frameNum,
             const osg::BoundingSphere& bound, const std::set<LightSource*>& ignored, LightList& out);
+
+        /// OpenMGE XE light occlusion: lights with world geometry between them and the whole of an object stop
+        /// lighting it, so a lamp doesn't light the next room through the wall. @a raysPerFrame caps the tests made
+        /// per frame (results are kept until the light or the object moves); objects with a bound radius above
+        /// @a maxObjectRadius (merged chunks, room shells) are never tested.
+        void setLightOcclusion(
+            LightOcclusionTest* test, bool enabled, unsigned int raysPerFrame, float maxObjectRadius);
+
+        /// Removes from @a lightList the lights the world hides from @a viewBound (in the view space of @a viewMatrix).
+        void removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
+            const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache);
 
         osg::ref_ptr<osg::StateSet> getLightListStateSet(
             const LightList& lightList, size_t frameNum, const osg::RefMatrix* viewMatrix);
@@ -373,6 +403,18 @@ namespace SceneUtil
         void fillPPLights(const LightSourceViewBoundCollection& collection, size_t frameNum, double time);
 
         osg::ref_ptr<LightManagerCullCallback> mCullCallback;
+
+        bool isLightHidden(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius);
+
+        osg::ref_ptr<LightOcclusionTest> mOcclusionTest;
+        bool mOcclusionEnabled = false;
+        unsigned int mOcclusionRaysPerFrame = 0;
+        float mOcclusionMaxObjectRadius = 0.f;
+        size_t mOcclusionFrame = 0;
+        unsigned int mOcclusionRaysUsed = 0;
+        const osg::RefMatrix* mOcclusionInverseViewFor = nullptr;
+        size_t mOcclusionInverseViewFrame = 0;
+        osg::Matrixf mOcclusionInverseView;
     };
 
     class LightManagerCullCallback
@@ -452,6 +494,7 @@ namespace SceneUtil
         size_t mLastFrameNumber;
         LightManager::LightList mLightList;
         std::set<SceneUtil::LightSource*> mIgnoredLightSources;
+        LightManager::OcclusionCache mOcclusionCache;
     };
 
     void configureStateSetSunOverride(const Light* light, osg::StateSet* stateset,

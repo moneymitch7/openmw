@@ -919,6 +919,23 @@
                                 <Property key="Caption" value="#{OMWEngine:LightHotspotSofteningDesc}"/>
                             </Widget>
 
+                            <!-- Light Occlusion -->
+                            <Widget type="HBox" align="Stretch">
+                                <UserString key="HStretch" value="true"/>
+                                <UserString key="VStretch" value="false"/>
+                                <Widget type="AutoSizedButton" skin="MW_Button">
+                                    <UserString key="SettingCategory" value="Shaders"/>
+                                    <UserString key="SettingName" value="light occlusion"/>
+                                    <UserString key="SettingType" value="CheckButton"/>
+                                </Widget>
+                                <Widget type="AutoSizedTextBox" skin="SandText">
+                                    <Property key="Caption" value="#{OMWEngine:LightOcclusion}"/>
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightOcclusionTooltip}"/>
+                                </Widget>
+                            </Widget>
+
                             <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
                                 <UserString key="HStretch" value="true"/>
                             </Widget>

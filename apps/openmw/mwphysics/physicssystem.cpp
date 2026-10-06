@@ -191,6 +191,65 @@ namespace MWPhysics
         return true;
     }
 
+    namespace
+    {
+        bool containsPoint(const btVector3& min, const btVector3& max, const btVector3& point)
+        {
+            return point.x() >= min.x() && point.y() >= min.y() && point.z() >= min.z() && point.x() <= max.x()
+                && point.y() <= max.y() && point.z() <= max.z();
+        }
+
+        // Stops at the first wall-like hit (see PhysicsSystem::isLightBlocked).
+        class LightBlockerCallback : public btCollisionWorld::RayResultCallback
+        {
+        public:
+            LightBlockerCallback(const btVector3& from, const btVector3& to)
+                : mFrom(from)
+                , mTo(to)
+            {
+                m_collisionFilterGroup = 0xff;
+                m_collisionFilterMask = CollisionType_World | CollisionType_Door | CollisionType_HeightMap;
+            }
+
+            bool needsCollision(btBroadphaseProxy* proxy) const override
+            {
+                if (!btCollisionWorld::RayResultCallback::needsCollision(proxy))
+                    return false;
+                if (containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mFrom)
+                    || containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mTo))
+                    return false;
+                if (proxy->m_collisionFilterGroup & (CollisionType_Door | CollisionType_HeightMap))
+                    return true;
+                // Wall-like: at least two sides of its bounds a couple of metres or more.
+                constexpr btScalar minSide = 128;
+                const btVector3 size = proxy->m_aabbMax - proxy->m_aabbMin;
+                return (size.x() >= minSide) + (size.y() >= minSide) + (size.z() >= minSide) >= 2;
+            }
+
+            btScalar addSingleResult(btCollisionWorld::LocalRayResult& rayResult, bool /*normalInWorldSpace*/) override
+            {
+                m_collisionObject = rayResult.m_collisionObject;
+                m_closestHitFraction = 0; // any hit will do: ends the test
+                return 0;
+            }
+
+        private:
+            btVector3 mFrom;
+            btVector3 mTo;
+        };
+    }
+
+    bool PhysicsSystem::isLightBlocked(const osg::Vec3f& from, const osg::Vec3f& to) const
+    {
+        if (from == to)
+            return false;
+        const btVector3 btFrom = Misc::Convert::toBullet(from);
+        const btVector3 btTo = Misc::Convert::toBullet(to);
+        LightBlockerCallback callback(btFrom, btTo);
+        mTaskScheduler->rayTest(btFrom, btTo, callback);
+        return callback.hasHit();
+    }
+
     RayCastingResult PhysicsSystem::castRay(const osg::Vec3f& from, const osg::Vec3f& to,
         const std::vector<MWWorld::ConstPtr>& ignore, const std::vector<MWWorld::Ptr>& targets, int mask,
         int group) const

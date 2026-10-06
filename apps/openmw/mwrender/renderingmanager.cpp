@@ -640,6 +640,20 @@ namespace MWRender
         return mSceneRoot.get();
     }
 
+    void RenderingManager::setLightOcclusionTest(SceneUtil::LightOcclusionTest* test)
+    {
+        mLightOcclusionTest = test;
+        applyLightOcclusion();
+    }
+
+    void RenderingManager::applyLightOcclusion()
+    {
+        // Objects bigger than this (merged chunks of statics, whole-room meshes) span both sides of a wall.
+        constexpr float maxObjectRadius = 768.f;
+        mSceneRoot->setLightOcclusion(mLightOcclusionTest.get(), Settings::shaders().mLightOcclusion,
+            static_cast<unsigned int>(Settings::shaders().mLightOcclusionRaysPerFrame), maxObjectRadius);
+    }
+
     void RenderingManager::setSunShadowFade(float fade)
     {
         mSharedUniformStateUpdater->setSunShadowFade(fade);
@@ -1634,6 +1648,11 @@ namespace MWRender
             else if (it->first == "Fog" && (it->second == "mge fog start cells" || it->second == "mge fog end cells"))
             {
                 mMgeFogRangeUniform->set(getMgeFogRange());
+            }
+            else if (it->first == "Shaders"
+                && (it->second == "light occlusion" || it->second == "light occlusion rays per frame"))
+            {
+                applyLightOcclusion();
             }
             else if (it->first == "Shaders" && it->second == "clamp lighting actors")
             {

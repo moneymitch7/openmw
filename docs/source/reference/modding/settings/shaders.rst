@@ -247,6 +247,29 @@ Shaders Settings
    The rest of the light's reach is unchanged.
 
 .. omw-setting::
+   :title: light occlusion
+   :type: boolean
+   :range: true, false
+   :default: true
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Point lights don't cast shadows, so a lamp lights everything within its reach, including the next room through
+   the wall. With this on, a light stops lighting an object when solid world geometry (a wall, floor, closed door or
+   other large shape) lies between the light and the object's centre and six points around it.
+   Small shapes such as furniture, crates and pillars don't count, and neither do shapes around the light or the
+   object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
+   Each light and object pair is tested once and retested when either moves or every few seconds (for doors).
+   The test is per object, not per pixel: an object partly behind a wall keeps the light.
+
+.. omw-setting::
+   :title: light occlusion rays per frame
+   :type: int
+   :range: 8-2048
+   :default: 64
+
+   How many wall tests :ref:`light occlusion` may make in one frame. Pairs not yet tested keep the light.
+
+.. omw-setting::
    :title: sunlight brightness
    :type: float32
    :range: 0.25-3.0

@@ -414,6 +414,109 @@ namespace SceneUtil
         return mClusteredLighting;
     }
 
+    void LightManager::setLightOcclusion(
+        LightOcclusionTest* test, bool enabled, unsigned int raysPerFrame, float maxObjectRadius)
+    {
+        mOcclusionTest = test;
+        mOcclusionEnabled = enabled && test != nullptr;
+        mOcclusionRaysPerFrame = raysPerFrame;
+        mOcclusionMaxObjectRadius = maxObjectRadius;
+    }
+
+    namespace
+    {
+        // A cached result stands while neither end has moved further than this (world units)...
+        constexpr float sOcclusionMoveTolerance2 = 24.f * 24.f;
+        // ...and is retested after this many frames anyway (doors open and close).
+        constexpr size_t sOcclusionRefreshFrames = 90;
+        // Results not used for this long are dropped.
+        constexpr size_t sOcclusionForgetFrames = 600;
+    }
+
+    bool LightManager::isLightHidden(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius)
+    {
+        // Hidden only when no part of the object can be reached: its centre and six points halfway out. The centre
+        // goes first, and most lights see it.
+        const float r = objectRadius * 0.5f;
+        const osg::Vec3f offsets[]
+            = { { 0, 0, 0 }, { 0, 0, r }, { r, 0, 0 }, { -r, 0, 0 }, { 0, r, 0 }, { 0, -r, 0 }, { 0, 0, -r } };
+        for (const osg::Vec3f& offset : offsets)
+        {
+            ++mOcclusionRaysUsed;
+            if (!mOcclusionTest->isBlocked(lightPos, objectPos + offset))
+                return false;
+        }
+        return true;
+    }
+
+    void LightManager::removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
+        const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache)
+    {
+        if (!mOcclusionEnabled || lightList.empty() || viewMatrix == nullptr || !viewBound.valid()
+            || viewBound.radius() > mOcclusionMaxObjectRadius)
+            return;
+
+        if (mOcclusionFrame != frameNum)
+        {
+            mOcclusionFrame = frameNum;
+            mOcclusionRaysUsed = 0;
+        }
+        if (mOcclusionInverseViewFor != viewMatrix || mOcclusionInverseViewFrame != frameNum)
+        {
+            mOcclusionInverseView = osg::Matrixf::inverse(*viewMatrix);
+            mOcclusionInverseViewFor = viewMatrix;
+            mOcclusionInverseViewFrame = frameNum;
+        }
+
+        // View space is world space rotated and moved (mirrored for reflections), so distances carry over.
+        const osg::Vec3f objectPos = viewBound.center() * mOcclusionInverseView;
+        const float radius = viewBound.radius();
+
+        const auto isHidden = [&](const LightSourceViewBound* light) {
+            const osg::Vec3f lightPos = light->mViewBound.center() * mOcclusionInverseView;
+            // A light within the object (a lamp's own mesh, a room around it) always reaches it.
+            if ((lightPos - objectPos).length2() <= radius * radius)
+                return false;
+
+            OcclusionCacheEntry* entry = nullptr;
+            for (OcclusionCacheEntry& candidate : cache)
+                if (candidate.mLight == light->mLightSource)
+                {
+                    entry = &candidate;
+                    break;
+                }
+
+            const bool moved = entry == nullptr || (entry->mLightPos - lightPos).length2() > sOcclusionMoveTolerance2
+                || (entry->mObjectPos - objectPos).length2() > sOcclusionMoveTolerance2;
+            if (!moved && frameNum - entry->mFrame < sOcclusionRefreshFrames)
+                return entry->mBlocked;
+
+            // Out of tests for this frame: keep what was found last unless either end has moved, then let the light
+            // through until it can be tested.
+            if (mOcclusionRaysUsed >= mOcclusionRaysPerFrame)
+                return !moved && entry->mBlocked;
+
+            const bool blocked = isLightHidden(lightPos, objectPos, radius);
+            if (entry == nullptr)
+            {
+                cache.emplace_back();
+                entry = &cache.back();
+                entry->mLight = light->mLightSource;
+            }
+            entry->mLightPos = lightPos;
+            entry->mObjectPos = objectPos;
+            entry->mFrame = frameNum;
+            entry->mBlocked = blocked;
+            return blocked;
+        };
+
+        lightList.erase(std::remove_if(lightList.begin(), lightList.end(), isHidden), lightList.end());
+
+        if (cache.size() > 32)
+            std::erase_if(cache,
+                [&](const OcclusionCacheEntry& entry) { return frameNum - entry.mFrame > sOcclusionForgetFrames; });
+    }
+
     int LightManager::getMaxLights() const
     {
         return mMaxLights;
@@ -899,6 +1002,7 @@ namespace SceneUtil
             mLightList.clear();
             mLightManager->getLightsIntersecting(
                 cv, viewMatrix, mLastFrameNumber, nodeBound, mIgnoredLightSources, mLightList);
+            mLightManager->removeOccludedLights(viewMatrix, mLastFrameNumber, nodeBound, mLightList, mOcclusionCache);
 
             const size_t maxLights = mLightManager->getMaxLights();
 

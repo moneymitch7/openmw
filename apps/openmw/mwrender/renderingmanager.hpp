@@ -64,6 +64,7 @@ namespace SceneUtil
     class ShadowManager;
     class WorkQueue;
     class LightManager;
+    class LightOcclusionTest;
     class UnrefQueue;
     class PerViewUniformStateUpdater;
     class SharedUniformStateUpdater;
@@ -137,6 +138,9 @@ namespace MWRender
         double getReferenceTime() const;
 
         SceneUtil::LightManager* getLightRoot();
+
+        /// OpenMGE XE light occlusion: the wall test lights use while [Shaders] 'light occlusion' is on.
+        void setLightOcclusionTest(SceneUtil::LightOcclusionTest* test);
 
         void setNightEyeFactor(float factor);
 
@@ -346,6 +350,8 @@ namespace MWRender
         osg::ref_ptr<osg::Uniform> mMgeSunDirUniform;
         osg::ref_ptr<osg::Group> mRootNode;
         osg::ref_ptr<SceneUtil::LightManager> mSceneRoot;
+        osg::ref_ptr<SceneUtil::LightOcclusionTest> mLightOcclusionTest;
+        void applyLightOcclusion();
         Resource::ResourceSystem* mResourceSystem;
 
         std::shared_ptr<SceneUtil::WorkQueue> mWorkQueue;
