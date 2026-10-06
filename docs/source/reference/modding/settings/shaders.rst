@@ -234,6 +234,24 @@ Shaders Settings
    0.0 is off; 0.2-0.4 is subtle.
 
 .. omw-setting::
+   :title: sunlight brightness
+   :type: float32
+   :range: 0.25-3.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Scales the direct light of the sun and moons outside.
+
+.. omw-setting::
+   :title: exterior ambient
+   :type: float32
+   :range: 0.0-2.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Scales the sky's even base light outside, which lights the shaded sides of things.
+
+.. omw-setting::
    :title: interior ambient
    :type: float32
    :range: 0.0-2.0

@@ -985,8 +985,21 @@ namespace MWWorld
 
         mRendering.configureFog(
             mResult.mFogDepth, underwaterFog, mResult.mDLFogFactor, mResult.mDLFogOffset / 100.0f, mResult.mFogColor);
-        mRendering.setAmbientColour(mResult.mAmbientColor);
-        mRendering.setSunColour(mResult.mSunColor, mResult.mSunColor, mResult.mGlareView * glareFade);
+        // [Shaders] sunlight brightness and exterior ambient: the direct sunlight (or moonlight) and the sky's even
+        // base light outside, scaled apart. A stronger sun over a weaker base light gives lit faces more colour and
+        // contrast against the shade, instead of brightening everything alike.
+        osg::Vec4f ambient = mResult.mAmbientColor;
+        const float exteriorAmbient = Settings::shaders().mExteriorAmbient;
+        ambient.r() *= exteriorAmbient;
+        ambient.g() *= exteriorAmbient;
+        ambient.b() *= exteriorAmbient;
+        osg::Vec4f sun = mResult.mSunColor;
+        const float sunlight = Settings::shaders().mSunlightBrightness;
+        sun.r() *= sunlight;
+        sun.g() *= sunlight;
+        sun.b() *= sunlight;
+        mRendering.setAmbientColour(ambient);
+        mRendering.setSunColour(sun, sun, mResult.mGlareView * glareFade);
 
         mRendering.getSkyManager()->setWeather(mResult);
 
