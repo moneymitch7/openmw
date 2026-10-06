@@ -71,7 +71,10 @@ namespace SceneUtil
     class PPLightBuffer
     {
     public:
-        inline static constexpr auto sMaxPPLights = 40;
+        // Lights post-processing shaders get at once (omw_GetPointLight*). The nearest ones in view are chosen each
+        // frame; lights joining or leaving the set fade in and out (LightManager::fillPPLights) so a crowded view
+        // doesn't make distant lights blink.
+        inline static constexpr auto sMaxPPLights = 64;
         inline static constexpr auto sMaxPPLightsArraySize = sMaxPPLights * 3;
 
         PPLightBuffer()
@@ -100,18 +103,18 @@ namespace SceneUtil
 
         void clear(size_t frame) { mIndex[frame % 2] = 0; }
 
-        void setLight(size_t frame, const Light* light, float radius)
+        void setLight(size_t frame, const Light* light, float radius, float weight = 1.f)
         {
             size_t frameId = frame % 2;
             int i = mIndex[frameId];
 
-            if (i >= (sMaxPPLights - 1))
+            if (i >= sMaxPPLights)
                 return;
 
             i *= 3;
 
             mUniformBuffers[frameId]->setElement(i + 0, light->getPosition());
-            mUniformBuffers[frameId]->setElement(i + 1, light->getDiffuse());
+            mUniformBuffers[frameId]->setElement(i + 1, light->getDiffuse() * weight);
             mUniformBuffers[frameId]->setElement(i + 2,
                 osg::Vec4f(light->getConstantAttenuation(), light->getLinearAttenuation(),
                     light->getQuadraticAttenuation(), radius));
@@ -357,6 +360,17 @@ namespace SceneUtil
         bool mSupportsClustered;
 
         std::shared_ptr<PPLightBuffer> mPPLightBuffer;
+
+        // Post-processing lights: how far each light (by id) has faded into the set shaders get, and when it was last
+        // seen, so lights joining or leaving the set fade instead of popping.
+        struct PPLightFade
+        {
+            float mWeight = 0.f;
+            size_t mFrame = 0;
+        };
+        std::unordered_map<int, PPLightFade> mPPLightFades;
+        double mPPLastTime = -1.0;
+        void fillPPLights(const LightSourceViewBoundCollection& collection, size_t frameNum, double time);
 
         osg::ref_ptr<LightManagerCullCallback> mCullCallback;
     };

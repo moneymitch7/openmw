@@ -684,10 +684,10 @@ namespace SceneUtil
 
                     if (bound.mCulled || bound.mLightSource->getEmpty() || light->getDiffuse().x() < 0.f)
                         continue;
-
-                    if (fillPPBuffer)
-                        getPPLightsBuffer()->setLight(frameNum, light, radius);
                 }
+
+                if (fillPPBuffer)
+                    fillPPLights(collection, frameNum, cv->getFrameStamp()->getReferenceTime());
             }
 
             // Lights reaching more than twice as far as the typical one (the median) are tested for every object
@@ -741,6 +741,71 @@ namespace SceneUtil
         mLastViewSpaceFrame = frameNum;
         mLastViewSpaceLights = &it->second;
         return it->second;
+    }
+
+    void LightManager::fillPPLights(const LightSourceViewBoundCollection& collection, size_t frameNum, double time)
+    {
+        // A light fades fully in or out over this long.
+        constexpr float fadeSeconds = 0.3f;
+        // Slots kept for lights fading out, so a light leaving the set still has room to fade.
+        constexpr std::size_t fadingOutSlots = 8;
+        constexpr std::size_t inSetSlots = PPLightBuffer::sMaxPPLights - fadingOutSlots;
+
+        // After a pause or a loading screen the set is taken as it is.
+        const double elapsed = mPPLastTime < 0.0 ? 1.0 : std::clamp(time - mPPLastTime, 0.0, 1.0);
+        mPPLastTime = time;
+        const float step = static_cast<float>(elapsed) / fadeSeconds;
+
+        const auto usable = [&](const LightSourceViewBound& bound) {
+            return !bound.mCulled && !bound.mLightSource->getEmpty()
+                && bound.mLightSource->getLight(frameNum)->getDiffuse().x() >= 0.f;
+        };
+
+        // The nearest usable lights (collection is sorted nearest first) make the set and fade in; every other light
+        // fades out. A light outside the view keeps its weight: it can't be seen, so it neither fades in nor out.
+        std::size_t inSet = 0;
+        std::vector<std::pair<const LightSourceViewBound*, float>> fadingOut;
+        const std::shared_ptr<PPLightBuffer>& buffer = getPPLightsBuffer();
+        for (const LightSourceViewBound& bound : collection)
+        {
+            const int id = bound.mLightSource->getId();
+            if (!usable(bound))
+            {
+                if (const auto fade = mPPLightFades.find(id); fade != mPPLightFades.end())
+                    fade->second.mFrame = frameNum;
+                continue;
+            }
+
+            PPLightFade& fade = mPPLightFades[id];
+            fade.mFrame = frameNum;
+            const float radius = bound.mLightSource->getRadius() * mPointLightRadiusMultiplier;
+            if (inSet < inSetSlots)
+            {
+                ++inSet;
+                fade.mWeight = std::min(1.f, fade.mWeight + step);
+                buffer->setLight(frameNum, bound.mLightSource->getLight(frameNum), radius, fade.mWeight);
+            }
+            else
+            {
+                fade.mWeight = std::max(0.f, fade.mWeight - step);
+                if (fade.mWeight > 0.f)
+                    fadingOut.emplace_back(&bound, fade.mWeight);
+            }
+        }
+
+        // the brightest of the lights fading out get the spare slots
+        std::sort(fadingOut.begin(), fadingOut.end(),
+            [](const auto& left, const auto& right) { return left.second > right.second; });
+        if (fadingOut.size() > fadingOutSlots)
+            fadingOut.resize(fadingOutSlots);
+        for (const auto& [bound, weight] : fadingOut)
+            buffer->setLight(frameNum, bound->mLightSource->getLight(frameNum),
+                bound->mLightSource->getRadius() * mPointLightRadiusMultiplier, weight);
+
+        // forget lights gone from the scene, and ones fully faded out
+        std::erase_if(mPPLightFades, [&](const auto& entry) {
+            return entry.second.mFrame != frameNum || entry.second.mWeight <= 0.f;
+        });
     }
 
     osg::ref_ptr<osg::Uniform> LightManager::generateLightBufferUniform()
