@@ -12,6 +12,7 @@
 #include <components/sceneutil/util.hpp>
 #include <components/shader/shadermanager.hpp>
 
+#include "cullprofile.hpp"
 #include "memorybarrier.hpp"
 
 namespace
@@ -503,6 +504,8 @@ namespace SceneUtil
 
         mLights.clear();
         mLightsInViewSpace.clear();
+        mLastViewSpaceCamera = nullptr;
+        mLastViewSpaceLights = nullptr;
         mLightListStateSets.clear();
     }
 
@@ -530,14 +533,16 @@ namespace SceneUtil
     osg::ref_ptr<osg::StateSet> LightManager::getLightListStateSet(
         const LightList& lightList, size_t frameNum, const osg::RefMatrix* viewMatrix)
     {
-        std::vector<int> lightIds;
-        lightIds.reserve(lightList.size());
+        mLightListStateSetKey.first = viewMatrix;
+        std::vector<int>& lightIds = mLightListStateSetKey.second;
+        lightIds.clear();
         for (const LightSourceViewBound* light : lightList)
             lightIds.push_back(light->mLightSource->getId());
 
-        auto [found, inserted] = mLightListStateSets.try_emplace(std::make_pair(viewMatrix, std::move(lightIds)));
-        if (!inserted)
+        auto found = mLightListStateSets.find(mLightListStateSetKey);
+        if (found != mLightListStateSets.end())
             return found->second;
+        found = mLightListStateSets.emplace(mLightListStateSetKey, nullptr).first;
 
         osg::ref_ptr<osg::StateSet> stateset = new osg::StateSet;
         osg::ref_ptr<osg::Uniform> data = generateLightBufferUniform();
@@ -567,14 +572,64 @@ namespace SceneUtil
     const std::vector<LightManager::LightSourceViewBound>& LightManager::getLightsInViewSpace(
         osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix, size_t frameNum)
     {
+        return getViewSpaceLights(cv, viewMatrix, frameNum).mLights;
+    }
+
+    void LightManager::getLightsIntersecting(osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix,
+        size_t frameNum, const osg::BoundingSphere& bound, const std::set<LightSource*>& ignored, LightList& out)
+    {
+        const ViewSpaceLights& lights = getViewSpaceLights(cv, viewMatrix, frameNum);
+        // osg::BoundingSphere::intersects is false for an invalid sphere
+        if (!bound.valid())
+            return;
+
+        // A light can only reach the bound when its centre is within both radii along every axis, so only lights whose
+        // centre x is within reach are tested. The margin covers rounding in the sphere test, which is the one
+        // osg::BoundingSphere::intersects does, term for term.
+        const float x = bound.center().x();
+        const float y = bound.center().y();
+        const float z = bound.center().z();
+        const float radius = bound.radius();
+        const auto test = [&](std::size_t i) {
+            const float dx = lights.mX[i] - x;
+            const float dy = lights.mY[i] - y;
+            const float dz = lights.mZ[i] - z;
+            const float radii = lights.mRadius[i] + radius;
+            if (!(dx * dx + dy * dy + dz * dz <= radii * radii))
+                return;
+            const LightSourceViewBound& light = lights.mLights[lights.mIndex[i]];
+            if (!ignored.empty() && ignored.contains(light.mLightSource))
+                return;
+            out.push_back(&light);
+        };
+
+        const std::size_t numSearched = lights.mX.size() - lights.mNumWide;
+        const float reach = (radius + lights.mMaxRadius) * 1.0001f + 1.f;
+        const auto searchedEnd = lights.mX.begin() + static_cast<std::ptrdiff_t>(numSearched);
+        const std::size_t begin
+            = static_cast<std::size_t>(std::lower_bound(lights.mX.begin(), searchedEnd, x - reach) - lights.mX.begin());
+        const float last = x + reach;
+        for (std::size_t i = begin; i < numSearched && lights.mX[i] <= last; ++i)
+            test(i);
+        for (std::size_t i = numSearched; i < lights.mX.size(); ++i)
+            test(i);
+    }
+
+    LightManager::ViewSpaceLights& LightManager::getViewSpaceLights(
+        osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix, size_t frameNum)
+    {
         osg::Camera* camera = cv->getCurrentCamera();
+
+        if (mLastViewSpaceLights != nullptr && camera == mLastViewSpaceCamera && frameNum == mLastViewSpaceFrame)
+            return *mLastViewSpaceLights;
 
         osg::observer_ptr<osg::Camera> camPtr(camera);
         auto it = mLightsInViewSpace.find(camPtr);
 
         if (it == mLightsInViewSpace.end())
         {
-            it = mLightsInViewSpace.insert(std::make_pair(camPtr, LightSourceViewBoundCollection())).first;
+            it = mLightsInViewSpace.insert(std::make_pair(camPtr, ViewSpaceLights())).first;
+            LightSourceViewBoundCollection& collection = it->second.mLights;
 
             for (const auto& transform : mLights)
             {
@@ -602,7 +657,7 @@ namespace SceneUtil
                 LightSourceViewBound l;
                 l.mLightSource = transform.mLightSource;
                 l.mViewBound = viewBound;
-                it->second.push_back(l);
+                collection.push_back(l);
             }
 
             const bool fillPPBuffer = mPPLightBuffer && it->first->getName() == Constants::SceneCamera;
@@ -615,10 +670,10 @@ namespace SceneUtil
                         < right.mViewBound.center().length2() - right.mViewBound.radius2();
                 };
 
-                std::sort(it->second.begin(), it->second.end(), sorter);
+                std::sort(collection.begin(), collection.end(), sorter);
 
                 osg::CullingSet& cullingSet = cv->getModelViewCullingStack().front();
-                for (auto& bound : it->second)
+                for (auto& bound : collection)
                 {
                     const auto* light = bound.mLightSource->getLight(frameNum);
                     const float radius = bound.mLightSource->getRadius() * mPointLightRadiusMultiplier;
@@ -634,8 +689,57 @@ namespace SceneUtil
                         getPPLightsBuffer()->setLight(frameNum, light, radius);
                 }
             }
+
+            // Lights reaching more than twice as far as the typical one (the median) are tested for every object
+            // instead of being searched along x, where they would widen the search for all the others.
+            ViewSpaceLights& lights = it->second;
+            const std::size_t count = collection.size();
+            float wideRadius = 0.f;
+            if (count > 0)
+            {
+                std::vector<float> radii;
+                radii.reserve(count);
+                for (const LightSourceViewBound& light : collection)
+                    radii.push_back(light.mViewBound.radius());
+                std::nth_element(
+                    radii.begin(), radii.begin() + static_cast<std::ptrdiff_t>(count / 2), radii.end());
+                wideRadius = 2.f * radii[count / 2];
+            }
+
+            std::vector<std::uint32_t> order;
+            order.reserve(count);
+            for (std::uint32_t i = 0; i < count; ++i)
+                if (collection[i].mViewBound.radius() <= wideRadius)
+                    order.push_back(i);
+            std::sort(order.begin(), order.end(), [&](std::uint32_t left, std::uint32_t right) {
+                return collection[left].mViewBound.center().x() < collection[right].mViewBound.center().x();
+            });
+            const std::size_t numSearched = order.size();
+            for (std::uint32_t i = 0; i < count; ++i)
+                if (collection[i].mViewBound.radius() > wideRadius)
+                    order.push_back(i);
+            lights.mNumWide = order.size() - numSearched;
+
+            lights.mX.reserve(count);
+            lights.mY.reserve(count);
+            lights.mZ.reserve(count);
+            lights.mRadius.reserve(count);
+            for (std::size_t i = 0; i < order.size(); ++i)
+            {
+                const osg::BoundingSphere& bound = collection[order[i]].mViewBound;
+                lights.mX.push_back(bound.center().x());
+                lights.mY.push_back(bound.center().y());
+                lights.mZ.push_back(bound.center().z());
+                lights.mRadius.push_back(bound.radius());
+                if (i < numSearched)
+                    lights.mMaxRadius = std::max(lights.mMaxRadius, bound.radius());
+            }
+            lights.mIndex = std::move(order);
         }
 
+        mLastViewSpaceCamera = camera;
+        mLastViewSpaceFrame = frameNum;
+        mLastViewSpaceLights = &it->second;
         return it->second;
     }
 
@@ -685,6 +789,8 @@ namespace SceneUtil
 
     bool LightListCallback::pushLightState(osg::Node* node, osgUtil::CullVisitor* cv)
     {
+        CullProfile::Scope profile(CullProfile::Section::LightLists);
+
         if (!mLightManager)
         {
             mLightManager = findLightManager(cv->getNodePath());
@@ -725,18 +831,9 @@ namespace SceneUtil
 
             transformBoundingSphere(*cv->getModelViewMatrix(), nodeBound);
 
-            const std::vector<LightManager::LightSourceViewBound>& lights
-                = mLightManager->getLightsInViewSpace(cv, viewMatrix, mLastFrameNumber);
-
             mLightList.clear();
-            for (const LightManager::LightSourceViewBound& light : lights)
-            {
-                if (mIgnoredLightSources.contains(light.mLightSource))
-                    continue;
-
-                if (light.mViewBound.intersects(nodeBound))
-                    mLightList.push_back(&light);
-            }
+            mLightManager->getLightsIntersecting(
+                cv, viewMatrix, mLastFrameNumber, nodeBound, mIgnoredLightSources, mLightList);
 
             const size_t maxLights = mLightManager->getMaxLights();
 

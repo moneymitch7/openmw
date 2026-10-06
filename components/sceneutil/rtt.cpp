@@ -75,6 +75,7 @@ namespace SceneUtil
                 if (sm.getEye(cv) == Stereo::Eye::Right)
                     applyRight(vdd->mCamera);
             }
+            CullProfile::Scope profile(mCullProfileSection);
             vdd->mCamera->accept(*cv);
         }
         vdd->mFrameNumber = frameNumber;

@@ -3,6 +3,8 @@
 
 #include <osg/Node>
 
+#include "cullprofile.hpp"
+
 #include <map>
 #include <memory>
 
@@ -99,6 +101,9 @@ namespace SceneUtil
         /// 40 ms (low frame rate). 1 = every frame.
         void setUpdateInterval(unsigned int interval) { mUpdateInterval = interval < 1 ? 1 : interval; }
 
+        /// Count this camera's cull under a section of the cull profile (F3 profiler). Count = none.
+        void setCullProfileSection(CullProfile::Section section) { mCullProfileSection = section; }
+
         /// Returns view dependent data
         /// @note This is not thread safe and is only going to be safe to use when threading is stopped
         const ViewDependentDataMap& getViewDependentDataMap() const { return mViewDependentDataMap; }
@@ -117,6 +122,7 @@ namespace SceneUtil
 
         ViewDependentDataMap mViewDependentDataMap;
         unsigned int mUpdateInterval = 1;
+        CullProfile::Section mCullProfileSection = CullProfile::Section::Count;
         uint32_t mTextureWidth;
         uint32_t mTextureHeight;
         uint32_t mSamples;

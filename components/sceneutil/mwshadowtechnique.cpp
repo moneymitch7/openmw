@@ -29,6 +29,7 @@
 #include <sstream>
 #include <vector>
 
+#include "cullprofile.hpp"
 #include "glextensions.hpp"
 #include "shadowsbin.hpp"
 #include "lightmanager.hpp"
@@ -360,10 +361,16 @@ void MWShadowTechnique::ComputeLightSpaceBounds::reset()
 {
     osg::CullStack::reset();
     _bb = osg::BoundingBox();
+    _covered = false;
+    _mvpModelView = nullptr;
+    _mvpProjection = nullptr;
 }
 
 void MWShadowTechnique::ComputeLightSpaceBounds::apply(osg::Node& node)
 {
+    // Once the casters span the whole light-space square the result is settled: x and y are clamped to it, and z is
+    // only used when the square is not covered. Nothing further down can change it.
+    if (_covered) return;
     if (isCulled(node)) return;
 
     // push the culling mode.
@@ -382,6 +389,7 @@ void MWShadowTechnique::ComputeLightSpaceBounds::apply(osg::Group& node)
 
 void MWShadowTechnique::ComputeLightSpaceBounds::apply(osg::Drawable& drawable)
 {
+    if (_covered) return;
     if (isCulled(drawable)) return;
 
     // push the culling mode.
@@ -412,6 +420,7 @@ void MWShadowTechnique::ComputeLightSpaceBounds::apply(osg::Projection&)
 
 void MWShadowTechnique::ComputeLightSpaceBounds::apply(osg::Transform& transform)
 {
+    if (_covered) return;
     if (isCulled(transform)) return;
 
     // push the culling mode.
@@ -448,7 +457,18 @@ void MWShadowTechnique::ComputeLightSpaceBounds::updateBound(const osg::Bounding
 {
     if (!bb.valid()) return;
 
-    const osg::Matrix& matrix = *getModelViewMatrix() * *getProjectionMatrix();
+    // One product per transform rather than per drawable: every drawable under a transform shares it. Matrices are
+    // not reused within a traversal (CullStack hands out a fresh one per push until reset), so the pointers identify
+    // the values.
+    const osg::RefMatrix* modelView = getModelViewMatrix();
+    const osg::RefMatrix* projection = getProjectionMatrix();
+    if (modelView != _mvpModelView || projection != _mvpProjection)
+    {
+        _mvp = *modelView * *projection;
+        _mvpModelView = modelView;
+        _mvpProjection = projection;
+    }
+    const osg::Matrix& matrix = _mvp;
 
     update(bb.corner(0) * matrix);
     update(bb.corner(1) * matrix);
@@ -474,6 +494,7 @@ void MWShadowTechnique::ComputeLightSpaceBounds::update(const osg::Vec3& v)
     if (y<-1.0f) y = -1.0f;
     if (y>1.0f) y = 1.0f;
     _bb.expandBy(osg::Vec3(x, y, v.z()));
+    _covered = _bb.xMin() <= -1.0f && _bb.xMax() >= 1.0f && _bb.yMin() <= -1.0f && _bb.yMax() >= 1.0f;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1159,6 +1180,9 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 
     cv.popStateSet();
 
+    // everything from here on is the shadow maps' own work (F3 profiler, performance log)
+    SceneUtil::CullProfile::Scope profileShadows(SceneUtil::CullProfile::Section::Shadows);
+
     // Temporal reuse: skip shadow cascade cull on non-update frames.
     // Reuse previous frame's shadow textures (FBO-persistent) + uniforms (already in correct slot).
     // Per-VDD counter: each CullVisitor has its own VDD (two CVs alternate in DrawThreadPerContext),
@@ -1329,6 +1353,7 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
         // traverse the scene to compute the extents of the objects
         if (/*numShadowMapsPerLight>1 &&*/ (_shadowedScene->getCastsShadowTraversalMask() & _worldMask) == 0)
         {
+            SceneUtil::CullProfile::Scope profileBounds(SceneUtil::CullProfile::Section::ShadowBounds);
             // osg::ElapsedTime timer;
 
             osg::ref_ptr<osg::Viewport> viewport = new osg::Viewport(0,0,2048,2048);

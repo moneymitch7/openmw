@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <optional>
 #include <queue>
 #include <unordered_set>
 
@@ -21,6 +22,7 @@
 
 #include <components/debug/debuglog.hpp>
 #include <components/misc/constants.hpp>
+#include <components/sceneutil/cullprofile.hpp>
 #include <components/sceneutil/occlusionculling.hpp>
 #include <components/sceneutil/userdata.hpp>
 #include <components/terrain/terrainoccluder.hpp>
@@ -479,6 +481,7 @@ namespace MWRender
         }
 
         // Begin occlusion frame with camera matrices
+        std::optional<SceneUtil::CullProfile::Scope> profile(std::in_place, SceneUtil::CullProfile::Section::Occluders);
         mCuller->beginFrame(cam->getViewMatrix(), cam->getProjectionMatrix());
 
         // Build and rasterize terrain occluder mesh (skip for quasi-exteriors and interiors, no real terrain)
@@ -495,6 +498,8 @@ namespace MWRender
         // Buildings the main view drew last frame, nearest first, before any visibility test.
         if (mRegistry && mEnableStaticOccluders)
             mRegistry->rasterizeNearestFirst(*mCuller, cv->getEyePoint(), mRules, node);
+
+        profile.reset();
 
         // Continue normal cull traversal, CellOcclusionCallbacks will test against the buffer
         traverse(node, cv);

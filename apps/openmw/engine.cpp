@@ -51,6 +51,7 @@
 #include <components/misc/frameratelimiter.hpp>
 
 #include <components/sceneutil/color.hpp>
+#include <components/sceneutil/cullprofile.hpp>
 #include <components/sceneutil/depth.hpp>
 #include <components/sceneutil/screencapture.hpp>
 #include <components/sceneutil/unrefqueue.hpp>
@@ -226,7 +227,7 @@ namespace
         unsigned int mLastFrame = 0;
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
-        std::array<Column, 17> mColumns{ {
+        std::array<Column, 23> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
             { "luasync", "luasyncupdate_time_taken" },
@@ -240,12 +241,53 @@ namespace
             { "focus", "focusobject_time_taken" },
             { "lua", "lua_time_taken" },
             { "cull", "Cull traversal time taken", true },
+            { "cull shadows", "cullshadows_time_taken" },
+            { "cull shadow bounds", "cullshadowbounds_time_taken" },
+            { "cull water", "cullwater_time_taken" },
+            { "cull occluders", "culloccluders_time_taken" },
+            { "cull light lists", "culllightlists_time_taken" },
+            { "light lists", "Cull Light Lists", false, 1.0 },
             { "draw", "Draw traversal time taken", true },
             { "gpu", "GPU draw time taken", true },
             { "occlusion tested", "Occlusion Tested", false, 1.0 },
             { "occlusion culled", "Occlusion Culled", false, 1.0 },
         } };
     };
+
+    // The parts of the cull just done (SceneUtil::CullProfile), as F3 profiler lines and performance log columns. A
+    // part that did not run this frame records 0, so averages are per frame.
+    void recordCullProfile(osg::Timer_t frameStart, unsigned int frameNumber, const osg::Timer& timer, osg::Stats& stats)
+    {
+        using SceneUtil::CullProfile::Section;
+
+        const SceneUtil::CullProfile::AllTotals totals = SceneUtil::CullProfile::take();
+        if (!stats.collectStats("engine"))
+            return;
+
+        const auto record = [&](Section section, const std::string& begin, const std::string& taken,
+                                const std::string& end) {
+            const SceneUtil::CullProfile::Totals& part = totals[static_cast<std::size_t>(section)];
+            const bool ran = part.mCalls > 0;
+            if (!begin.empty())
+                stats.setAttribute(frameNumber, begin, ran ? timer.delta_s(frameStart, part.mFirst) : 0.0);
+            stats.setAttribute(frameNumber, taken, timer.delta_s(0, part.mTaken));
+            if (!end.empty())
+                stats.setAttribute(frameNumber, end, ran ? timer.delta_s(frameStart, part.mLast) : 0.0);
+        };
+        const auto recordLine = [&](Section section, const OMW::UserStats& line) {
+            record(section, line.mBegin, line.mTaken, line.mEnd);
+        };
+
+        using OMW::UserStatsType;
+        using OMW::UserStatsValue;
+        recordLine(Section::Shadows, UserStatsValue<UserStatsType::CullShadows>::sValue);
+        recordLine(Section::Water, UserStatsValue<UserStatsType::CullWater>::sValue);
+        recordLine(Section::Occluders, UserStatsValue<UserStatsType::CullOccluders>::sValue);
+        recordLine(Section::LightLists, UserStatsValue<UserStatsType::CullLightLists>::sValue);
+        record(Section::ShadowBounds, {}, "cullshadowbounds_time_taken", {});
+        stats.setAttribute(frameNumber, "Cull Light Lists",
+            static_cast<double>(totals[static_cast<std::size_t>(Section::LightLists)].mCalls));
+    }
 
     void checkSDLError(int ret)
     {
@@ -516,7 +558,11 @@ bool OMW::Engine::frame(unsigned frameNumber, float frametime)
     // if there is a separate Lua thread, it starts the update now
     mLuaWorker->allowUpdate(frameStart, frameNumber, *stats);
 
+    // drop what loading screens culled since the last frame
+    SceneUtil::CullProfile::take();
+    SceneUtil::CullProfile::setEnabled(stats->collectStats("engine"));
     mViewer->renderingTraversals();
+    recordCullProfile(frameStart, frameNumber, *timer, *stats);
 
     mLuaWorker->finishUpdate(frameStart, frameNumber, *stats);
 

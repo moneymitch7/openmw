@@ -39,6 +39,12 @@ namespace OMW
         Gui,
         Focus,
         Lua,
+        // Parts of the cull traversal (SceneUtil::CullProfile), recorded by the engine after the cull. The rest of
+        // the cull is the main view's own traversal.
+        CullShadows,
+        CullWater,
+        CullOccluders,
+        CullLightLists,
         Number,
     };
 
@@ -83,6 +89,18 @@ namespace OMW
 
     template <>
     inline const UserStats UserStatsValue<UserStatsType::Focus>::sValue{ "Focus", "focusobject" };
+
+    template <>
+    inline const UserStats UserStatsValue<UserStatsType::CullShadows>::sValue{ "Shadows", "cullshadows" };
+
+    template <>
+    inline const UserStats UserStatsValue<UserStatsType::CullWater>::sValue{ "Water", "cullwater" };
+
+    template <>
+    inline const UserStats UserStatsValue<UserStatsType::CullOccluders>::sValue{ "Occlude", "culloccluders" };
+
+    template <>
+    inline const UserStats UserStatsValue<UserStatsType::CullLightLists>::sValue{ "Lights", "culllightlists" };
 
     template <UserStatsType type>
     struct ForEachUserStatsValue

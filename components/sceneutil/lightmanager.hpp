@@ -2,9 +2,12 @@
 #define OPENMW_COMPONENTS_SCENEUTIL_LIGHTMANAGER_H
 
 #include <array>
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <set>
 #include <unordered_map>
+#include <vector>
 
 #include <osg/BufferIndexBinding>
 #include <osg/BufferTemplate>
@@ -255,6 +258,13 @@ namespace SceneUtil
         const std::vector<LightSourceViewBound>& getLightsInViewSpace(
             osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix, size_t frameNum);
 
+        /// Appends to @a out the lights of getLightsInViewSpace whose view bound intersects @a bound (in the same
+        /// camera's view space), except @a ignored ones. The same lights as testing every one, but only those whose
+        /// centre is within reach along view x are tested. They come in an order fixed for the frame and camera (the
+        /// same lights always in the same order, so equal lists share a state set), not getLightsInViewSpace's.
+        void getLightsIntersecting(osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix, size_t frameNum,
+            const osg::BoundingSphere& bound, const std::set<LightSource*>& ignored, LightList& out);
+
         osg::ref_ptr<osg::StateSet> getLightListStateSet(
             const LightList& lightList, size_t frameNum, const osg::RefMatrix* viewMatrix);
 
@@ -302,9 +312,35 @@ namespace SceneUtil
         std::vector<LightSourceTransform> mLights;
 
         using LightSourceViewBoundCollection = std::vector<LightSourceViewBound>;
-        std::map<osg::observer_ptr<osg::Camera>, LightSourceViewBoundCollection> mLightsInViewSpace;
 
-        std::map<std::pair<const osg::RefMatrix*, std::vector<int>>, osg::ref_ptr<osg::StateSet>> mLightListStateSets;
+        struct ViewSpaceLights
+        {
+            LightSourceViewBoundCollection mLights;
+
+            // The view bounds again as flat arrays for getLightsIntersecting, in ascending order of centre x, with each
+            // light's index in mLights. Lights reaching much further than the rest are kept apart (the last mNumWide
+            // entries, in mLights order), so they don't widen the search along x for every object.
+            std::vector<float> mX;
+            std::vector<float> mY;
+            std::vector<float> mZ;
+            std::vector<float> mRadius;
+            std::vector<std::uint32_t> mIndex;
+            std::size_t mNumWide = 0;
+            float mMaxRadius = 0.f;
+        };
+
+        ViewSpaceLights& getViewSpaceLights(osgUtil::CullVisitor* cv, const osg::RefMatrix* viewMatrix, size_t frameNum);
+
+        std::map<osg::observer_ptr<osg::Camera>, ViewSpaceLights> mLightsInViewSpace;
+        // The entry the last lookup found: every lit object of a view asks for the same one in a row.
+        const osg::Camera* mLastViewSpaceCamera = nullptr;
+        size_t mLastViewSpaceFrame = 0;
+        ViewSpaceLights* mLastViewSpaceLights = nullptr;
+
+        using LightListStateSetKey = std::pair<const osg::RefMatrix*, std::vector<int>>;
+        std::map<LightListStateSetKey, osg::ref_ptr<osg::StateSet>> mLightListStateSets;
+        // reused for lookups, so a light list already seen this frame costs no allocation
+        LightListStateSetKey mLightListStateSetKey;
 
         size_t mLightingMask;
 

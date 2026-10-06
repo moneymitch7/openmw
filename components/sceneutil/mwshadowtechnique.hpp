@@ -119,6 +119,14 @@ namespace SceneUtil {
             void reset() override;
 
             osg::BoundingBox _bb;
+
+        private:
+            // _bb spans the whole light-space square, so the traversal can stop
+            bool _covered = false;
+            // modelview * projection for the current transform
+            osg::Matrix _mvp;
+            const osg::RefMatrix* _mvpModelView = nullptr;
+            const osg::RefMatrix* _mvpProjection = nullptr;
         };
 
         struct Frustum
