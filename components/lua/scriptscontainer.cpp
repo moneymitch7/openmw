@@ -369,6 +369,7 @@ namespace LuaUtil
                 return;
             }
             EventHandlerList& list = it->second;
+            const CallLabel label("event", eventName);
             for (size_t i = list.size(); i > 0; --i)
             {
                 const Handler& h = list[i - 1];
@@ -747,6 +748,8 @@ namespace LuaUtil
         try
         {
             Script& script = getScript(t.mScriptId);
+            const CallLabel label(
+                "timer", t.mSerializable ? std::string_view(std::get<std::string>(t.mCallback)) : std::string_view());
             if (t.mSerializable)
             {
                 const std::string& callbackName = std::get<std::string>(t.mCallback);
@@ -858,8 +861,16 @@ namespace LuaUtil
                     if (now - script.mLastSlowCallLog >= 2)
                     {
                         script.mLastSlowCallLog = now;
-                        Log(Debug::Info) << "Slow Lua call: " << mNamePrefix << "[" << scriptPath(scriptId) << "] took "
-                                         << static_cast<int>(microseconds / 1000.f + 0.5f) << " ms in one call";
+                        Log log(Debug::Info);
+                        log << "Slow Lua call: " << mNamePrefix << "[" << scriptPath(scriptId) << "] took "
+                            << static_cast<int>(microseconds / 1000.f + 0.5f) << " ms in one call";
+                        if (!sCallKind.empty())
+                        {
+                            log << " (" << sCallKind;
+                            if (!sCallName.empty())
+                                log << " '" << sCallName << "'";
+                            log << ")";
+                        }
                     }
                 }
             }

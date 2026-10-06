@@ -234,11 +234,40 @@ namespace LuaUtil
             }
         };
 
+        // What the call being made into a script runs (an engine handler, an event, a timer), named in the slow call
+        // log. Only the outermost call into a script is timed, and nested labels are undone before it is, so the log
+        // names what the engine called.
+        class CallLabel
+        {
+        public:
+            CallLabel(std::string_view kind, std::string_view name)
+                : mPrevKind(sCallKind)
+                , mPrevName(sCallName)
+            {
+                sCallKind = kind;
+                sCallName = name;
+            }
+            ~CallLabel()
+            {
+                sCallKind = mPrevKind;
+                sCallName = mPrevName;
+            }
+            CallLabel(const CallLabel&) = delete;
+            CallLabel& operator=(const CallLabel&) = delete;
+
+        private:
+            const std::string_view mPrevKind;
+            const std::string_view mPrevName;
+        };
+        static inline thread_local std::string_view sCallKind;
+        static inline thread_local std::string_view sCallName;
+
         // Calls given handlers in direct order.
         template <typename... Args>
         void callEngineHandlers(EngineHandlerList& handlers, const Args&... args)
         {
             ensureLoaded();
+            const CallLabel label("engine handler", handlers.mName);
             for (Handler& handler : handlers.mList)
             {
                 try
