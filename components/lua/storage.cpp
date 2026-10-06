@@ -288,15 +288,21 @@ namespace LuaUtil
         }
     }
 
-    void LuaStorage::save(lua_State* state, const std::filesystem::path& path) const
+    void LuaStorage::save(lua_State* /*state*/, const std::filesystem::path& path) const
     {
-        sol::table data(state, sol::create);
+        // The values are kept serialized, so they are written as they are: turning them back into Lua tables to
+        // serialize them again took seconds (and as much garbage) with mods that keep tens of MB here.
+        SerializedTableWriter writer;
         for (const auto& [sectionName, section] : mData)
         {
-            if (section->mLifeTime == Section::Persistent && !section->mValues.empty())
-                data[sectionName] = section->asTable(state);
+            if (section->mLifeTime != Section::Persistent || section->mValues.empty())
+                continue;
+            writer.beginTable(sectionName);
+            for (const auto& [key, value] : section->mValues)
+                writer.addSerialized(key, value.getSerialized());
+            writer.endTable();
         }
-        std::string serializedData = serialize(data);
+        std::string serializedData = writer.finish();
         Log(Debug::Info) << "Saving Lua storage \"" << path << "\" (" << serializedData.size() << " bytes)";
         std::ofstream fout(path, std::fstream::binary);
         fout.write(serializedData.data(), serializedData.size());

@@ -51,6 +51,28 @@ namespace LuaUtil
     };
 
     BinaryData serialize(const sol::object&, const UserdataSerializer* customSerializer = nullptr);
+
+    /// Builds the serialized form of a table, string key by string key, from values that are already serialized (by
+    /// `serialize`), without going through Lua. The result deserializes as `serialize` would have written the table.
+    class SerializedTableWriter
+    {
+    public:
+        SerializedTableWriter();
+
+        /// Starts a nested table under `key`; ended by endTable.
+        void beginTable(std::string_view key);
+        void endTable();
+
+        /// Adds a value under `key` as `serialize` returned it. An empty value (nil) is left out.
+        void addSerialized(std::string_view key, std::string_view serializedValue);
+
+        /// Ends the table and returns its serialized form.
+        BinaryData finish();
+
+    private:
+        BinaryData mData;
+        int mDepth = 0;
+    };
     sol::object deserialize(lua_State* lua, std::string_view binaryData,
         const UserdataSerializer* customSerializer = nullptr, bool readOnly = false);
 

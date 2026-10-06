@@ -366,6 +366,46 @@ namespace LuaUtil
         return res;
     }
 
+    SerializedTableWriter::SerializedTableWriter()
+    {
+        mData.push_back(FORMAT_VERSION);
+        appendType(mData, SerializedType::TABLE_START);
+    }
+
+    void SerializedTableWriter::beginTable(std::string_view key)
+    {
+        appendString(mData, key);
+        appendType(mData, SerializedType::TABLE_START);
+        ++mDepth;
+    }
+
+    void SerializedTableWriter::endTable()
+    {
+        if (mDepth <= 0)
+            throw std::logic_error("SerializedTableWriter: no table to end");
+        appendType(mData, SerializedType::TABLE_END);
+        --mDepth;
+    }
+
+    void SerializedTableWriter::addSerialized(std::string_view key, std::string_view serializedValue)
+    {
+        if (serializedValue.empty())
+            return;
+        if (serializedValue[0] != FORMAT_VERSION)
+            throw std::runtime_error("Incorrect version of Lua serialization format: "
+                + std::to_string(static_cast<unsigned>(serializedValue[0])));
+        appendString(mData, key);
+        mData.append(serializedValue.substr(1));
+    }
+
+    BinaryData SerializedTableWriter::finish()
+    {
+        if (mDepth != 0)
+            throw std::logic_error("SerializedTableWriter: unfinished nested table");
+        appendType(mData, SerializedType::TABLE_END);
+        return std::move(mData);
+    }
+
     sol::object deserialize(
         lua_State* lua, std::string_view binaryData, const UserdataSerializer* customSerializer, bool readOnly)
     {

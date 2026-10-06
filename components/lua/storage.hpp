@@ -73,6 +73,7 @@ namespace LuaUtil
             }
             sol::object getCopy(lua_State* state) const;
             sol::object getReadOnly(lua_State* state) const;
+            const std::string& getSerialized() const { return mSerializedValue; }
 
         private:
             std::string mSerializedValue;
