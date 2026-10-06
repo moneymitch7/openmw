@@ -12,6 +12,8 @@
 #include <components/misc/resourcehelpers.hpp>
 #include <components/vfs/pathutil.hpp>
 
+#include <vector>
+
 namespace
 {
     std::vector<const ESM::Dialogue*> makeIndex(const MWWorld::Store<ESM::Dialogue>& store, ESM::Dialogue::Type type)
@@ -86,6 +88,25 @@ namespace
     struct DialogueInfos
     {
         const ESM::Dialogue& parentDialogueRecord;
+
+        // The infos are kept in a std::list, so finding the n-th one walks the list from its start: going through
+        // all of them with pairs/ipairs was quadratic, about a quarter of a second for a greeting with a few thousand
+        // infos (Quest Guider Lite and Advanced World Map do it on every line of dialogue). The first indexed access
+        // through this object lists them once; every later one is direct.
+        mutable std::vector<const ESM::DialInfo*> mIndex;
+
+        const ESM::DialInfo* at(std::size_t index) const
+        {
+            const ESM::Dialogue::InfoContainer& infos = parentDialogueRecord.mInfo;
+            if (mIndex.size() != infos.size())
+            {
+                mIndex.clear();
+                mIndex.reserve(infos.size());
+                for (const ESM::DialInfo& info : infos)
+                    mIndex.push_back(&info);
+            }
+            return index < mIndex.size() ? mIndex[index] : nullptr;
+        }
     };
 
     void prepareBindingsForDialogueRecord(sol::state_view& lua)
@@ -113,7 +134,7 @@ namespace
                   return sol::nullopt;
               });
         recordBindingsClass["infos"]
-            = sol::readonly_property([](const ESM::Dialogue& rec) { return DialogueInfos{ rec }; });
+            = sol::readonly_property([](const ESM::Dialogue& rec) { return DialogueInfos{ rec, {} }; });
     }
 
     void prepareBindingsForDialogueRecordInfoList(sol::state_view& lua)
@@ -128,14 +149,11 @@ namespace
             = [](const DialogueInfos& store) { return store.parentDialogueRecord.mInfo.size(); };
         recordInfosBindingsClass[sol::meta_function::index]
             = [](const DialogueInfos& store, size_t index) -> const ESM::DialInfo* {
-            const ESM::Dialogue& dialogueRecord = store.parentDialogueRecord;
-            if (index == 0 || index > dialogueRecord.mInfo.size())
+            if (index == 0 || index > store.parentDialogueRecord.mInfo.size())
             {
                 return nullptr;
             }
-            ESM::Dialogue::InfoContainer::const_iterator iter{ dialogueRecord.mInfo.cbegin() };
-            std::advance(iter, LuaUtil::fromLuaIndex(index));
-            return &(*iter);
+            return store.at(LuaUtil::fromLuaIndex(index));
         };
         recordInfosBindingsClass[sol::meta_function::ipairs] = lua["ipairsForArray"].template get<sol::function>();
         recordInfosBindingsClass[sol::meta_function::pairs] = lua["ipairsForArray"].template get<sol::function>();
