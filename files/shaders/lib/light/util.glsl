@@ -42,10 +42,10 @@ float specularIntensity(vec3 viewNormal, vec3 viewDir, float shininess, vec3 lig
     return 0.0;
 }
 
-// [Shaders] light brightness, light falloff and light bounce (SharedUniformStateUpdater): x = brightness - 1,
-// y = falloff - 1, z = bounce. Zero, which is also what a program drawn outside the scene root reads, leaves point
-// lights unchanged.
-uniform vec3 pointLightTuning;
+// [Shaders] light brightness, light falloff, light bounce and light hotspot softening (SharedUniformStateUpdater):
+// x = brightness - 1, y = falloff - 1, z = bounce, w = hotspot rounding strength (8 * softening). Zero, which is also
+// what a program drawn outside the scene root reads, leaves point lights unchanged.
+uniform vec4 pointLightTuning;
 
 // The light's own distance curve, as the game data and attenuation settings make it.
 float calcBaseAttenuation(PointLight light, float dist) {
@@ -68,6 +68,14 @@ float calcAttenuation(PointLight light, float dist) {
     // The radius fade below is left as is, so lights still end where they did.
     if (pointLightTuning.y != 0.0)
         attenuation = pow(attenuation, 1.0 + pointLightTuning.y);
+    // Hotspot softening: right next to a light the curve climbs far past full strength (several times over, more
+    // with falloff above 1), which burns the wall behind a candle out to white. Round off the part above full strength
+    // towards a ceiling of 1 + 1/w; the curve and its slope are unchanged at full strength and below.
+    if (pointLightTuning.w > 0.0 && attenuation > 1.0)
+    {
+        float over = attenuation - 1.0;
+        attenuation = 1.0 + over / (1.0 + pointLightTuning.w * over);
+    }
     attenuation *= 1.0 + pointLightTuning.x;
     return attenuation * calcRadiusFade(light, dist);
 }

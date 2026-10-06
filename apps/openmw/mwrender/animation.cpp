@@ -1696,11 +1696,22 @@ namespace MWRender
 
     namespace
     {
-        // The held light settings, for the lights actors carry (the player's torch, guards' torches, ...); lights
-        // placed in the world are left as they are.
+        // A carriable light with no model, placed in the world: what mods that light the player from a belt or hip
+        // lantern (Belt Lanterns / Hip Lanterns and the like) create and move along with the character every frame,
+        // since a worn lantern has no light of its own. It stands in for a light someone carries.
+        bool isCarriedLightProxy(const MWWorld::Ptr& ptr)
+        {
+            if (ptr.getType() != ESM::Light::sRecordId)
+                return false;
+            const ESM::Light& light = *ptr.get<ESM::Light>()->mBase;
+            return light.mModel.empty() && (light.mData.mFlags & ESM::Light::Carry) != 0;
+        }
+
+        // The held light settings, for the lights actors carry (the player's torch, guards' torches, ...) and the
+        // stand-in lights of worn lanterns; lights placed in the world are left as they are.
         SceneUtil::LightTuning getCarriedLightTuning(const MWWorld::Ptr& ptr)
         {
-            if (!ptr.getClass().isActor())
+            if (!ptr.getClass().isActor() && !isCarriedLightProxy(ptr))
                 return {};
             SceneUtil::LightTuning tuning;
             tuning.mBrightness = Settings::shaders().mHeldLightBrightness;

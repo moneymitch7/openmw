@@ -98,7 +98,7 @@ namespace SceneUtil
         stateset->addUniform(new osg::Uniform("sunShadowFade", 1.f));
         // stored as offsets from 1, so a program drawn outside this root (the inventory character preview) reads
         // GL's default 0 as "unchanged"
-        stateset->addUniform(new osg::Uniform("pointLightTuning", osg::Vec3f()));
+        stateset->addUniform(new osg::Uniform("pointLightTuning", osg::Vec4f()));
     }
 
     void SharedUniformStateUpdater::apply(osg::StateSet* stateset, osg::NodeVisitor* nv)
@@ -111,7 +111,7 @@ namespace SceneUtil
         stateset->getUniform("playerPos")->set(mPlayerPos);
         stateset->getUniform("viewerUnderwater")->set(mViewerUnderwater);
         stateset->getUniform("sunShadowFade")->set(mSunShadowFade);
-        stateset->getUniform("pointLightTuning")->set(mPointLightTuning - osg::Vec3f(1.f, 1.f, 0.f));
+        stateset->getUniform("pointLightTuning")->set(mPointLightTuning - osg::Vec4f(1.f, 1.f, 0.f, 0.f));
     }
 
     void SharedUniformStateUpdater::setNear(float near)
@@ -149,9 +149,12 @@ namespace SceneUtil
         mSunShadowFade = fade;
     }
 
-    void SharedUniformStateUpdater::setPointLightTuning(float brightness, float falloff, float bounce)
+    void SharedUniformStateUpdater::setPointLightTuning(
+        float brightness, float falloff, float bounce, float hotspotSoftening)
     {
-        mPointLightTuning = osg::Vec3f(brightness, falloff, bounce);
+        // The shader rounds off attenuation above 1 as 1 + over / (1 + w * over): w = 8 * softening puts the ceiling
+        // at 1 + 1 / w.
+        mPointLightTuning = osg::Vec4f(brightness, falloff, bounce, 8.f * hotspotSoftening);
     }
 
     void StateUpdater::setDefaults(osg::StateSet* stateset)

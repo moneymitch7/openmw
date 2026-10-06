@@ -77,7 +77,7 @@ namespace SceneUtil
         void setSunShadowFade(float fade);
 
         /// [Shaders] light brightness, light falloff and light bounce, applied to point lights (lib/light/util.glsl).
-        void setPointLightTuning(float brightness, float falloff, float bounce);
+        void setPointLightTuning(float brightness, float falloff, float bounce, float hotspotSoftening);
 
     private:
         float mNear = 0.f;
@@ -88,7 +88,7 @@ namespace SceneUtil
         osg::Vec2f mScreenRes;
         bool mViewerUnderwater = false;
         float mSunShadowFade = 1.f;
-        osg::Vec3f mPointLightTuning{ 1.f, 1.f, 0.f };
+        osg::Vec4f mPointLightTuning{ 1.f, 1.f, 0.f, 0.f };
     };
 
     class StateUpdater : public StateSetUpdater

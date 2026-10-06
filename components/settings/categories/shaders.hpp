@@ -46,6 +46,8 @@ namespace Settings
             makeClampSanitizerFloat(0.1f, 4) };
         SettingValue<float> mLightFalloff{ mIndex, "Shaders", "light falloff", makeClampSanitizerFloat(0.25f, 3) };
         SettingValue<float> mLightBounce{ mIndex, "Shaders", "light bounce", makeClampSanitizerFloat(0, 1) };
+        SettingValue<float> mLightHotspotSoftening{ mIndex, "Shaders", "light hotspot softening",
+            makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mSunlightBrightness{ mIndex, "Shaders", "sunlight brightness",
             makeClampSanitizerFloat(0.25f, 3) };
         SettingValue<float> mExteriorAmbient{ mIndex, "Shaders", "exterior ambient", makeClampSanitizerFloat(0, 2) };

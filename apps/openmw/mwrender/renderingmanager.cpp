@@ -403,8 +403,9 @@ namespace MWRender
         sceneRoot->addUpdateCallback(mStateUpdater);
 
         mSharedUniformStateUpdater = new SceneUtil::SharedUniformStateUpdater(Settings::fog().mSkyBlendingStart);
-        mSharedUniformStateUpdater->setPointLightTuning(
-            Settings::shaders().mLightBrightness, Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce);
+        mSharedUniformStateUpdater->setPointLightTuning(Settings::shaders().mLightBrightness,
+            Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce,
+            Settings::shaders().mLightHotspotSoftening);
         rootNode->addUpdateCallback(mSharedUniformStateUpdater);
 
         mPerViewUniformStateUpdater = new SceneUtil::PerViewUniformStateUpdater(mResourceSystem->getSceneManager(),
@@ -1639,10 +1640,12 @@ namespace MWRender
                 mClampActorsGateUniform->set(Settings::shaders().mClampLightingActors ? 1.f : 0.f);
             }
             else if (it->first == "Shaders"
-                && (it->second == "light brightness" || it->second == "light falloff" || it->second == "light bounce"))
+                && (it->second == "light brightness" || it->second == "light falloff" || it->second == "light bounce"
+                    || it->second == "light hotspot softening"))
             {
                 mSharedUniformStateUpdater->setPointLightTuning(Settings::shaders().mLightBrightness,
-                    Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce);
+                    Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce,
+                    Settings::shaders().mLightHotspotSoftening);
             }
             else if (it->first == "Shaders"
                 && (it->second == "held light brightness" || it->second == "held light reach"

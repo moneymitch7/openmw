@@ -234,6 +234,19 @@ Shaders Settings
    0.0 is off; 0.2-0.4 is subtle.
 
 .. omw-setting::
+   :title: light hotspot softening
+   :type: float32
+   :range: 0.0-1.0
+   :default: 0.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Right next to a light (the wall behind a candle or sconce) its distance curve rises far above full strength,
+   and :ref:`light falloff` above 1.0 raises it further, so those spots burn out to white.
+   This rounds off everything above full strength towards a ceiling:
+   0.0 is unchanged, 0.5 keeps the brightest spot within about 1.25 times full strength, 1.0 within about 1.12 times.
+   The rest of the light's reach is unchanged.
+
+.. omw-setting::
    :title: sunlight brightness
    :type: float32
    :range: 0.25-3.0
@@ -269,7 +282,8 @@ Shaders Settings
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
    Scales the strength of the lights characters carry (torches and lanterns: the player's, guards' and others').
-   Lights placed in the world are left alone.
+   Lights placed in the world are left alone, except the model-less carriable lights that worn-lantern mods
+   (Belt Lanterns and the like) move along with a character, which count as carried.
 
 .. omw-setting::
    :title: held light reach
