@@ -2,9 +2,11 @@
 #define OPENMW_COMPONENTS_NIFOSG_SKELETON_H
 
 #include <osg/Group>
+#include <osg/observer_ptr>
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 namespace SceneUtil
 {
@@ -78,6 +80,16 @@ namespace SceneUtil
 
         unsigned int mLastFrameNumber;
         unsigned int mLastCullFrameNumber;
+
+        /// While the update of an off-screen skeleton is skipped, the lights under it (a carried torch) are still
+        /// updated, so they keep lighting what is on screen.
+        void updateLightsOnly(osg::NodeVisitor& nv);
+        void findLights(unsigned int traversalNumber);
+
+        // the paths from the skeleton's children down to each light source under it, refreshed now and then
+        std::vector<std::vector<osg::observer_ptr<osg::Node>>> mLightPaths;
+        unsigned int mLightPathsFrame = 0;
+        bool mLightPathsValid = false;
     };
 
 }

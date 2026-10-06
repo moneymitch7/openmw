@@ -5,6 +5,8 @@
 #include <components/debug/debuglog.hpp>
 #include <components/misc/strings/lower.hpp>
 
+#include "lightmanager.hpp"
+
 #include <algorithm>
 
 namespace SceneUtil
@@ -128,6 +130,100 @@ namespace SceneUtil
         mBoneCacheInit = false;
     }
 
+    namespace
+    {
+        class FindLightSourcesVisitor : public osg::NodeVisitor
+        {
+        public:
+            explicit FindLightSourcesVisitor(std::vector<std::vector<osg::observer_ptr<osg::Node>>>& paths)
+                : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+                , mPaths(paths)
+            {
+            }
+
+            void apply(osg::Node& node) override
+            {
+                if (dynamic_cast<LightSource*>(&node) != nullptr)
+                {
+                    // the path starts at the skeleton, which is left out
+                    const osg::NodePath& path = getNodePath();
+                    std::vector<osg::observer_ptr<osg::Node>>& lightPath = mPaths.emplace_back();
+                    for (std::size_t i = 1; i < path.size(); ++i)
+                        lightPath.emplace_back(path[i]);
+                }
+                traverse(node);
+            }
+
+        private:
+            std::vector<std::vector<osg::observer_ptr<osg::Node>>>& mPaths;
+        };
+    }
+
+    void Skeleton::findLights(unsigned int traversalNumber)
+    {
+        mLightPaths.clear();
+        FindLightSourcesVisitor visitor(mLightPaths);
+        accept(visitor);
+        mLightPathsFrame = traversalNumber;
+        mLightPathsValid = true;
+    }
+
+    void Skeleton::updateLightsOnly(osg::NodeVisitor& nv)
+    {
+        // A torch equipped while off-screen is found within half a second.
+        constexpr unsigned int refreshInterval = 30;
+        const unsigned int frame = nv.getTraversalNumber();
+        if (!mLightPathsValid || frame - mLightPathsFrame >= refreshInterval)
+            findLights(frame);
+
+        std::vector<osg::ref_ptr<osg::Node>> nodes;
+        for (const auto& lightPath : mLightPaths)
+        {
+            // still attached the way it was found, and not hidden
+            nodes.clear();
+            const osg::Node* parent = this;
+            bool valid = !lightPath.empty();
+            for (const auto& observer : lightPath)
+            {
+                osg::ref_ptr<osg::Node> node;
+                if (!observer.lock(node))
+                {
+                    valid = false;
+                    break;
+                }
+                const osg::Node::ParentList& parents = node->getParents();
+                if (std::find(parents.begin(), parents.end(), parent) == parents.end())
+                {
+                    valid = false;
+                    break;
+                }
+                parent = node.get();
+                nodes.push_back(std::move(node));
+            }
+            if (!valid)
+            {
+                mLightPathsValid = false;
+                continue;
+            }
+            bool visible = true;
+            for (const auto& node : nodes)
+                visible = visible && nv.validNodeMask(*node);
+            if (!visible)
+                continue;
+
+            auto* light = static_cast<LightSource*>(nodes.back().get());
+            osg::Callback* callback = light->getUpdateCallback();
+            if (callback == nullptr)
+                continue;
+            // the update callbacks of the light (collecting it, its flicker) run as in a full update traversal
+            for (const auto& node : nodes)
+                nv.pushOntoNodePath(node.get());
+            callback->run(light, &nv);
+            for (std::size_t i = 0; i < nodes.size(); ++i)
+                nv.popFromNodePath();
+        }
+    }
+
     void Skeleton::traverse(osg::NodeVisitor& nv)
     {
         if (nv.getVisitorType() == osg::NodeVisitor::UPDATE_VISITOR)
@@ -135,7 +231,10 @@ namespace SceneUtil
             if (mActive == Inactive && mLastFrameNumber != 0)
                 return;
             if (mActive == SemiActive && mLastFrameNumber != 0 && mLastCullFrameNumber + 3 <= nv.getTraversalNumber())
+            {
+                updateLightsOnly(nv);
                 return;
+            }
         }
         else if (nv.getVisitorType() == osg::NodeVisitor::CULL_VISITOR)
             mLastCullFrameNumber = nv.getTraversalNumber();
