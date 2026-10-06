@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <fstream>
@@ -9,6 +10,10 @@
 #include <iomanip>
 #include <system_error>
 
+#include <osg/ContextData>
+#include <osg/GLExtensions>
+#include <osg/GraphicsThread>
+#include <osg/Texture>
 #include <osgDB/ReaderWriter>
 #include <osgDB/Registry>
 #include <osgViewer/Renderer>
@@ -96,6 +101,72 @@
 
 namespace
 {
+    // OpenMGE XE: video memory numbers for the performance log, read on the draw thread (the GL context lives there)
+    // about twice a second. AMD drivers report free video memory and the free system memory the driver may page
+    // textures out to (GL_ATI_meminfo); NVIDIA drivers report free video memory and how much has been evicted so far
+    // (GL_NVX_gpu_memory_info). -1 when the driver reports neither. The texture object counts are OSG's: textures it
+    // has live on the GPU, and released ones it still holds on to for reuse.
+    struct GpuMemory
+    {
+        std::atomic<int> mFreeMb{ -1 };
+        std::atomic<int> mOtherMb{ -1 };
+        std::atomic<int> mTextureObjects{ -1 };
+        std::atomic<int> mOrphanedTextureObjects{ -1 };
+    };
+    GpuMemory sGpuMemory;
+
+    class GpuMemoryProbe : public osg::GraphicsOperation
+    {
+    public:
+        GpuMemoryProbe()
+            : osg::Referenced(true)
+            , osg::GraphicsOperation("GpuMemoryProbe", true)
+        {
+        }
+
+        void operator()(osg::GraphicsContext* context) override
+        {
+            if (mFrames++ % 30 != 0 || context == nullptr || context->getState() == nullptr)
+                return;
+            const unsigned int contextId = context->getState()->getContextID();
+            if (!mChecked)
+            {
+                mChecked = true;
+                mAti = osg::isGLExtensionSupported(contextId, "GL_ATI_meminfo");
+                mNvx = !mAti && osg::isGLExtensionSupported(contextId, "GL_NVX_gpu_memory_info");
+            }
+            if (mAti)
+            {
+                // GL_TEXTURE_FREE_MEMORY_ATI: free pool memory, largest free block, free auxiliary (system) memory,
+                // largest auxiliary block, all in KB.
+                GLint values[4] = { -1, -1, -1, -1 };
+                glGetIntegerv(0x87FC, values);
+                sGpuMemory.mFreeMb = values[0] >= 0 ? values[0] / 1024 : -1;
+                sGpuMemory.mOtherMb = values[2] >= 0 ? values[2] / 1024 : -1;
+            }
+            else if (mNvx)
+            {
+                GLint available = -1;
+                GLint evicted = -1;
+                glGetIntegerv(0x9049, &available); // GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, KB
+                glGetIntegerv(0x904B, &evicted); // GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX, KB
+                sGpuMemory.mFreeMb = available >= 0 ? available / 1024 : -1;
+                sGpuMemory.mOtherMb = evicted >= 0 ? evicted / 1024 : -1;
+            }
+            if (osg::TextureObjectManager* textures = osg::get<osg::TextureObjectManager>(contextId))
+            {
+                sGpuMemory.mTextureObjects = static_cast<int>(textures->getNumberActiveTextureObjects());
+                sGpuMemory.mOrphanedTextureObjects = static_cast<int>(textures->getNumberOrphanedTextureObjects());
+            }
+        }
+
+    private:
+        unsigned int mFrames = 0;
+        bool mChecked = false;
+        bool mAti = false;
+        bool mNvx = false;
+    };
+
     // OpenMGE XE: hidden performance log ([General] performance log). Every frame's F3 profiler numbers are added up,
     // and once a second their averages, the second's worst frame and where the player is go to performance-log.csv next
     // to openmw.log. Nothing is shown on screen.
@@ -113,9 +184,12 @@ namespace
             }
             Log(Debug::Info) << "Performance log: " << path;
             enableStats();
+            if (osg::GraphicsContext* context = viewer.getCamera()->getGraphicsContext())
+                context->add(new GpuMemoryProbe);
             mFile << "time,cell,x,y,menu,fps,frame ms,worst frame ms";
             for (const Column& column : mColumns)
                 mFile << ',' << column.mHeading;
+            mFile << ",vram free MB,vram other MB,gl textures,gl released textures";
             mFile << '\n';
             mFile.flush();
         }
@@ -174,6 +248,8 @@ namespace
             mWorstFrameMs = 0.0;
             for (Column& column : mColumns)
                 mFile << ',' << std::setprecision(column.mScale == 1.0 ? 0 : 2) << column.mSum.take();
+            mFile << ',' << sGpuMemory.mFreeMb.load() << ',' << sGpuMemory.mOtherMb.load() << ','
+                  << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load();
             mFile << '\n';
             mFile.flush();
         }
@@ -227,7 +303,7 @@ namespace
         unsigned int mLastFrame = 0;
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
-        std::array<Column, 23> mColumns{ {
+        std::array<Column, 31> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
             { "luasync", "luasyncupdate_time_taken" },
@@ -251,6 +327,15 @@ namespace
             { "gpu", "GPU draw time taken", true },
             { "occlusion tested", "Occlusion Tested", false, 1.0 },
             { "occlusion culled", "Occlusion Culled", false, 1.0 },
+            // What the resource caches hold, to tell a growing cache from memory held elsewhere.
+            { "cached images", "Image Count", false, 1.0 },
+            { "cached nodes", "Node Count", false, 1.0 },
+            { "terrain chunks", "Terrain Chunk Count", false, 1.0 },
+            { "terrain textures", "Terrain Texture Count", false, 1.0 },
+            { "object chunks", "Object Chunk Count", false, 1.0 },
+            { "groundcover chunks", "Groundcover Chunk Count", false, 1.0 },
+            { "preloaded cells", "CellPreloader Count", false, 1.0 },
+            { "unref queue", "UnrefQueue", false, 1.0 },
         } };
     };
 
