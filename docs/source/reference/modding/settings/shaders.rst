@@ -195,10 +195,40 @@ Shaders Settings
    :type: float32
    :range: 0.0-1.0
    :default: 0.08
+
+   Minimum ambient brightness inside interiors, applied after :ref:`interior ambient`.
+   Should be small to avoid unwanted visual changes.
+   Not shown in the in-game menu; edit settings.cfg to change it.
+
+.. omw-setting::
+   :title: light brightness
+   :type: float32
+   :range: 0.1-4.0
+   :default: 1.0
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
-   Minimum ambient brightness inside interiors.
-   Should be small to avoid unwanted visual changes.
+   Scales the strength of every point light (torches, lamps, candles, spells).
+
+.. omw-setting::
+   :title: light falloff
+   :type: float32
+   :range: 0.25-3.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Raises the point light distance curve to this power. Above 1.0 lights are brighter close to the source and
+   darker further out; below 1.0 light spreads more evenly. The pivot is the distance where a light reaches its
+   full colour. The radius fade is unchanged, so lights end where they did.
+
+.. omw-setting::
+   :title: interior ambient
+   :type: float32
+   :range: 0.0-2.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Scales the base lighting of interiors: the cell's ambient and directional light.
+   Lower values make point lights stand out more against the room.
 
 .. omw-setting::
    :title: antialias alpha test

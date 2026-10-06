@@ -821,37 +821,21 @@
                                 </Widget>
                             </Widget>
 
-                            <!-- Clamp Lighting -->
+                            <!-- Clamp Lighting: Off / NPCs Only / Everything ([Shaders] clamp lighting, clamp lighting actors) -->
                             <Widget type="HBox" align="Stretch">
                                 <UserString key="HStretch" value="true"/>
                                 <UserString key="VStretch" value="false"/>
-                                <Widget type="AutoSizedButton" skin="MW_Button">
-                                    <UserString key="SettingCategory" value="Shaders"/>
-                                    <UserString key="SettingName" value="clamp lighting"/>
-                                    <UserString key="SettingType" value="CheckButton"/>
+                                <Widget type="ComboBox" skin="MW_ComboBox" position="0 0 120 24" align="Left Top" name="ClampLightingMode">
+                                    <Property key="ReadOnly" value="true"/>
+                                    <Property key="AddItem" value="#{Interface:Off}"/>
+                                    <Property key="AddItem" value="#{OMWEngine:ClampLightingActorsOnly}"/>
+                                    <Property key="AddItem" value="#{OMWEngine:ClampLightingEverything}"/>
                                 </Widget>
                                 <Widget type="AutoSizedTextBox" skin="SandText">
                                     <Property key="Caption" value="#{OMWEngine:ClampLighting}"/>
                                     <UserString key="ToolTipType" value="Layout"/>
                                     <UserString key="ToolTipLayout" value="TextToolTip"/>
                                     <UserString key="Caption_Text" value="#{OMWEngine:ClampLightingTooltip}"/>
-                                </Widget>
-                            </Widget>
-
-                            <!-- Clamp Lighting (Actors Only) -->
-                            <Widget type="HBox" align="Stretch">
-                                <UserString key="HStretch" value="true"/>
-                                <UserString key="VStretch" value="false"/>
-                                <Widget type="AutoSizedButton" skin="MW_Button">
-                                    <UserString key="SettingCategory" value="Shaders"/>
-                                    <UserString key="SettingName" value="clamp lighting actors"/>
-                                    <UserString key="SettingType" value="CheckButton"/>
-                                </Widget>
-                                <Widget type="AutoSizedTextBox" skin="SandText">
-                                    <Property key="Caption" value="#{OMWEngine:ClampLightingActors}"/>
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:ClampLightingActorsTooltip}"/>
                                 </Widget>
                             </Widget>
 
@@ -966,26 +950,76 @@
                                 <UserString key="SettingLabelCaption" value="LightRadiusMultiplierValue"/>
                             </Widget>
 
-                            <!-- Minimum Interior Brightness -->
+                            <!-- Light Brightness -->
                             <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
                                 <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="MinimumBrightnessText">
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightBrightnessText">
                                     <UserString key="ToolTipType" value="Layout"/>
                                     <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:LightsMinimumInteriorBrightnessTooltip}"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightBrightnessTooltip}"/>
                                 </Widget>
                             </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top" name="MinimumBrightnessScroll">
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
                                 <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="10000"/>
-                                <Property key="Page" value="100"/>
-                                <Property key="WheelPage" value="100"/>
+                                <Property key="Range" value="276"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
                                 <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.25"/>
+                                <UserString key="SettingMax" value="3.0"/>
                                 <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="minimum interior brightness"/>
+                                <UserString key="SettingName" value="light brightness"/>
                                 <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="MinimumBrightnessText"/>
-                                <UserString key="SettingLabelCaption" value="LightsMinimumInteriorBrightnessValue"/>
+                                <UserString key="SettingLabelWidget" value="LightBrightnessText"/>
+                                <UserString key="SettingLabelCaption" value="LightBrightnessValue"/>
+                            </Widget>
+
+                            <!-- Light Falloff -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightFalloffText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightFalloffTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="151"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.5"/>
+                                <UserString key="SettingMax" value="2.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="light falloff"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="LightFalloffText"/>
+                                <UserString key="SettingLabelCaption" value="LightFalloffValue"/>
+                            </Widget>
+
+                            <!-- Interior Ambient (minimum interior brightness stays as a floor, settings.cfg only) -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="InteriorAmbientText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:InteriorAmbientTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="201"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="2.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="interior ambient"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="InteriorAmbientText"/>
+                                <UserString key="SettingLabelCaption" value="InteriorAmbientValue"/>
                             </Widget>
 
                             <Widget type="Widget" position="0 0 0 2" align="Top HStretch">

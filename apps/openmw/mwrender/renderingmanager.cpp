@@ -383,6 +383,8 @@ namespace MWRender
         sceneRoot->addUpdateCallback(mStateUpdater);
 
         mSharedUniformStateUpdater = new SceneUtil::SharedUniformStateUpdater(Settings::fog().mSkyBlendingStart);
+        mSharedUniformStateUpdater->setPointLightTuning(
+            Settings::shaders().mLightBrightness, Settings::shaders().mLightFalloff);
         rootNode->addUpdateCallback(mSharedUniformStateUpdater);
 
         mPerViewUniformStateUpdater = new SceneUtil::PerViewUniformStateUpdater(mResourceSystem->getSceneManager(),
@@ -393,6 +395,7 @@ namespace MWRender
         rootNode->addCullCallback(mPerViewUniformStateUpdater);
 
         mPostProcessor = new PostProcessor(*this, viewer, mRootNode, resourceSystem->getVFS());
+        mPostProcessor->getStateUpdater()->setPointLightRadiusMultiplier(Settings::shaders().mLightRadiusMultiplier);
         resourceSystem->getSceneManager()->setOpaqueDepthTex(
             mPostProcessor->getTexture(PostProcessor::Tex_OpaqueDepth, 0),
             mPostProcessor->getTexture(PostProcessor::Tex_OpaqueDepth, 1));
@@ -660,6 +663,19 @@ namespace MWRender
         needsAdjusting = isInterior && (!Settings::shaders().mClassicFalloff || Settings::shaders().mClusteredLighting);
 
         osg::Vec4f ambient = SceneUtil::colourFromRGB(cell.getMood().mAmbiantColor);
+        osg::Vec4f diffuse = SceneUtil::colourFromRGB(cell.getMood().mDirectionalColor);
+
+        // [Shaders] interior ambient: scales the room's own light (ambient and directional) so point lights stand
+        // out more or less against it; the minimum brightness below still applies as a floor
+        if (isInterior)
+        {
+            const float scale = Settings::shaders().mInteriorAmbient;
+            for (int i = 0; i < 3; ++i)
+            {
+                ambient[i] *= scale;
+                diffuse[i] *= scale;
+            }
+        }
 
         if (needsAdjusting)
         {
@@ -683,8 +699,6 @@ namespace MWRender
         }
 
         setAmbientColour(ambient);
-
-        osg::Vec4f diffuse = SceneUtil::colourFromRGB(cell.getMood().mDirectionalColor);
 
         setSunColour(diffuse, diffuse, 0.f);
         // This is total nonsense but it's what Morrowind uses
@@ -1590,7 +1604,13 @@ namespace MWRender
             {
                 mClampActorsGateUniform->set(Settings::shaders().mClampLightingActors ? 1.f : 0.f);
             }
-            else if (it->first == "Shaders" && it->second == "minimum interior brightness")
+            else if (it->first == "Shaders" && (it->second == "light brightness" || it->second == "light falloff"))
+            {
+                mSharedUniformStateUpdater->setPointLightTuning(
+                    Settings::shaders().mLightBrightness, Settings::shaders().mLightFalloff);
+            }
+            else if (it->first == "Shaders"
+                && (it->second == "minimum interior brightness" || it->second == "interior ambient"))
             {
                 if (MWMechanics::getPlayer().isInCell())
                     configureAmbient(*MWMechanics::getPlayer().getCell()->getCell());
@@ -1619,6 +1639,9 @@ namespace MWRender
             {
                 if (MWMechanics::getPlayer().isInCell())
                     configureAmbient(*MWMechanics::getPlayer().getCell()->getCell());
+
+                mPostProcessor->getStateUpdater()->setPointLightRadiusMultiplier(
+                    Settings::shaders().mLightRadiusMultiplier);
 
                 LightManagerUpdateVisitor visitor;
                 bool lightManagersUpdated = false;

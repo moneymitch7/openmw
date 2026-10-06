@@ -96,6 +96,9 @@ namespace SceneUtil
         stateset->addUniform(new osg::Uniform("viewerUnderwater", false));
         stateset->addUniform(new osg::Uniform("isRefraction", false));
         stateset->addUniform(new osg::Uniform("sunShadowFade", 1.f));
+        // stored as offsets from 1, so a program drawn outside this root (the inventory character preview) reads
+        // GL's default 0 as "unchanged"
+        stateset->addUniform(new osg::Uniform("pointLightTuning", osg::Vec2f()));
     }
 
     void SharedUniformStateUpdater::apply(osg::StateSet* stateset, osg::NodeVisitor* nv)
@@ -108,6 +111,7 @@ namespace SceneUtil
         stateset->getUniform("playerPos")->set(mPlayerPos);
         stateset->getUniform("viewerUnderwater")->set(mViewerUnderwater);
         stateset->getUniform("sunShadowFade")->set(mSunShadowFade);
+        stateset->getUniform("pointLightTuning")->set(mPointLightTuning - osg::Vec2f(1.f, 1.f));
     }
 
     void SharedUniformStateUpdater::setNear(float near)
@@ -143,6 +147,11 @@ namespace SceneUtil
     void SharedUniformStateUpdater::setSunShadowFade(float fade)
     {
         mSunShadowFade = fade;
+    }
+
+    void SharedUniformStateUpdater::setPointLightTuning(float brightness, float falloff)
+    {
+        mPointLightTuning = osg::Vec2f(brightness, falloff);
     }
 
     void StateUpdater::setDefaults(osg::StateSet* stateset)

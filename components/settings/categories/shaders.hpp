@@ -42,6 +42,10 @@ namespace Settings
         SettingValue<int> mMaxLights{ mIndex, "Shaders", "max lights", makeClampSanitizerInt(2, 64) };
         SettingValue<float> mMinimumInteriorBrightness{ mIndex, "Shaders", "minimum interior brightness",
             makeClampSanitizerFloat(0, 1) };
+        SettingValue<float> mLightBrightness{ mIndex, "Shaders", "light brightness",
+            makeClampSanitizerFloat(0.1f, 4) };
+        SettingValue<float> mLightFalloff{ mIndex, "Shaders", "light falloff", makeClampSanitizerFloat(0.25f, 3) };
+        SettingValue<float> mInteriorAmbient{ mIndex, "Shaders", "interior ambient", makeClampSanitizerFloat(0, 2) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };
         SettingValue<bool> mSoftParticles{ mIndex, "Shaders", "soft particles" };

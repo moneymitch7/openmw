@@ -104,6 +104,16 @@ namespace
             max = MyGUI::utility::parseFloat(widget->getUserString(settingMax));
     }
 
+    // Off / NPCs Only / Everything: the two clamp settings as one choice ('clamp lighting actors' only matters while
+    // 'clamp lighting' is off)
+    void updateClampLightingComboBox(MyGUI::ComboBox* box)
+    {
+        if (Settings::shaders().mClampLighting)
+            box->setIndexSelected(2);
+        else
+            box->setIndexSelected(Settings::shaders().mClampLightingActors ? 1 : 0);
+    }
+
     void updateMaxLightsComboBox(MyGUI::ComboBox* box)
     {
         constexpr int min = 8;
@@ -307,8 +317,7 @@ namespace MWGui
         getWidget(mScriptAdapter, "ScriptAdapter");
         getWidget(mScriptDisabled, "ScriptDisabled");
         getWidget(mClassicFalloffWidget, "ClassicFalloffWidget");
-        getWidget(mMinimumBrightnessText, "MinimumBrightnessText");
-        getWidget(mMinimumBrightnessScroll, "MinimumBrightnessScroll");
+        getWidget(mClampLightingMode, "ClampLightingMode");
         getWidget(mActorShadowsButton, "ActorShadowsButton");
         getWidget(mPlayerShadowsButton, "PlayerShadowsButton");
         getWidget(mTerrainShadowsButton, "TerrainShadowsButton");
@@ -361,6 +370,8 @@ namespace MWGui
             += MyGUI::newDelegate(this, &SettingsWindow::onShadowMapResolutionChanged);
         mShadowUpdateInterval->eventComboChangePosition
             += MyGUI::newDelegate(this, &SettingsWindow::onShadowUpdateIntervalChanged);
+        mClampLightingMode->eventComboChangePosition
+            += MyGUI::newDelegate(this, &SettingsWindow::onClampLightingModeChanged);
 
         mWindowModeList->eventComboChangePosition += MyGUI::newDelegate(this, &SettingsWindow::onWindowModeChanged);
         mVSyncModeList->eventComboChangePosition += MyGUI::newDelegate(this, &SettingsWindow::onVSyncModeChanged);
@@ -422,6 +433,7 @@ namespace MWGui
         mWaterRainRippleDetail->setIndexSelected(waterRainRippleDetail);
 
         updateMaxLightsComboBox(mMaxLights);
+        updateClampLightingComboBox(mClampLightingMode);
 
         updateShadowMapResolutionComboBox(mShadowMapResolution);
         {
@@ -666,6 +678,15 @@ namespace MWGui
         }
     }
 
+    void SettingsWindow::onClampLightingModeChanged(MyGUI::ComboBox* /*sender*/, size_t pos)
+    {
+        if (pos == MyGUI::ITEM_NONE)
+            return;
+        Settings::shaders().mClampLighting.set(pos == 2);
+        Settings::shaders().mClampLightingActors.set(pos == 1);
+        apply();
+    }
+
     void SettingsWindow::onLightsResetButtonClicked(MyGUI::Widget* /*sender*/)
     {
         std::vector<std::string> buttons = { "#{Interface:Yes}", "#{Interface:No}" };
@@ -684,10 +705,14 @@ namespace MWGui
         Settings::shaders().mMaximumLightDistance.reset();
         Settings::shaders().mLightFadeStart.reset();
         Settings::shaders().mMinimumInteriorBrightness.reset();
+        Settings::shaders().mLightBrightness.reset();
+        Settings::shaders().mLightFalloff.reset();
+        Settings::shaders().mInteriorAmbient.reset();
         Settings::shaders().mMaxLights.reset();
         Settings::shaders().mClusteredLighting.reset();
 
         updateMaxLightsComboBox(mMaxLights);
+        updateClampLightingComboBox(mClampLightingMode);
 
         apply();
         configureWidgets(mMainWidget, false);
@@ -952,11 +977,8 @@ namespace MWGui
             MWBase::Environment::get().getResourceSystem()->getSceneManager()->isClusteredLightingSupported());
 
         const bool isClustered = Settings::shaders().mClusteredLighting;
-        const bool isClassic = !isClustered && Settings::shaders().mClassicFalloff;
 
         mClassicFalloffWidget->setVisible(!isClustered);
-        mMinimumBrightnessText->setVisible(!isClassic);
-        mMinimumBrightnessScroll->setVisible(!isClassic);
     }
 
     void SettingsWindow::updateWindowModeSettings()

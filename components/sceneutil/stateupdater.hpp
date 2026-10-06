@@ -76,6 +76,9 @@ namespace SceneUtil
         /// 1 = sun shadows at full strength, 0 = none (the MGE shadow receiver, compat.glsl).
         void setSunShadowFade(float fade);
 
+        /// [Shaders] light brightness and light falloff, applied to point light attenuation (lib/light/util.glsl).
+        void setPointLightTuning(float brightness, float falloff);
+
     private:
         float mNear = 0.f;
         float mFar = 0.f;
@@ -85,6 +88,7 @@ namespace SceneUtil
         osg::Vec2f mScreenRes;
         bool mViewerUnderwater = false;
         float mSunShadowFade = 1.f;
+        osg::Vec2f mPointLightTuning{ 1.f, 1.f };
     };
 
     class StateUpdater : public StateSetUpdater

@@ -42,8 +42,19 @@ float specularIntensity(vec3 viewNormal, vec3 viewDir, float shininess, vec3 lig
     return 0.0;
 }
 
+// [Shaders] light brightness and light falloff, stored as offsets from 1 (SharedUniformStateUpdater):
+// x = brightness - 1, y = falloff - 1. Zero, which is also what a program drawn outside the scene root reads,
+// leaves point lights unchanged.
+uniform vec2 pointLightTuning;
+
 float calcAttenuation(PointLight light, float dist) {
     float attenuation = 1.0 / (light.constant + light.linear * dist + light.quadratic * dist * dist);
+    // Falloff raises the distance curve to a power: above 1 it brightens where the light is past full strength
+    // (close to the source) and darkens where it is below, so pools of light get tighter and more contrasted.
+    // The radius fade below is left as is, so lights still end where they did.
+    if (pointLightTuning.y != 0.0)
+        attenuation = pow(attenuation, 1.0 + pointLightTuning.y);
+    attenuation *= 1.0 + pointLightTuning.x;
     #if !@classicFalloff || @lightingMethodClustered
         // Fade illumination out to 0 when reaching the lights radius
         attenuation *= 1.0 - fade((dist / light.radius - 0.75) / 0.25);

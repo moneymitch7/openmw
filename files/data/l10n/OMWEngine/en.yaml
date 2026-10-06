@@ -81,12 +81,14 @@ CameraZoomOut: "Zoom Camera Out"
 ChangeRequiresRestart: "This change requires a restart to take effect."
 ClampLighting: "Clamp Lighting"
 ClampLightingTooltip: |-
-    Cap lighting brightness at (1, 1, 1) to replicate Morrowind's rendering.
-    Prevents overly bright or shifted colors but can dull lighting.
-ClampLightingActors: "Clamp Lighting (NPCs Only)"
-ClampLightingActorsTooltip: |-
-    Default: off
-    Cap lighting on NPCs, creatures and your own body so faces and armour keep their texture contrast at light peaks, while the world keeps the unclamped MGE XE curve. Only takes effect while Clamp Lighting is off.
+    Default: Everything
+    Cap lighting brightness at (1, 1, 1) as Morrowind did.
+
+    Off: unclamped (MGE XE) lighting everywhere.
+    NPCs Only: NPCs, creatures and your own body are capped, so faces and armour keep their texture contrast at light peaks, while the world stays unclamped.
+    Everything: Morrowind's look. Prevents overly bright or shifted colours but can dull lighting.
+ClampLightingActorsOnly: "NPCs Only"
+ClampLightingEverything: "Everything"
 ClassicFalloff: "Classic Falloff"
 ClassicFalloffTooltip: |-
     Default: off
@@ -97,7 +99,7 @@ ClassicFalloffTooltip: |-
     Early fade out helps diminish these seams at the cost of darkening the scene.
 
     Morrowind uses the traditional formula, so you may want to enable this if you dislike the brightness differences.
-    Alternatively, try changing the minimum interior brightness.
+    Alternatively, try changing the interior ambient.
 ConfirmResetBindings: "Reset all controls to the default?"
 ConfirmResolution: "New resolution will be applied immediately. Do you want to continue?"
 Controller: "Controller"
@@ -140,6 +142,15 @@ Lights: "Lights"
 LightRadiusMultiplier: "Radius Multiplier"
 LightRadiusMultiplierValue: "Radius Multiplier ({value, number, ::.00})"
 LightRadiusMultiplierTooltip: "Default: 1.75\nMultiplier for point light radius. Larger values will increase the range of lights."
+LightBrightness: "Light Brightness"
+LightBrightnessValue: "Light Brightness ({value, number, ::.00})"
+LightBrightnessTooltip: "Default: 1.00\nStrength of every point light: torches, lamps, candles and spells.\n\nRaise it if lamps look dim against the room around them, lower it if pools of light wash out."
+LightFalloff: "Light Falloff"
+LightFalloffValue: "Light Falloff ({value, number, ::.00})"
+LightFalloffTooltip: "Default: 1.00\nHow quickly point lights dim with distance.\n\nAbove 1, lights are brighter close to the source and darker further away, for tighter pools of light with more contrast. Below 1, light spreads more evenly. Lights still end at the same radius."
+InteriorAmbient: "Interior Ambient"
+InteriorAmbientValue: "Interior Ambient ({value, number, ::.00})"
+InteriorAmbientTooltip: "Default: 1.00\nBase light of interiors: the room's own ambient and directional light.\n\nLower it for darker rooms where lamps and torches stand out, raise it for brighter interiors. The darkest rooms are still kept at the minimum interior brightness (0.08 by default, in settings.cfg) unless classic falloff is used."
 LightsFadeStartMultiplier: "Fade Start Multiplier"
 LightsFadeStartMultiplierValue: "Fade Start Multiplier ({value, number, ::.00})"
 LightsFadeStartMultiplierTooltip: "Default: 0.85\nFraction of maximum distance at which lights will start to fade.\n\nSet this to a low value for slower transitions or a high value for quicker transitions."

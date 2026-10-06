@@ -79,6 +79,8 @@ namespace Fx
 
         void setIsInterior(bool interior) { mData.get<IsInterior>() = interior; }
 
+        void setPointLightRadiusMultiplier(float multiplier) { mData.get<PointLightRadiusMultiplier>() = multiplier; }
+
         void setFov(float fov) { mData.get<Fov>() = fov; }
 
         void setGameHour(float hour) { mData.get<GameHour>() = hour; }
@@ -281,11 +283,18 @@ namespace Fx
             static constexpr std::string_view sName = "isInterior";
         };
 
+        // [Shaders] light radius multiplier, already applied to omw_GetPointLightRadius; a shader that wants the
+        // radius the light was authored with divides by it (OMW_POINT_LIGHT_RADIUS_MULTIPLIER)
+        struct PointLightRadiusMultiplier : Std140::Float
+        {
+            static constexpr std::string_view sName = "pointLightRadiusMultiplier";
+        };
+
         using UniformData = Std140::UBO<ProjectionMatrix, InvProjectionMatrix, ViewMatrix, PrevViewMatrix,
             InvViewMatrix, EyePos, EyeVec, FogColor, AmbientColor, SkyColor, SunColor, SunPos, SunVec, Resolution,
             RcpResolution, FogNear, FogFar, Near, Far, Fov, GameHour, SunVis, WaterHeight, IsWaterEnabled,
             SimulationTime, DeltaSimulationTime, FrameNumber, WindSpeed, WeatherTransition, WeatherID, NextWeatherID,
-            IsUnderwater, IsInterior>;
+            IsUnderwater, IsInterior, PointLightRadiusMultiplier>;
 
         UniformData mData;
         bool mUseUBO;
