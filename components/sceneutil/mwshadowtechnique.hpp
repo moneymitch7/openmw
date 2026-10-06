@@ -86,6 +86,10 @@ namespace SceneUtil {
 
         virtual void setShadowFadeStart(float shadowFadeStart);
 
+        /// Objects smaller than this many pixels on the main view's screen are left out of the shadow maps (objects
+        /// carrying a ShadowCasterFilter::SmallCasterCallback). 0 keeps them all.
+        void setMinimumCasterSize(float pixels) { _minimumCasterSize = pixels; }
+
         virtual void enableFrontFaceCulling();
 
         virtual void disableFrontFaceCulling();
@@ -324,6 +328,7 @@ namespace SceneUtil {
         bool                                    _useFrontFaceCulling = true;
 
         float                                   _shadowFadeStart = 0.0f;
+        float                                   _minimumCasterSize = 0.0f;
 
         unsigned int                            _worldMask = ~0u;
 

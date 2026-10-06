@@ -122,6 +122,16 @@ Shadows Settings
    May reduce performance.
 
 .. omw-setting::
+   :title: minimum caster size
+   :type: float32
+   :range: 0.0-32.0
+   :default: 3.0
+
+   Objects (items, clutter and other loose objects) that look smaller than this many pixels from the camera
+   are left out of the shadow maps. Their shadows would be a pixel or two, but each one still costs culling,
+   a draw call and GPU time in every shadow map. Nothing close to the camera is affected. 0 keeps every caster.
+
+.. omw-setting::
    :title: enable indoor shadows
    :type: boolean
    :range: true, false

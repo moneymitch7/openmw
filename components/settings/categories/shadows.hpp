@@ -41,6 +41,8 @@ namespace Settings
         SettingValue<bool> mPlayerShadows{ mIndex, "Shadows", "player shadows" };
         SettingValue<bool> mTerrainShadows{ mIndex, "Shadows", "terrain shadows" };
         SettingValue<bool> mObjectShadows{ mIndex, "Shadows", "object shadows" };
+        SettingValue<float> mMinimumCasterSize{ mIndex, "Shadows", "minimum caster size",
+            makeClampSanitizerFloat(0, 32) };
         SettingValue<bool> mEnableIndoorShadows{ mIndex, "Shadows", "enable indoor shadows" };
         SettingValue<bool> mSoftShadows{ mIndex, "Shadows", "soft shadows" };
         SettingValue<bool> mNightShadows{ mIndex, "Shadows", "night shadows" };

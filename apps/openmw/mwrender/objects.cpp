@@ -6,6 +6,7 @@
 #include <components/misc/resourcehelpers.hpp>
 #include <components/misc/strings/algorithm.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
+#include <components/sceneutil/shadowcasterfilter.hpp>
 #include <components/sceneutil/unrefqueue.hpp>
 #include <components/sceneutil/userdata.hpp>
 
@@ -81,6 +82,10 @@ namespace MWRender
     {
         insertBegin(ptr);
         ptr.getRefData().getBaseNode()->setNodeMask(Mask_Object);
+        // left out of the shadow maps while too small on screen for its shadow to show ([Shadows] minimum caster size)
+        static const osg::ref_ptr<SceneUtil::ShadowCasterFilter::SmallCasterCallback> smallCasterCallback
+            = new SceneUtil::ShadowCasterFilter::SmallCasterCallback;
+        ptr.getRefData().getBaseNode()->addCullCallback(smallCasterCallback);
         bool animated = ptr.getClass().useAnim();
         std::string animationMesh = mesh;
         if (animated && !mesh.empty())

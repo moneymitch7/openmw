@@ -57,6 +57,7 @@ namespace SceneUtil
         }
 
         mShadowSettings->setMinimumShadowMapNearFarRatio(settings.mMinimumLispsmNearFarRatio);
+        mShadowTechnique->setMinimumCasterSize(settings.mMinimumCasterSize);
 
         const std::string& computeSceneBounds = settings.mComputeSceneBounds;
         if (Misc::StringUtils::ciEqual(computeSceneBounds, "primitives"))

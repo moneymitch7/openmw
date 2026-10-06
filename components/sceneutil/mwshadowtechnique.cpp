@@ -19,6 +19,8 @@
 
 #include "mwshadowtechnique.hpp"
 
+#include "shadowcasterfilter.hpp"
+
 #include <osgShadow/ShadowedScene>
 #include <osg/CullFace>
 #include <osg/Geometry>
@@ -1247,6 +1249,16 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
     cv.setNearFarRatio(minZNear / maxZFar);
 
     Frustum frustum(&cv, minZNear, maxZFar);
+
+    // Objects smaller than _minimumCasterSize pixels on this view's screen are left out of the shadow maps. An object
+    // of radius r at distance d spans about r / d * P(1,1) * height / 2 pixels.
+    float minCasterSizeRatio = 0.f;
+    if (_minimumCasterSize > 0.f && cv.getViewport() != nullptr && cv.getViewport()->height() > 0.0)
+    {
+        const double focal = (*cv.getProjectionMatrix())(1, 1);
+        if (focal > 0.0)
+            minCasterSizeRatio = static_cast<float>(2.0 * _minimumCasterSize / (focal * cv.getViewport()->height()));
+    }
     if (_customFrustumCallback)
     {
         OSG_INFO << "Calling custom frustum callback" << std::endl;
@@ -1635,7 +1647,10 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 
             cv.pushStateSet(_shadowCastingStateSet.get());
 
-            cullShadowCastingScene(&cv, camera.get());
+            {
+                const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
+                cullShadowCastingScene(&cv, camera.get());
+            }
 
             cv.popStateSet();
 
