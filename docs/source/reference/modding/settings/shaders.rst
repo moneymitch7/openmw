@@ -134,6 +134,7 @@ Shaders Settings
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
    Multiplier for point light radius. Larger values will increase the range of lights.
+   Shown in the menu as Light Reach.
 
 .. omw-setting::
    :title: classic falloff
@@ -163,7 +164,6 @@ Shaders Settings
    :type: float32
    :range: full float range
    :default: 8192
-   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
    Maximum distance at which lights illuminate objects.
    Set to ≤ 0 to disable fading for lights.

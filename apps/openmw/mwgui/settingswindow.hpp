@@ -51,6 +51,7 @@ namespace MWGui
         MyGUI::ComboBox* mMaxLights;
         MyGUI::Button* mClusteredLightingButton;
         MyGUI::Widget* mClassicFalloffWidget;
+        MyGUI::Widget* mMaxLightsWidget;
         MyGUI::Button* mLightsResetButton;
         MyGUI::ComboBox* mClampLightingMode;
 

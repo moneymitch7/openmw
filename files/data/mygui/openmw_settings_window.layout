@@ -771,6 +771,314 @@
                         <Widget type="ScrollView" skin="MW_ScrollView" position_real="0 0 1 1" align="Stretch" name="LightsScroll">
                             <Property key="CanvasAlign" value="Left Top"/>
                         <Widget type="VBox" position="0 0 100 100" align="Left Top" name="LightsBox">
+                            <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
+                                <UserString key="HStretch" value="true"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandBrightText">
+                                <Property key="Caption" value="#{OMWEngine:LightsSectionLamps}"/>
+                            </Widget>
+
+                            <!-- Bounding Sphere Multiplier -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightRadiusMultText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightRadiusMultiplierTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="500000"/>
+                                <Property key="Page" value="1000"/>
+                                <Property key="WheelPage" value="1000"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="1.0"/>
+                                <!-- We limit the max in the UI as larger values can tank performance  -->
+                                <UserString key="SettingMax" value="5.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="light radius multiplier"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="LightRadiusMultText"/>
+                                <UserString key="SettingLabelCaption" value="LightRadiusMultiplierValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:LightRadiusMultiplierDesc}"/>
+                            </Widget>
+
+                            <!-- Light Brightness -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightBrightnessText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightBrightnessTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="276"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.25"/>
+                                <UserString key="SettingMax" value="3.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="light brightness"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="LightBrightnessText"/>
+                                <UserString key="SettingLabelCaption" value="LightBrightnessValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:LightBrightnessDesc}"/>
+                            </Widget>
+
+                            <!-- Light Falloff -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightFalloffText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightFalloffTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="151"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.5"/>
+                                <UserString key="SettingMax" value="2.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="light falloff"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="LightFalloffText"/>
+                                <UserString key="SettingLabelCaption" value="LightFalloffValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:LightFalloffDesc}"/>
+                            </Widget>
+
+                            <!-- Light Bounce -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightBounceText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:LightBounceTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="101"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="1.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="light bounce"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="LightBounceText"/>
+                                <UserString key="SettingLabelCaption" value="LightBounceValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:LightBounceDesc}"/>
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
+                                <UserString key="HStretch" value="true"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandBrightText">
+                                <Property key="Caption" value="#{OMWEngine:LightsSectionDaylight}"/>
+                            </Widget>
+
+                            <!-- SunlightBrightness -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="SunlightBrightnessText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:SunlightBrightnessTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="251"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.5"/>
+                                <UserString key="SettingMax" value="3.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="sunlight brightness"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="SunlightBrightnessText"/>
+                                <UserString key="SettingLabelCaption" value="SunlightBrightnessValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:SunlightBrightnessDesc}"/>
+                            </Widget>
+
+                            <!-- ExteriorAmbient -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="ExteriorAmbientText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ExteriorAmbientTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="201"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="2.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="exterior ambient"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="ExteriorAmbientText"/>
+                                <UserString key="SettingLabelCaption" value="ExteriorAmbientValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:ExteriorAmbientDesc}"/>
+                            </Widget>
+
+                            <!-- Interior Ambient (minimum interior brightness stays as a floor, settings.cfg only) -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="InteriorAmbientText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:InteriorAmbientTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="201"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="2.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="interior ambient"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="InteriorAmbientText"/>
+                                <UserString key="SettingLabelCaption" value="InteriorAmbientValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:InteriorAmbientDesc}"/>
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
+                                <UserString key="HStretch" value="true"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandBrightText">
+                                <Property key="Caption" value="#{OMWEngine:LightsSectionCarried}"/>
+                            </Widget>
+
+                            <!-- HeldLightBrightness -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightBrightnessText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightBrightnessTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="191"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.1"/>
+                                <UserString key="SettingMax" value="2.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="held light brightness"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="HeldLightBrightnessText"/>
+                                <UserString key="SettingLabelCaption" value="HeldLightBrightnessValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:HeldLightBrightnessDesc}"/>
+                            </Widget>
+
+                            <!-- HeldLightReach -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightReachText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightReachTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="251"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.5"/>
+                                <UserString key="SettingMax" value="3.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="held light reach"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="HeldLightReachText"/>
+                                <UserString key="SettingLabelCaption" value="HeldLightReachValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:HeldLightReachDesc}"/>
+                            </Widget>
+
+                            <!-- HeldLightSoftness -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightSoftnessText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightSoftnessTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="101"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="1.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="held light softness"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="HeldLightSoftnessText"/>
+                                <UserString key="SettingLabelCaption" value="HeldLightSoftnessValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:HeldLightSoftnessDesc}"/>
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
+                                <UserString key="HStretch" value="true"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandBrightText">
+                                <Property key="Caption" value="#{OMWEngine:LightsSectionAdvanced}"/>
+                            </Widget>
 
                             <!-- Clustered Lighting -->
                             <Widget type="HBox" align="Stretch">
@@ -876,7 +1184,7 @@
                             </Widget>
 
                            <!-- Max Lights -->
-                            <Widget type="Widget" position="0 0 0 60" align="Top HStretch">
+                            <Widget type="Widget" position="0 0 0 60" align="Top HStretch" name="MaxLightsWidget">
                                 <UserString key="HStretch" value="true"/>
                                 <Widget type="TextBox" skin="NormalText" position="0 4 350 18" align="Left Top" name="MaxLightsText">
                                     <UserString key="ToolTipType" value="Layout"/>
@@ -901,271 +1209,6 @@
                                     <Property key="AddItem" value="56"/>
                                     <Property key="AddItem" value="64"/>
                                 </Widget>
-                            </Widget>
-
-                            <!-- Maximum Light Distance -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="MaxLightDistanceText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:LightsMaximumDistanceTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="8193"/>
-                                <Property key="Page" value="128"/>
-                                <Property key="WheelPage" value="128"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0"/>
-                                <UserString key="SettingMax" value="8192"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="maximum light distance"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="MaxLightDistanceText"/>
-                                <UserString key="SettingLabelCaption" value="LightsMaximumDistanceValue"/>
-                            </Widget>
-
-                            <!-- Bounding Sphere Multiplier -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightRadiusMultText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:LightRadiusMultiplierTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="500000"/>
-                                <Property key="Page" value="1000"/>
-                                <Property key="WheelPage" value="1000"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="1.0"/>
-                                <!-- We limit the max in the UI as larger values can tank performance  -->
-                                <UserString key="SettingMax" value="5.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="light radius multiplier"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="LightRadiusMultText"/>
-                                <UserString key="SettingLabelCaption" value="LightRadiusMultiplierValue"/>
-                            </Widget>
-
-                            <!-- Light Brightness -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightBrightnessText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:LightBrightnessTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="276"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.25"/>
-                                <UserString key="SettingMax" value="3.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="light brightness"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="LightBrightnessText"/>
-                                <UserString key="SettingLabelCaption" value="LightBrightnessValue"/>
-                            </Widget>
-
-                            <!-- Light Falloff -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightFalloffText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:LightFalloffTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="151"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.5"/>
-                                <UserString key="SettingMax" value="2.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="light falloff"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="LightFalloffText"/>
-                                <UserString key="SettingLabelCaption" value="LightFalloffValue"/>
-                            </Widget>
-
-                            <!-- Light Bounce -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="LightBounceText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:LightBounceTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="101"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.0"/>
-                                <UserString key="SettingMax" value="1.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="light bounce"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="LightBounceText"/>
-                                <UserString key="SettingLabelCaption" value="LightBounceValue"/>
-                            </Widget>
-
-                            <!-- SunlightBrightness -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="SunlightBrightnessText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:SunlightBrightnessTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="251"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.5"/>
-                                <UserString key="SettingMax" value="3.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="sunlight brightness"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="SunlightBrightnessText"/>
-                                <UserString key="SettingLabelCaption" value="SunlightBrightnessValue"/>
-                            </Widget>
-
-                            <!-- ExteriorAmbient -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="ExteriorAmbientText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:ExteriorAmbientTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="201"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.0"/>
-                                <UserString key="SettingMax" value="2.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="exterior ambient"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="ExteriorAmbientText"/>
-                                <UserString key="SettingLabelCaption" value="ExteriorAmbientValue"/>
-                            </Widget>
-
-                            <!-- Interior Ambient (minimum interior brightness stays as a floor, settings.cfg only) -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="InteriorAmbientText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:InteriorAmbientTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="201"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.0"/>
-                                <UserString key="SettingMax" value="2.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="interior ambient"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="InteriorAmbientText"/>
-                                <UserString key="SettingLabelCaption" value="InteriorAmbientValue"/>
-                            </Widget>
-
-                            <!-- HeldLightBrightness -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightBrightnessText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightBrightnessTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="191"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.1"/>
-                                <UserString key="SettingMax" value="2.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="held light brightness"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="HeldLightBrightnessText"/>
-                                <UserString key="SettingLabelCaption" value="HeldLightBrightnessValue"/>
-                            </Widget>
-
-                            <!-- HeldLightReach -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightReachText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightReachTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="251"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.5"/>
-                                <UserString key="SettingMax" value="3.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="held light reach"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="HeldLightReachText"/>
-                                <UserString key="SettingLabelCaption" value="HeldLightReachValue"/>
-                            </Widget>
-
-                            <!-- HeldLightSoftness -->
-                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
-                                <UserString key="HStretch" value="true"/>
-                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightSoftnessText">
-                                    <UserString key="ToolTipType" value="Layout"/>
-                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
-                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightSoftnessTooltip}"/>
-                                </Widget>
-                            </Widget>
-                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
-                                <UserString key="HStretch" value="true"/>
-                                <Property key="Range" value="101"/>
-                                <Property key="Page" value="5"/>
-                                <Property key="WheelPage" value="5"/>
-                                <UserString key="SettingType" value="Slider"/>
-                                <UserString key="SettingMin" value="0.0"/>
-                                <UserString key="SettingMax" value="1.0"/>
-                                <UserString key="SettingCategory" value="Shaders"/>
-                                <UserString key="SettingName" value="held light softness"/>
-                                <UserString key="SettingValueType" value="Float"/>
-                                <UserString key="SettingLabelWidget" value="HeldLightSoftnessText"/>
-                                <UserString key="SettingLabelCaption" value="HeldLightSoftnessValue"/>
                             </Widget>
 
                             <Widget type="Widget" position="0 0 0 2" align="Top HStretch">

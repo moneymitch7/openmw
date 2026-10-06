@@ -321,6 +321,7 @@ namespace MWGui
         getWidget(mScriptAdapter, "ScriptAdapter");
         getWidget(mScriptDisabled, "ScriptDisabled");
         getWidget(mClassicFalloffWidget, "ClassicFalloffWidget");
+        getWidget(mMaxLightsWidget, "MaxLightsWidget");
         getWidget(mClampLightingMode, "ClampLightingMode");
         getWidget(mActorShadowsButton, "ActorShadowsButton");
         getWidget(mPlayerShadowsButton, "PlayerShadowsButton");
@@ -1003,7 +1004,14 @@ namespace MWGui
 
         const bool isClustered = Settings::shaders().mClusteredLighting;
 
-        mClassicFalloffWidget->setVisible(!isClustered);
+        // Classic falloff and the per-object light limit only apply without clustered lighting. Hidden rows take no
+        // space on the page.
+        for (MyGUI::Widget* widget : { mClassicFalloffWidget, mMaxLightsWidget })
+        {
+            widget->setVisible(!isClustered);
+            widget->setUserString("Hidden", isClustered ? "true" : "false");
+        }
+        layoutLightsBox();
     }
 
     void SettingsWindow::updateWindowModeSettings()
