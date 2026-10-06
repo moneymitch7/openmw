@@ -371,7 +371,7 @@ namespace
         unsigned int mLastFrame = 0;
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
-        std::array<Column, 31> mColumns{ {
+        std::array<Column, 33> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
             { "luasync", "luasyncupdate_time_taken" },
@@ -401,6 +401,8 @@ namespace
             { "terrain chunks", "Terrain Chunk Count", false, 1.0 },
             { "terrain textures", "Terrain Texture Count", false, 1.0 },
             { "object chunks", "Object Chunk Count", false, 1.0 },
+            { "auto lod meshes", "Object Chunk LOD Meshes", false, 1.0 },
+            { "auto lod triangles kept %", "Object Chunk LOD Triangles Kept", false, 1.0 },
             { "groundcover chunks", "Groundcover Chunk Count", false, 1.0 },
             { "preloaded cells", "CellPreloader Count", false, 1.0 },
             { "unref queue", "UnrefQueue", false, 1.0 },

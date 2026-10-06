@@ -5,7 +5,12 @@
 #include <components/resource/resourcemanager.hpp>
 #include <components/terrain/quadtreeworld.hpp>
 
+#include <atomic>
+#include <map>
 #include <mutex>
+#include <string>
+
+#include <osg/observer_ptr>
 
 namespace Resource
 {
@@ -102,6 +107,27 @@ namespace MWRender
         typedef std::pair<std::string, unsigned char> LODNameCacheKey; // Key: mesh name, lod level
         using LODNameCache = std::map<LODNameCacheKey, VFS::Path::Normalized>; // Cache: key, mesh name to use
         LODNameCache mLODNameCache;
+
+        // OpenMGE XE automatic LOD: simplified copies of the models in distant chunks, per model and detail level.
+        // An entry is valid while its source template is the one the scene manager hands out.
+        struct AutoLodEntry
+        {
+            osg::observer_ptr<osg::Node> mSource;
+            osg::ref_ptr<const osg::Node> mLod; // nullptr: the model can't be simplified usefully at this level
+            unsigned int mTrianglesBefore = 0;
+            unsigned int mTrianglesAfter = 0;
+        };
+        using AutoLodKey = std::pair<std::string, int>; // Key: mesh name, detail level
+        std::mutex mAutoLodMutex;
+        std::map<AutoLodKey, AutoLodEntry> mAutoLodCache;
+        unsigned int mAutoLodInsertions = 0;
+        std::atomic<unsigned int> mAutoLodMeshes{ 0 };
+        std::atomic<unsigned long long> mAutoLodTrianglesBefore{ 0 };
+        std::atomic<unsigned long long> mAutoLodTrianglesAfter{ 0 };
+
+        osg::ref_ptr<const osg::Node> getAutoLod(
+            const VFS::Path::Normalized& model, const osg::Node& source, int level);
+        void eraseAutoLodEntry(std::map<AutoLodKey, AutoLodEntry>::iterator it);
     };
 
     struct RefnumMarker

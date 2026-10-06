@@ -201,6 +201,31 @@ Terrain Settings
    See the formula above to figure out the math.
 
 .. omw-setting::
+   :title: object paging auto lod
+   :type: boolean
+   :range: true, false
+   :default: true
+
+   When object paging builds a chunk for distant (non active grid) cells, the meshes in it are simplified
+   automatically: triangles are collapsed as long as no surface moves by more than
+   'object paging lod pixel error' pixels at the nearest distance the chunk is drawn from.
+   Larger chunks are only drawn from further away, so they are simplified more.
+   Open mesh borders and texture seams are kept, so modular pieces stay joined.
+   Models for which the game data provides a ``_dist`` mesh use that mesh instead.
+   Skinned, morphed and animated meshes are never simplified.
+   Simplified meshes are made once per model and detail level, in the background thread building the chunk.
+
+.. omw-setting::
+   :title: object paging lod pixel error
+   :type: float32
+   :range: 0 to 16
+   :default: 1.0
+
+   How far, in pixels on screen, a simplified surface may be from the original one.
+   Higher values remove more triangles and can make distant silhouettes visibly coarser.
+   0 disables automatic LOD.
+
+.. omw-setting::
    :title: water culling
    :type: boolean
    :range: true, false
