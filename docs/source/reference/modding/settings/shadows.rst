@@ -126,6 +126,7 @@ Shadows Settings
    :type: float32
    :range: 0.0-32.0
    :default: 3.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Shadows`
 
    Objects (items, clutter and other loose objects) that look smaller than this many pixels from the camera
    are left out of the shadow maps. Their shadows would be a pixel or two, but each one still costs culling,

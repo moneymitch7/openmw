@@ -1415,6 +1415,33 @@
                                 <UserString key="SettingLabelWidget" value="ShadowsMaxDistanceText"/>
                                 <UserString key="SettingLabelCaption" value="ShadowsMaxDistanceValue"/>
                             </Widget>
+
+                            <!-- ShadowsMinCasterSize -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="ShadowsMinCasterSizeText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ShadowsMinCasterSizeTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="13"/>
+                                <Property key="Page" value="1"/>
+                                <Property key="WheelPage" value="1"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0"/>
+                                <UserString key="SettingMax" value="12"/>
+                                <UserString key="SettingCategory" value="Shadows"/>
+                                <UserString key="SettingName" value="minimum caster size"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="ShadowsMinCasterSizeText"/>
+                                <UserString key="SettingLabelCaption" value="ShadowsMinCasterSizeValue"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:ShadowsMinCasterSizeDesc}"/>
+                            </Widget>
                         </Widget>
                     </Widget>
                 </Widget>

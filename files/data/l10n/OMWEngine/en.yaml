@@ -344,6 +344,9 @@ ShadowMapResolution: "Shadow Map Resolution"
 ShadowMapResolutionTooltip: "The resolution of each individual shadow map. Increasing it significantly improves shadow quality but may have a minor performance impact."
 ShadowsMaxDistanceValue: "Shadow Distance Limit ({value, number, :: group-off})"
 ShadowsMaxDistanceTooltip: "The distance from the camera at which shadows completely disappear. Set to 0 to disable."
+ShadowsMinCasterSizeValue: "Skip Tiny Shadows ({value, number, :: group-off} px)"
+ShadowsMinCasterSizeTooltip: "Default: 3\nObjects smaller than this many pixels on screen do not cast shadows. Shadows are drawn several times per frame, so leaving out small or distant clutter saves a lot of work. 0 turns this off; higher values save more but small items like bottles and plants may lose their shadows."
+ShadowsMinCasterSizeDesc: "Small, far objects skip casting shadows. Higher is faster."
 
 # Controller button names
 
