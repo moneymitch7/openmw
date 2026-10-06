@@ -273,6 +273,7 @@ namespace LuaUtil
             VFS::Path::Normalized mPath;
             ScriptStats mStats;
             int64_t mStatsFrame = 0; // frame mStats was last brought up to date
+            int64_t mLastSlowCallLog = 0; // steady clock seconds of the last "slow call" log line, to space them out
 
             ~Script();
         };

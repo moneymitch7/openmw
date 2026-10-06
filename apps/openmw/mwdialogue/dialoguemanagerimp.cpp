@@ -1,6 +1,8 @@
 #include "dialoguemanagerimp.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <iomanip>
 #include <list>
 #include <optional>
 #include <sstream>
@@ -54,6 +56,49 @@
 
 namespace MWDialogue
 {
+    // Writes a dialogue step to the log when it takes long enough to be felt as a hitch, with the part of it spent
+    // finding the actor's answers on topics and running result scripts.
+    class DialogueManager::SlowStepLog
+    {
+    public:
+        SlowStepLog(DialogueManager& manager, std::string_view step, const MWWorld::Ptr& actor)
+            : mManager(manager)
+            , mStep(step)
+            , mActor(actor)
+            , mStart(std::chrono::steady_clock::now())
+            , mTopicSeconds(manager.mTopicCheckSeconds)
+            , mScriptSeconds(manager.mScriptSeconds)
+            , mTopics(manager.mTopicsChecked)
+        {
+        }
+
+        ~SlowStepLog()
+        {
+            constexpr double threshold = 0.004;
+            const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - mStart).count();
+            if (seconds < threshold || mActor.isEmpty())
+                return;
+            Log(Debug::Info) << "Slow dialogue: " << mStep << " with " << mActor.getCellRef().getRefId()
+                             << " took " << std::fixed << std::setprecision(1) << seconds * 1000.0
+                             << " ms (finding answers on topics "
+                             << (mManager.mTopicCheckSeconds - mTopicSeconds) * 1000.0 << " ms for "
+                             << mManager.mTopicsChecked - mTopics << " topics, result scripts "
+                             << (mManager.mScriptSeconds - mScriptSeconds) * 1000.0 << " ms)";
+        }
+
+        SlowStepLog(const SlowStepLog&) = delete;
+        SlowStepLog& operator=(const SlowStepLog&) = delete;
+
+    private:
+        DialogueManager& mManager;
+        const std::string_view mStep;
+        const MWWorld::Ptr mActor;
+        const std::chrono::steady_clock::time_point mStart;
+        const double mTopicSeconds;
+        const double mScriptSeconds;
+        const std::size_t mTopics;
+    };
+
     DialogueManager::DialogueManager(
         const Compiler::Extensions& extensions, Translation::Storage& translationDataStorage)
         : mTranslationDataStorage(translationDataStorage)
@@ -120,7 +165,7 @@ namespace MWDialogue
 
         for (const auto& topicId : parseTopicIdsFromText(text))
         {
-            if (mActorKnownTopics.count(topicId))
+            if (findActorKnownTopic(topicId) != nullptr)
                 mKnownTopics.insert(topicId);
         }
     }
@@ -141,6 +186,8 @@ namespace MWDialogue
 
     bool DialogueManager::startDialogue(const MWWorld::Ptr& actor, ResponseCallback* callback)
     {
+        SlowStepLog slowLog(*this, "greeting", actor);
+
         updateGlobals();
 
         // Dialogue with dead actor (e.g. through script) should not be allowed.
@@ -161,6 +208,7 @@ namespace MWDialogue
         mTalkedTo = creatureStats.hasTalkedToPlayer();
 
         mActorKnownTopics.clear();
+        mActorTopicsChecked.clear();
 
         // greeting
         const MWWorld::Store<ESM::Dialogue>& dialogs = MWBase::Environment::get().getESMStore()->get<ESM::Dialogue>();
@@ -252,6 +300,14 @@ namespace MWDialogue
 
     void DialogueManager::executeScript(const std::string& script, const MWWorld::Ptr& actor)
     {
+        const auto start = std::chrono::steady_clock::now();
+        struct AddTime
+        {
+            double& mSeconds;
+            std::chrono::steady_clock::time_point mStart;
+            ~AddTime() { mSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - mStart).count(); }
+        } addTime{ mScriptSeconds, start };
+
         if (const std::optional<Interpreter::Program> program = compile(script, actor))
         {
             try
@@ -346,57 +402,75 @@ namespace MWDialogue
         updateGlobals();
 
         mActorKnownTopics.clear();
+        mActorTopicsChecked.clear();
 
-        const auto& dialogs = MWBase::Environment::get().getESMStore()->get<ESM::Dialogue>();
-
-        Filter filter(mActor, -1, mTalkedTo);
-
-        for (const auto& dialog : dialogs)
-        {
-            if (dialog.mType == ESM::Dialogue::Topic)
-            {
-                const auto* answer = filter.search(dialog, true).second;
-                const auto& topicId = dialog.mId;
-
-                if (answer != nullptr)
-                {
-                    int topicFlags = 0;
-                    if (!inJournal(topicId, answer->mId))
-                    {
-                        // Does this dialogue contains some actor-specific answer?
-                        if (answer->mActor == mActor.getCellRef().getRefId())
-                            topicFlags |= MWBase::DialogueManager::TopicType::Specific;
-                    }
-                    else
-                        topicFlags |= MWBase::DialogueManager::TopicType::Exhausted;
-                    mActorKnownTopics.insert(std::make_pair(dialog.mId, ActorKnownTopicInfo{ topicFlags, answer }));
-                }
-            }
-        }
+        // The player's topics are the ones listed; any other topic is checked when a response names it. Checking every
+        // topic in the game instead took tens of milliseconds with a large load order, on every line of dialogue.
+        for (const ESM::RefId& topicId : mKnownTopics)
+            findActorKnownTopic(topicId);
 
         // If response to a topic leads to a new topic, the original topic is not exhausted.
-
+        // If the topic is not marked as exhausted, we don't need to do anything about it.
+        // If the topic will not be shown to the player, the flag actually does not matter.
+        std::vector<ActorKnownTopicInfo*> exhausted;
         for (auto& [dialogId, topicInfo] : mActorKnownTopics)
         {
-            // If the topic is not marked as exhausted, we don't need to do anything about it.
-            // If the topic will not be shown to the player, the flag actually does not matter.
+            if ((topicInfo.mFlags & MWBase::DialogueManager::TopicType::Exhausted) && mKnownTopics.count(dialogId))
+                exhausted.push_back(&topicInfo);
+        }
 
-            if (!(topicInfo.mFlags & MWBase::DialogueManager::TopicType::Exhausted) || !mKnownTopics.count(dialogId))
-                continue;
-
-            for (const auto& topicId : parseTopicIdsFromText(topicInfo.mInfo->mResponse))
+        for (ActorKnownTopicInfo* topicInfo : exhausted)
+        {
+            for (const auto& topicId : parseTopicIdsFromText(topicInfo->mInfo->mResponse))
             {
-                if (mActorKnownTopics.count(topicId) && !mKnownTopics.count(topicId))
+                if (!mKnownTopics.count(topicId) && findActorKnownTopic(topicId) != nullptr)
                 {
-                    topicInfo.mFlags &= ~MWBase::DialogueManager::TopicType::Exhausted;
+                    topicInfo->mFlags &= ~MWBase::DialogueManager::TopicType::Exhausted;
                     break;
                 }
             }
         }
     }
 
+    const DialogueManager::ActorKnownTopicInfo* DialogueManager::findActorKnownTopic(const ESM::RefId& topicId)
+    {
+        if (const auto known = mActorKnownTopics.find(topicId); known != mActorKnownTopics.end())
+            return &known->second;
+        if (!mActorTopicsChecked.insert(topicId).second)
+            return nullptr;
+
+        const ESM::Dialogue* dialog = searchDialogue(topicId);
+        if (dialog == nullptr || dialog->mType != ESM::Dialogue::Topic)
+            return nullptr;
+
+        const auto start = std::chrono::steady_clock::now();
+        ++mTopicsChecked;
+
+        Filter filter(mActor, -1, mTalkedTo);
+        const ESM::DialInfo* answer = filter.search(*dialog, true).second;
+
+        const ActorKnownTopicInfo* result = nullptr;
+        if (answer != nullptr)
+        {
+            int topicFlags = 0;
+            if (!inJournal(topicId, answer->mId))
+            {
+                // Does this dialogue contains some actor-specific answer?
+                if (answer->mActor == mActor.getCellRef().getRefId())
+                    topicFlags |= MWBase::DialogueManager::TopicType::Specific;
+            }
+            else
+                topicFlags |= MWBase::DialogueManager::TopicType::Exhausted;
+            result = &mActorKnownTopics.emplace(topicId, ActorKnownTopicInfo{ topicFlags, answer }).first->second;
+        }
+
+        mTopicCheckSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        return result;
+    }
+
     std::list<std::string> DialogueManager::getAvailableTopics()
     {
+        SlowStepLog slowLog(*this, "topic list", mActor);
         updateActorKnownTopics();
 
         std::list<std::string> keywordList;
@@ -423,6 +497,7 @@ namespace MWDialogue
 
     void DialogueManager::keywordSelected(std::string_view keyword, ResponseCallback* callback)
     {
+        SlowStepLog slowLog(*this, "topic", mActor);
         if (!mIsInChoice)
         {
             const ESM::Dialogue* dialogue = searchDialogue(ESM::RefId::stringRefId(keyword));
@@ -463,6 +538,7 @@ namespace MWDialogue
 
     void DialogueManager::questionAnswered(int answer, ResponseCallback* callback)
     {
+        SlowStepLog slowLog(*this, "answer", mActor);
         mChoice = answer;
 
         const ESM::Dialogue* dialogue = searchDialogue(mLastTopic);

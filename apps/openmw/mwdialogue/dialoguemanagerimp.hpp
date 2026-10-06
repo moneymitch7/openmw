@@ -40,7 +40,17 @@ namespace MWDialogue
         typedef std::map<ESM::RefId, std::map<ESM::RefId, int>> ModFactionReactionMap;
         ModFactionReactionMap mChangedFactionReaction;
 
+        // The actor's answer on each topic, worked out on first use after updateActorKnownTopics
+        // (findActorKnownTopic): only the topics the player knows and the ones named in responses are ever asked about,
+        // a small part of every topic in a big load order. mActorTopicsChecked also holds the ones without an answer.
         std::map<ESM::RefId, ActorKnownTopicInfo> mActorKnownTopics;
+        std::set<ESM::RefId> mActorTopicsChecked;
+
+        // For the slow dialogue log: time spent finding the actor's answers and running result scripts, and how many
+        // topics were checked.
+        double mTopicCheckSeconds = 0.0;
+        double mScriptSeconds = 0.0;
+        std::size_t mTopicsChecked = 0;
 
         Translation::Storage& mTranslationDataStorage;
         mutable bool mKeywordSearchInitialized{ false };
@@ -68,7 +78,10 @@ namespace MWDialogue
         void addTopicsFromText(const std::string& text);
 
         void updateActorKnownTopics();
+        const ActorKnownTopicInfo* findActorKnownTopic(const ESM::RefId& topicId);
         void updateGlobals();
+
+        class SlowStepLog;
 
         std::optional<Interpreter::Program> compile(const std::string& cmd, const MWWorld::Ptr& actor);
 

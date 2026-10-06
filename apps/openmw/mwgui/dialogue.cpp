@@ -1,5 +1,7 @@
 #include "dialogue.hpp"
 
+#include <chrono>
+
 #include <MyGUI_Button.h>
 #include <MyGUI_LanguageManager.h>
 #include <MyGUI_ProgressBar.h>
@@ -475,6 +477,22 @@ namespace MWGui
             Log(Debug::Warning) << "Warning: can not talk with non-actor object.";
             return;
         }
+
+        // Slow dialogue log: the whole of opening the window, greeting, topic list and window layout included (the
+        // dialogue manager logs its own parts).
+        struct LogIfSlow
+        {
+            MWWorld::Ptr mActor;
+            std::chrono::steady_clock::time_point mStart = std::chrono::steady_clock::now();
+            ~LogIfSlow()
+            {
+                const double ms
+                    = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mStart).count();
+                if (ms >= 8.0)
+                    Log(Debug::Info) << "Slow dialogue: opening the window with " << mActor.getCellRef().getRefId()
+                                     << " took " << static_cast<int>(ms + 0.5) << " ms";
+            }
+        } logIfSlow{ actor };
 
         bool sameActor = (mPtr == actor);
         if (!sameActor)

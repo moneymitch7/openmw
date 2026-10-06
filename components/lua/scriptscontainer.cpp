@@ -1,5 +1,6 @@
 #include "scriptscontainer.hpp"
 
+#include <chrono>
 #include <cmath>
 
 #include "scripttracker.hpp"
@@ -845,6 +846,22 @@ namespace LuaUtil
                 Script& script = it->second;
                 bringStatsUpToDate(script);
                 script.mStats.mAvgTimeUs += microseconds * instructionCountAvgCoef;
+
+                // A single call long enough to be felt as a hitch (a quarter of a 60 fps frame), named in the log at
+                // most every 2 seconds per script, so one-off stutters can be traced to the script behind them.
+                constexpr float slowCallUs = 4000.f;
+                if (microseconds >= slowCallUs)
+                {
+                    const int64_t now = std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                            .count();
+                    if (now - script.mLastSlowCallLog >= 2)
+                    {
+                        script.mLastSlowCallLog = now;
+                        Log(Debug::Info) << "Slow Lua call: " << mNamePrefix << "[" << scriptPath(scriptId) << "] took "
+                                         << static_cast<int>(microseconds / 1000.f + 0.5f) << " ms in one call";
+                    }
+                }
             }
         }
     }
