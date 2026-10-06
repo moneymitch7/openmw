@@ -1,5 +1,7 @@
 #include "worker.hpp"
 
+#include <chrono>
+
 #include "luamanagerimp.hpp"
 
 #include "apps/openmw/profile.hpp"
@@ -76,9 +78,15 @@ namespace MWLua
     {
         if (!mThread)
             return;
+        const auto start = std::chrono::steady_clock::now();
         std::unique_lock<std::mutex> lk(mMutex);
         mGcRequest = false;
         mCV.wait(lk, [&] { return !mGcInProgress; });
+        lk.unlock();
+        // OpenMGE XE: the frame had to wait for a garbage collection step still running
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        if (ms >= 10.0)
+            Log(Debug::Info) << "Frame waited " << static_cast<int>(ms) << " ms for Lua garbage collection";
     }
 
     void Worker::join()

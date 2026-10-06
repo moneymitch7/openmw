@@ -363,7 +363,15 @@ namespace MWLua
 
     bool LuaManager::gcStep(int steps)
     {
-        return lua_gc(mLua.unsafeState(), LUA_GCSTEP, steps) == 1;
+        // OpenMGE XE: a step that runs long (LuaJIT's atomic phase cannot be split, and grows with the heap) holds
+        // up the next frame's Lua update; name it so such hitches are not blamed on scripts.
+        const auto start = std::chrono::steady_clock::now();
+        const bool finished = lua_gc(mLua.unsafeState(), LUA_GCSTEP, steps) == 1;
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        if (ms >= 20.0)
+            Log(Debug::Info) << "Slow Lua garbage collection step: " << static_cast<int>(ms) << " ms (Lua memory "
+                             << lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0) / 1024 << " MB)";
+        return finished;
     }
 
     void LuaManager::objectTeleported(const MWWorld::Ptr& ptr)
@@ -1274,6 +1282,26 @@ namespace MWLua
                 out << separator << "specific objects";
             out << ")\n";
         }
+
+        // OpenMGE XE: who holds the Lua memory. A large heap makes every garbage collection cycle longer, and its
+        // last (atomic) step cannot be split up, so the scripts holding most of it are the ones to slim down.
+        std::vector<std::pair<uint64_t, std::size_t>> memory;
+        uint64_t attributed = 0;
+        for (std::size_t i = 0; i < mConfiguration.size(); ++i)
+        {
+            const uint64_t bytes = mLua.getMemoryUsageByScriptIndex(static_cast<unsigned>(i));
+            attributed += bytes;
+            if (bytes >= 1024 * 1024)
+                memory.emplace_back(bytes, i);
+        }
+        std::sort(memory.begin(), memory.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+        out << "\nLua memory by script, largest first (allocations of more than "
+            << Settings::lua().mSmallAllocMaxSize.get() << " bytes; smaller ones are not counted per script):\n";
+        for (std::size_t n = 0; n < memory.size() && n < 25; ++n)
+            out << std::setw(10) << static_cast<double>(memory[n].first) / (1024 * 1024) << " MB  "
+                << mConfiguration[memory[n].second].mScriptPath.value() << "\n";
+        out << std::setw(10) << static_cast<double>(attributed) / (1024 * 1024) << " MB  counted per script, "
+            << static_cast<double>(mLua.getSmallAllocMemoryUsage()) / (1024 * 1024) << " MB in smaller allocations\n";
     }
 
     std::string LuaManager::formatResourceUsageStats() const
