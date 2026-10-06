@@ -250,8 +250,8 @@ Shaders Settings
    :default: 1.0
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
-   Scales the strength of the light the player carries (a torch or lantern).
-   Other actors' lights and lights placed in the world are left alone.
+   Scales the strength of the lights characters carry (torches and lanterns: the player's, guards' and others').
+   Lights placed in the world are left alone.
 
 .. omw-setting::
    :title: held light reach
@@ -260,7 +260,7 @@ Shaders Settings
    :default: 1.0
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
-   Scales how far the light the player carries reaches before it ends,
+   Scales how far the lights characters carry reach before they end,
    without changing how bright it is at a given distance.
 
 .. omw-setting::
@@ -270,7 +270,7 @@ Shaders Settings
    :default: 0.0
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
-   Flattens the light the player carries: dims the bright spot right around the light and brightens it further out,
+   Flattens the lights characters carry: dims the bright spot right around the light and brightens it further out,
    keeping it the same at the distance where it reaches its full colour
    (a third of its radius with the usual attenuation settings).
    At 1.0 the brightest point is capped at about 4/3 of the full colour.

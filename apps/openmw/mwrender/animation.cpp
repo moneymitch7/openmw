@@ -56,7 +56,6 @@
 #include "../mwworld/containerstore.hpp"
 #include "../mwworld/esmstore.hpp"
 
-#include "../mwmechanics/actorutil.hpp"
 #include "../mwmechanics/character.hpp" // FIXME: for MWMechanics::Priority
 #include "../mwmechanics/weapontype.hpp"
 
@@ -1697,11 +1696,11 @@ namespace MWRender
 
     namespace
     {
-        // The held light settings, for the light the player carries; other actors' lights are left as they are.
+        // The held light settings, for the lights actors carry (the player's torch, guards' torches, ...); lights
+        // placed in the world are left as they are.
         SceneUtil::LightTuning getCarriedLightTuning(const MWWorld::Ptr& ptr)
         {
-            // (lights placed in the world aren't actors, and may be set up before the player is)
-            if (!ptr.getClass().isActor() || ptr != MWMechanics::getPlayer())
+            if (!ptr.getClass().isActor())
                 return {};
             SceneUtil::LightTuning tuning;
             tuning.mBrightness = Settings::shaders().mHeldLightBrightness;

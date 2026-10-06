@@ -345,7 +345,7 @@ namespace MWRender
         /// 0 = Inactive, 1 = Active in place, 2 = Active
         void setActive(int active);
 
-        /// Applies the held light settings to the light this actor carries again, if it is the player's.
+        /// Applies the held light settings again to the light this actor carries.
         void retuneExtraLight();
 
         osg::Group* getOrCreateObjectRoot();

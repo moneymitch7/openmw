@@ -239,6 +239,12 @@ namespace MWRender
             iter->second->updatePtr(cur);
     }
 
+    void Objects::retuneCarriedLights()
+    {
+        for (const auto& [ref, animation] : mObjects)
+            animation->retuneExtraLight();
+    }
+
     Animation* Objects::getAnimation(const MWWorld::Ptr& ptr)
     {
         PtrAnimationMap::const_iterator iter = mObjects.find(ptr.mRef);

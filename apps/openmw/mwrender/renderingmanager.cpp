@@ -1650,6 +1650,7 @@ namespace MWRender
             {
                 if (mPlayerAnimation)
                     mPlayerAnimation->retuneExtraLight();
+                mObjects->retuneCarriedLights();
             }
             else if (it->first == "Shaders"
                 && (it->second == "minimum interior brightness" || it->second == "interior ambient"))
