@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <string>
 #include <vector>
 
 #include <components/esm/exteriorcelllocation.hpp>
@@ -116,6 +117,12 @@ namespace MWWorld
 
         void insertCell(CellStore& cell, Loading::Listener* loadingListener,
             const DetourNavigator::UpdateGuard* navigatorUpdateGuard);
+
+        // OpenMGE XE: where a cell grid change spends its time, for the log when it stalls a frame. Set by
+        // changeCellGrid while it runs; loadCell and insertCell add their parts.
+        std::string* mCellChangeReport = nullptr;
+        double mInsertRenderMs = 0;
+        double mInsertPhysicsMs = 0;
 
         osg::Vec2i mCurrentGridCenter;
 

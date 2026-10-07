@@ -433,6 +433,7 @@ namespace MWWorld
         mActiveCells.insert(&cell);
 
         Log(Debug::Info) << "Loading cell " << cell.getCell()->getDescription();
+        const auto loadStart = std::chrono::steady_clock::now();
 
         const int cellX = cell.getCell()->getGridX();
         const int cellY = cell.getCell()->getGridY();
@@ -528,6 +529,16 @@ namespace MWWorld
             mRendering.configureAmbient(cellVariant);
 
         mPreloader->notifyLoaded(&cell);
+
+        if (mCellChangeReport != nullptr)
+        {
+            const double totalMs
+                = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count();
+            *mCellChangeReport += "; " + std::string(cell.getCell()->getDescription()) + " "
+                + std::to_string(static_cast<int>(totalMs)) + " ms (" + std::to_string(cell.count())
+                + " objects: scene graph " + std::to_string(static_cast<int>(mInsertRenderMs)) + " ms, physics "
+                + std::to_string(static_cast<int>(mInsertPhysicsMs)) + " ms)";
+        }
     }
 
     void Scene::clear()
@@ -621,6 +632,14 @@ namespace MWWorld
         const int playerCellX = playerCellIndex.mX;
         const int playerCellY = playerCellIndex.mY;
 
+        // OpenMGE XE: log the parts of a grid change that stalls the game (crossing into a busy town).
+        using Clock = std::chrono::steady_clock;
+        const auto msSince = [](Clock::time_point since) {
+            return static_cast<int>(std::chrono::duration<double, std::milli>(Clock::now() - since).count());
+        };
+        const auto changeStart = Clock::now();
+        std::string report;
+
         for (auto iter = mActiveCells.begin(); iter != mActiveCells.end();)
         {
             auto* cell = *iter++;
@@ -640,7 +659,9 @@ namespace MWWorld
             .mHalfSize = halfGridSize,
         };
 
+        const int unloadMs = msSince(changeStart);
         mNavigator.updateBounds(playerCellIndex.mWorldspace, cellGridBounds, pos, navigatorUpdateGuard.get());
+        const auto terrainStart = Clock::now();
 
         mHalfGridSize = halfGridSize;
         mCurrentGridCenter = osg::Vec2i(playerCellX, playerCellY);
@@ -655,10 +676,13 @@ namespace MWWorld
             mPreloader->abortTerrainPreloadExcept(nullptr);
         if (!mPreloader->isTerrainLoaded(PositionCellGrid{ pos, newGrid }, mRendering.getReferenceTime()))
             preloadTerrain(pos, playerCellIndex.mWorldspace, true);
+        const int terrainMs = msSince(terrainStart);
+        const auto pagingStart = Clock::now();
         mPagedRefs.clear();
         mRendering.getPagedRefnums(newGrid, mPagedRefs);
 
         addPostponedPhysicsObjects();
+        const int pagingMs = msSince(pagingStart);
 
         std::size_t refsToLoad = 0;
         std::vector<std::pair<int, int>> cellsPositionsToLoad;
@@ -677,6 +701,7 @@ namespace MWWorld
 
         sortCellsToLoad(playerCellX, playerCellY, cellsPositionsToLoad);
 
+        mCellChangeReport = &report;
         for (const auto& [x, y] : cellsPositionsToLoad)
         {
             ESM::ExteriorCellLocation indexToLoad = { x, y, playerCellIndex.mWorldspace };
@@ -687,9 +712,19 @@ namespace MWWorld
             }
         }
 
+        mCellChangeReport = nullptr;
+
+        const auto navigatorStart = Clock::now();
         mNavigator.update(pos, navigatorUpdateGuard.get());
 
         navigatorUpdateGuard.reset();
+        const int navigatorMs = msSince(navigatorStart);
+
+        const int totalMs = msSince(changeStart);
+        if (totalMs >= 100)
+            Log(Debug::Warning) << "Slow cell change: " << totalMs << " ms (unloading " << unloadMs << " ms, terrain "
+                                << terrainMs << " ms, paged objects " << pagingMs << " ms, navigator " << navigatorMs
+                                << " ms" << report << ")";
 
         CellStore& current = mWorld.getWorldModel().getExterior(playerCellIndex);
         MWBase::Environment::get().getWindowManager()->changeCell(&current);
@@ -1032,11 +1067,16 @@ namespace MWWorld
         const bool isInterior = !cell.isExterior();
         InsertVisitor insertVisitor(cell, loadingListener);
         cell.forEach(insertVisitor);
+        const auto start = std::chrono::steady_clock::now();
         insertVisitor.insert(
             [&](const MWWorld::Ptr& ptr) { addObject(ptr, mWorld, mPagedRefs, *mPhysics, mRendering); });
+        const auto rendered = std::chrono::steady_clock::now();
         insertVisitor.insert([&](const MWWorld::Ptr& ptr) {
             addObject(ptr, mWorld, *mPhysics, mLowestPoint, isInterior, mNavigator, navigatorUpdateGuard);
         });
+        const auto end = std::chrono::steady_clock::now();
+        mInsertRenderMs = std::chrono::duration<double, std::milli>(rendered - start).count();
+        mInsertPhysicsMs = std::chrono::duration<double, std::milli>(end - rendered).count();
     }
 
     void Scene::addObjectToScene(const Ptr& ptr)
