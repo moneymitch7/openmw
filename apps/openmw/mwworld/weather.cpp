@@ -980,8 +980,10 @@ namespace MWWorld
 
         mRendering.getSkyManager()->setGlareTimeOfDayFade(glareFade);
 
-        mRendering.getSkyManager()->setMasserState(mMasser.calculateState(time));
-        mRendering.getSkyManager()->setSecundaState(mSecunda.calculateState(time));
+        const MWRender::MoonState masserState = mMasser.calculateState(time);
+        const MWRender::MoonState secundaState = mSecunda.calculateState(time);
+        mRendering.getSkyManager()->setMasserState(masserState);
+        mRendering.getSkyManager()->setSecundaState(secundaState);
 
         mRendering.configureFog(
             mResult.mFogDepth, underwaterFog, mResult.mDLFogFactor, mResult.mDLFogOffset / 100.0f, mResult.mFogColor);
@@ -994,7 +996,24 @@ namespace MWWorld
         ambient.g() *= exteriorAmbient;
         ambient.b() *= exteriorAmbient;
         osg::Vec4f sun = mResult.mSunColor;
-        const float sunlight = Settings::shaders().mSunlightBrightness;
+        float sunlight = Settings::shaders().mSunlightBrightness;
+        // [Shaders] moonlight brightness: at night the "sun" is the moonlight. Blended in over the hour before
+        // nightfall and out over the hour after sunrise, as the weather's own sun colour turns.
+        {
+            const float hour = time.getHour();
+            const float night = hour >= 12.f
+                ? std::clamp(hour - (mTimeSettings.mNightStart - 1.f), 0.f, 1.f)
+                : std::clamp((mSunriseTime + 1.f) - hour, 0.f, 1.f);
+            float moonlight = Settings::shaders().mMoonlightBrightness;
+            if (Settings::shaders().mMoonlightFollowsMoonPhases)
+            {
+                // 40% under two new moons, full when either moon is full.
+                const unsigned int fullest = std::max(MWRender::MoonState::phaseToInt(masserState.mPhase),
+                    MWRender::MoonState::phaseToInt(secundaState.mPhase));
+                moonlight *= 0.4f + 0.6f * static_cast<float>(fullest) / 4.f;
+            }
+            sunlight *= 1.f + (moonlight - 1.f) * night;
+        }
         sun.r() *= sunlight;
         sun.g() *= sunlight;
         sun.b() *= sunlight;

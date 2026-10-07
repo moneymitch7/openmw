@@ -247,6 +247,45 @@ Shaders Settings
    The rest of the light's reach is unchanged.
 
 .. omw-setting::
+   :title: separate outdoor lights
+   :type: boolean
+   :range: true, false
+   :default: false
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Lamps outside use :ref:`outdoor light radius multiplier`, :ref:`outdoor light brightness` and
+   :ref:`outdoor light bounce` in place of the usual three, so streets and interiors can each be tuned without
+   switching settings back and forth. Outside means wherever the sky is drawn (exteriors and quasi-exteriors).
+   :ref:`light falloff` and :ref:`light hotspot softening` are shared.
+
+.. omw-setting::
+   :title: outdoor light radius multiplier
+   :type: float32
+   :range: 1.0-100.0
+   :default: 1.75
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   :ref:`light radius multiplier` for lamps outside, while :ref:`separate outdoor lights` is on.
+
+.. omw-setting::
+   :title: outdoor light brightness
+   :type: float32
+   :range: 0.1-4.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   :ref:`light brightness` for lamps outside, while :ref:`separate outdoor lights` is on.
+
+.. omw-setting::
+   :title: outdoor light bounce
+   :type: float32
+   :range: 0.0-1.0
+   :default: 0.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   :ref:`light bounce` for lamps outside, while :ref:`separate outdoor lights` is on.
+
+.. omw-setting::
    :title: light occlusion
    :type: boolean
    :range: true, false
@@ -277,6 +316,26 @@ Shaders Settings
    :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
 
    Scales the direct light of the sun and moons outside.
+
+.. omw-setting::
+   :title: moonlight brightness
+   :type: float32
+   :range: 0.25-8.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Scales the moonlight on top of :ref:`sunlight brightness`, at night only: it fades in over the hour before
+   nightfall and out over the hour after sunrise. Night light is so dim that surfaces away from lamps go black;
+   raising this gives them shape from a light with a direction, unlike raising ambient or gamma.
+
+.. omw-setting::
+   :title: moonlight follows moon phases
+   :type: boolean
+   :range: true, false
+   :default: false
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   Moonlight is at full strength when Masser or Secunda is full and dims to 40% when both are new.
 
 .. omw-setting::
    :title: exterior ambient

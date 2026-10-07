@@ -98,8 +98,9 @@ namespace
     class LightManagerUpdateVisitor : public osg::NodeVisitor
     {
     public:
-        LightManagerUpdateVisitor()
+        explicit LightManagerUpdateVisitor(float lightRadiusMultiplier)
             : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+            , mLightRadiusMultiplier(lightRadiusMultiplier)
         {
             setNodeMaskOverride(~0u);
         }
@@ -127,8 +128,8 @@ namespace
                     lm->enableClustered(Settings::shaders().mClusteredLighting);
                 }
 
-                lm->processChangedSettings(Settings::shaders().mLightRadiusMultiplier,
-                    Settings::shaders().mMaximumLightDistance, Settings::shaders().mLightFadeStart);
+                lm->processChangedSettings(mLightRadiusMultiplier, Settings::shaders().mMaximumLightDistance,
+                    Settings::shaders().mLightFadeStart);
 
                 return;
             }
@@ -139,6 +140,7 @@ namespace
 
     private:
         bool mDoThreadUnsafeOps = false;
+        float mLightRadiusMultiplier;
     };
 
     unsigned int getIndoorShadowCastingMask()
@@ -406,6 +408,7 @@ namespace MWRender
         mSharedUniformStateUpdater->setPointLightTuning(Settings::shaders().mLightBrightness,
             Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce,
             Settings::shaders().mLightHotspotSoftening);
+        mAppliedLightRadiusMultiplier = Settings::shaders().mLightRadiusMultiplier;
         rootNode->addUpdateCallback(mSharedUniformStateUpdater);
 
         mPerViewUniformStateUpdater = new SceneUtil::PerViewUniformStateUpdater(mResourceSystem->getSceneManager(),
@@ -638,6 +641,31 @@ namespace MWRender
     SceneUtil::LightManager* RenderingManager::getLightRoot()
     {
         return mSceneRoot.get();
+    }
+
+    float RenderingManager::getLightRadiusMultiplier() const
+    {
+        const auto& shaders = Settings::shaders();
+        return mLightsOutdoors && shaders.mSeparateOutdoorLights ? shaders.mOutdoorLightRadiusMultiplier
+                                                                 : shaders.mLightRadiusMultiplier;
+    }
+
+    void RenderingManager::applyPointLightTuning()
+    {
+        const auto& shaders = Settings::shaders();
+        const bool outdoor = mLightsOutdoors && shaders.mSeparateOutdoorLights;
+        const float brightness = outdoor ? shaders.mOutdoorLightBrightness : shaders.mLightBrightness;
+        const float bounce = outdoor ? shaders.mOutdoorLightBounce : shaders.mLightBounce;
+        const float radius = getLightRadiusMultiplier();
+        mSharedUniformStateUpdater->setPointLightTuning(
+            brightness, shaders.mLightFalloff, bounce, shaders.mLightHotspotSoftening);
+        if (radius != mAppliedLightRadiusMultiplier)
+        {
+            mAppliedLightRadiusMultiplier = radius;
+            mPostProcessor->getStateUpdater()->setPointLightRadiusMultiplier(radius);
+            LightManagerUpdateVisitor visitor(radius);
+            mViewer->getSceneData()->accept(visitor);
+        }
     }
 
     void RenderingManager::setLightOcclusionTest(SceneUtil::LightOcclusionTest* test)
@@ -962,6 +990,14 @@ namespace MWRender
         mResourceSystem->getSceneManager()->getShaderManager().update(*mViewer);
 
         mWater->setRainIntensity(mSky->getRainRipplesEnabled() ? mSky->getPrecipitationAlpha() : 0.f);
+
+        // [Shaders] separate outdoor lights: switch lamp tuning between indoors and out (the sky is drawn outside,
+        // including in quasi-exteriors).
+        if (mSky->isEnabled() != mLightsOutdoors)
+        {
+            mLightsOutdoors = mSky->isEnabled();
+            applyPointLightTuning();
+        }
 
         mWater->update(dt, paused);
         if (!paused)
@@ -1660,11 +1696,11 @@ namespace MWRender
             }
             else if (it->first == "Shaders"
                 && (it->second == "light brightness" || it->second == "light falloff" || it->second == "light bounce"
-                    || it->second == "light hotspot softening"))
+                    || it->second == "light hotspot softening" || it->second == "separate outdoor lights"
+                    || it->second == "outdoor light brightness" || it->second == "outdoor light bounce"
+                    || it->second == "outdoor light radius multiplier"))
             {
-                mSharedUniformStateUpdater->setPointLightTuning(Settings::shaders().mLightBrightness,
-                    Settings::shaders().mLightFalloff, Settings::shaders().mLightBounce,
-                    Settings::shaders().mLightHotspotSoftening);
+                applyPointLightTuning();
             }
             else if (it->first == "Shaders"
                 && (it->second == "held light brightness" || it->second == "held light reach"
@@ -1705,10 +1741,10 @@ namespace MWRender
                 if (MWMechanics::getPlayer().isInCell())
                     configureAmbient(*MWMechanics::getPlayer().getCell()->getCell());
 
-                mPostProcessor->getStateUpdater()->setPointLightRadiusMultiplier(
-                    Settings::shaders().mLightRadiusMultiplier);
+                mAppliedLightRadiusMultiplier = getLightRadiusMultiplier();
+                mPostProcessor->getStateUpdater()->setPointLightRadiusMultiplier(mAppliedLightRadiusMultiplier);
 
-                LightManagerUpdateVisitor visitor;
+                LightManagerUpdateVisitor visitor(mAppliedLightRadiusMultiplier);
                 bool lightManagersUpdated = false;
 
                 if (it->second == "max lights" || it->second == "clustered lighting"

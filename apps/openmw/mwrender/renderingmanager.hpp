@@ -352,6 +352,12 @@ namespace MWRender
         osg::ref_ptr<SceneUtil::LightManager> mSceneRoot;
         osg::ref_ptr<SceneUtil::LightOcclusionTest> mLightOcclusionTest;
         void applyLightOcclusion();
+
+        // [Shaders] separate outdoor lights: which lamp tuning is in use, switched as the sky comes and goes.
+        bool mLightsOutdoors = false;
+        float mAppliedLightRadiusMultiplier = 1.f;
+        float getLightRadiusMultiplier() const;
+        void applyPointLightTuning();
         Resource::ResourceSystem* mResourceSystem;
 
         std::shared_ptr<SceneUtil::WorkQueue> mWorkQueue;

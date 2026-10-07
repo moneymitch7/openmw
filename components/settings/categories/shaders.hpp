@@ -48,11 +48,21 @@ namespace Settings
         SettingValue<float> mLightBounce{ mIndex, "Shaders", "light bounce", makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mLightHotspotSoftening{ mIndex, "Shaders", "light hotspot softening",
             makeClampSanitizerFloat(0, 1) };
+        SettingValue<bool> mSeparateOutdoorLights{ mIndex, "Shaders", "separate outdoor lights" };
+        SettingValue<float> mOutdoorLightRadiusMultiplier{ mIndex, "Shaders", "outdoor light radius multiplier",
+            makeClampSanitizerFloat(1, 100) };
+        SettingValue<float> mOutdoorLightBrightness{ mIndex, "Shaders", "outdoor light brightness",
+            makeClampSanitizerFloat(0.1f, 4) };
+        SettingValue<float> mOutdoorLightBounce{ mIndex, "Shaders", "outdoor light bounce",
+            makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mLightOcclusion{ mIndex, "Shaders", "light occlusion" };
         SettingValue<int> mLightOcclusionRaysPerFrame{ mIndex, "Shaders", "light occlusion rays per frame",
             makeClampSanitizerInt(8, 2048) };
         SettingValue<float> mSunlightBrightness{ mIndex, "Shaders", "sunlight brightness",
             makeClampSanitizerFloat(0.25f, 3) };
+        SettingValue<float> mMoonlightBrightness{ mIndex, "Shaders", "moonlight brightness",
+            makeClampSanitizerFloat(0.25f, 8) };
+        SettingValue<bool> mMoonlightFollowsMoonPhases{ mIndex, "Shaders", "moonlight follows moon phases" };
         SettingValue<float> mExteriorAmbient{ mIndex, "Shaders", "exterior ambient", makeClampSanitizerFloat(0, 2) };
         SettingValue<float> mInteriorAmbient{ mIndex, "Shaders", "interior ambient", makeClampSanitizerFloat(0, 2) };
         SettingValue<float> mHeldLightBrightness{ mIndex, "Shaders", "held light brightness",

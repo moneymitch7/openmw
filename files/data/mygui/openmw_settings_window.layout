@@ -940,6 +940,102 @@
                                 <UserString key="HStretch" value="true"/>
                             </Widget>
                             <Widget type="AutoSizedTextBox" skin="SandBrightText">
+                                <Property key="Caption" value="#{OMWEngine:LightsSectionOutdoor}"/>
+                            </Widget>
+
+                            <!-- Separate Outdoor Lights -->
+                            <Widget type="HBox" align="Stretch">
+                                <UserString key="HStretch" value="true"/>
+                                <UserString key="VStretch" value="false"/>
+                                <Widget type="AutoSizedButton" skin="MW_Button">
+                                    <UserString key="SettingCategory" value="Shaders"/>
+                                    <UserString key="SettingName" value="separate outdoor lights"/>
+                                    <UserString key="SettingType" value="CheckButton"/>
+                                </Widget>
+                                <Widget type="AutoSizedTextBox" skin="SandText">
+                                    <Property key="Caption" value="#{OMWEngine:SeparateOutdoorLights}"/>
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:SeparateOutdoorLightsTooltip}"/>
+                                </Widget>
+                            </Widget>
+
+                            <!-- OutdoorLightReach -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="OutdoorLightReachText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:OutdoorLightReachTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="500000"/>
+                                <Property key="Page" value="1000"/>
+                                <Property key="WheelPage" value="1000"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="1.0"/>
+                                <UserString key="SettingMax" value="5.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="outdoor light radius multiplier"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="OutdoorLightReachText"/>
+                                <UserString key="SettingLabelCaption" value="OutdoorLightReachValue"/>
+                            </Widget>
+
+                            <!-- OutdoorLightBrightness -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="OutdoorLightBrightnessText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:OutdoorLightBrightnessTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="276"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.25"/>
+                                <UserString key="SettingMax" value="3.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="outdoor light brightness"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="OutdoorLightBrightnessText"/>
+                                <UserString key="SettingLabelCaption" value="OutdoorLightBrightnessValue"/>
+                            </Widget>
+
+                            <!-- OutdoorLightBounce -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="OutdoorLightBounceText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:OutdoorLightBounceTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="101"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="1.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="outdoor light bounce"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="OutdoorLightBounceText"/>
+                                <UserString key="SettingLabelCaption" value="OutdoorLightBounceValue"/>
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
+                                <UserString key="HStretch" value="true"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandBrightText">
                                 <Property key="Caption" value="#{OMWEngine:LightsSectionDaylight}"/>
                             </Widget>
 
@@ -969,6 +1065,51 @@
 
                             <Widget type="AutoSizedTextBox" skin="SandText">
                                 <Property key="Caption" value="#{OMWEngine:SunlightBrightnessDesc}"/>
+                            </Widget>
+
+                            <!-- MoonlightBrightness -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="MoonlightBrightnessText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:MoonlightBrightnessTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="776"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.25"/>
+                                <UserString key="SettingMax" value="8.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="moonlight brightness"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="MoonlightBrightnessText"/>
+                                <UserString key="SettingLabelCaption" value="MoonlightBrightnessValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:MoonlightBrightnessDesc}"/>
+                            </Widget>
+
+                            <!-- Moonlight follows moon phases -->
+                            <Widget type="HBox" align="Stretch">
+                                <UserString key="HStretch" value="true"/>
+                                <UserString key="VStretch" value="false"/>
+                                <Widget type="AutoSizedButton" skin="MW_Button">
+                                    <UserString key="SettingCategory" value="Shaders"/>
+                                    <UserString key="SettingName" value="moonlight follows moon phases"/>
+                                    <UserString key="SettingType" value="CheckButton"/>
+                                </Widget>
+                                <Widget type="AutoSizedTextBox" skin="SandText">
+                                    <Property key="Caption" value="#{OMWEngine:MoonlightFollowsMoonPhases}"/>
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:MoonlightFollowsMoonPhasesTooltip}"/>
+                                </Widget>
                             </Widget>
 
                             <!-- ExteriorAmbient -->
