@@ -299,6 +299,8 @@ Shaders Settings
    object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
    Each light and object pair is tested once and retested when either moves or every few seconds (for doors).
    The test is per object, not per pixel: an object partly behind a wall keeps the light.
+   Works with both lighting methods. With :ref:`clustered lighting` the shaders skip the hidden lights per object, for
+   the 128 lights nearest the camera.
 
 .. omw-setting::
    :title: light occlusion rays per frame

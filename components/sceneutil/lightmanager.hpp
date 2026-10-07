@@ -241,6 +241,9 @@ namespace SceneUtil
             LightSource* mLightSource;
             osg::BoundingSphere mViewBound;
             bool mCulled = false;
+            // Clustered lighting: the light's place in this frame's light buffer for this camera (-1 if not in it).
+            // Set by LightManagerCullCallback as it fills the buffer.
+            mutable int mGpuIndex = -1;
         };
 
         using LightList = std::vector<const LightSourceViewBound*>;
@@ -297,6 +300,15 @@ namespace SceneUtil
         /// Removes from @a lightList the lights the world hides from @a viewBound (in the view space of @a viewMatrix).
         void removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
             const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache);
+
+        bool getLightOcclusionEnabled() const { return mOcclusionEnabled; }
+
+        /// Clustered lighting has no per-object light lists, so hidden lights are left out by the shaders instead: a
+        /// state set telling them which lights of the light buffer to skip (bit i of @a mask is the light at index i).
+        osg::ref_ptr<osg::StateSet> getBlockedLightsStateSet(const std::array<unsigned int, 4>& mask);
+
+        /// How many blocked-light masks are pushed on the cull visitor's state right now (LightListCallback only).
+        int mBlockedMaskDepth = 0;
 
         osg::ref_ptr<osg::StateSet> getLightListStateSet(
             const LightList& lightList, size_t frameNum, const osg::RefMatrix* viewMatrix);
@@ -374,6 +386,8 @@ namespace SceneUtil
         std::map<LightListStateSetKey, osg::ref_ptr<osg::StateSet>> mLightListStateSets;
         // reused for lookups, so a light list already seen this frame costs no allocation
         LightListStateSetKey mLightListStateSetKey;
+
+        std::map<std::array<unsigned int, 4>, osg::ref_ptr<osg::StateSet>> mBlockedLightsStateSets;
 
         size_t mLightingMask;
 
@@ -487,6 +501,10 @@ namespace SceneUtil
 
         bool pushLightState(osg::Node* node, osgUtil::CullVisitor* nv);
 
+        /// Clustered lighting with light occlusion: pushes the mask of lights the world hides from @a node, if any.
+        /// @return 0 if nothing was pushed, 1 for an empty mask (undoing a parent's), 2 for a mask with lights in it.
+        int pushBlockedLightsState(osg::Node* node, osgUtil::CullVisitor* cv);
+
         std::set<SceneUtil::LightSource*>& getIgnoredLightSources() { return mIgnoredLightSources; }
 
     private:
@@ -495,6 +513,11 @@ namespace SceneUtil
         LightManager::LightList mLightList;
         std::set<SceneUtil::LightSource*> mIgnoredLightSources;
         LightManager::OcclusionCache mOcclusionCache;
+        // clustered lighting: the mask found for the last camera and frame
+        const osg::Camera* mBlockedCamera = nullptr;
+        size_t mBlockedFrame = 0;
+        osg::ref_ptr<osg::StateSet> mBlockedStateSet;
+        bool mBlockedAny = false;
     };
 
     void configureStateSetSunOverride(const Light* light, osg::StateSet* stateset,

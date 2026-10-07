@@ -30,7 +30,10 @@ void doLighting(vec2 screenCoord, vec3 viewPos, vec3 viewNormal, float shininess
 #if @lightingMethodClustered
     LightGrid grid = lightGrid[getClusterTileIndex(screenRes, gridSize, near, screenCoord, viewPos.z)];
     for (uint i = 0u; i < grid.count; ++i) {
-        PointLight light = pointLight[lightIndexList[grid.offset + i]];
+        uint lightIndex = lightIndexList[grid.offset + i];
+        if (isLightBlocked(lightIndex))
+            continue;
+        PointLight light = pointLight[lightIndex];
 #else
     for (int i = 0; i < PointLightCount; ++i) {
         PointLight light = PointLight(
@@ -57,7 +60,10 @@ vec3 doSpecularLighting(vec2 screenCoord, vec3 viewPos, vec3 viewNormal) {
 
     LightGrid grid = lightGrid[getClusterTileIndex(screenRes, gridSize, near, screenCoord, viewPos.z)];
     for (uint i = 0u; i < grid.count; ++i) {
-        PointLight light = pointLight[lightIndexList[grid.offset + i]];
+        uint lightIndex = lightIndexList[grid.offset + i];
+        if (isLightBlocked(lightIndex))
+            continue;
+        PointLight light = pointLight[lightIndex];
 
         vec3 lightPos = light.position.xyz - viewPos;
         float lightDistance = length(lightPos);

@@ -325,7 +325,8 @@ namespace SceneUtil
                         .mRadius = bound.mLightSource->getRadius() * node->getPointLightRadiusMultiplier(),
                     };
 
-                    cache.mGPULights[frame % 2]->getData().push_back(gpuLight);
+                    bound.mGpuIndex = static_cast<int>(cache.mGPULights[frameId]->getData().size());
+                    cache.mGPULights[frameId]->getData().push_back(gpuLight);
                 }
 
                 // Always add a dummy light, SSBO can't have zero size
@@ -390,6 +391,8 @@ namespace SceneUtil
             initPerObjectUniform(settings.mMaxLights);
 
         getOrCreateStateSet()->addUniform(new osg::Uniform("PointLightCount", 0));
+        // No light hidden unless a lit object's own state says otherwise.
+        getOrCreateStateSet()->addUniform(new osg::Uniform("blockedLights", 0u, 0u, 0u, 0u));
 
         updateSettings(settings.mLightRadiusMultiplier, settings.mMaximumLightDistance, settings.mLightFadeStart);
     }
@@ -610,6 +613,7 @@ namespace SceneUtil
         mLastViewSpaceCamera = nullptr;
         mLastViewSpaceLights = nullptr;
         mLightListStateSets.clear();
+        mBlockedLightsStateSets.clear();
     }
 
     void LightManager::addLight(LightSource* lightSource, const osg::Matrixf& worldMat, size_t frameNum)
@@ -669,6 +673,17 @@ namespace SceneUtil
         stateset->addUniform(new osg::Uniform("PointLightCount", static_cast<int>(lightList.size())));
 
         found->second = stateset;
+        return stateset;
+    }
+
+    osg::ref_ptr<osg::StateSet> LightManager::getBlockedLightsStateSet(const std::array<unsigned int, 4>& mask)
+    {
+        osg::ref_ptr<osg::StateSet>& stateset = mBlockedLightsStateSets[mask];
+        if (!stateset)
+        {
+            stateset = new osg::StateSet;
+            stateset->addUniform(new osg::Uniform("blockedLights", mask[0], mask[1], mask[2], mask[3]));
+        }
         return stateset;
     }
 
@@ -949,10 +964,94 @@ namespace SceneUtil
 
     void LightListCallback::operator()(osg::Node* node, osgUtil::CullVisitor* cv)
     {
+        if (!mLightManager)
+            mLightManager = findLightManager(cv->getNodePath());
+        if (mLightManager && mLightManager->getClusteredLighting())
+        {
+            const int pushed = pushBlockedLightsState(node, cv);
+            if (pushed == 2)
+                ++mLightManager->mBlockedMaskDepth;
+            traverse(node, cv);
+            if (pushed == 2)
+                --mLightManager->mBlockedMaskDepth;
+            if (pushed != 0)
+                cv->popStateSet();
+            return;
+        }
+
         bool pushedState = pushLightState(node, cv);
         traverse(node, cv);
         if (pushedState)
             cv->popStateSet();
+    }
+
+    int LightListCallback::pushBlockedLightsState(osg::Node* node, osgUtil::CullVisitor* cv)
+    {
+        CullProfile::Scope profile(CullProfile::Section::LightLists);
+
+        if (!mLightManager->getLightOcclusionEnabled())
+            return 0;
+        if (!(cv->getTraversalMask() & mLightManager->getLightingMask()))
+            return 0;
+
+        const osg::Camera* camera = cv->getCurrentCamera();
+        const size_t frameNum = cv->getTraversalNumber();
+        if (camera != mBlockedCamera || frameNum != mBlockedFrame)
+        {
+            mBlockedCamera = camera;
+            mBlockedFrame = frameNum;
+            mBlockedStateSet = nullptr;
+            mBlockedAny = false;
+
+            const osg::RefMatrix* viewMatrix = cv->getCurrentRenderStage()->getInitialViewMatrix();
+
+            osg::BoundingSphere nodeBound;
+            const osg::Transform* transform = node->asTransform();
+            if (transform)
+            {
+                for (unsigned int i = 0; i < transform->getNumChildren(); ++i)
+                    nodeBound.expandBy(transform->getChild(i)->getBound());
+            }
+            else
+                nodeBound = node->getBound();
+            transformBoundingSphere(*cv->getModelViewMatrix(), nodeBound);
+
+            mLightList.clear();
+            mLightManager->getLightsIntersecting(cv, viewMatrix, frameNum, nodeBound, mIgnoredLightSources, mLightList);
+            if (!mLightList.empty())
+            {
+                LightManager::LightList reaching = mLightList;
+                mLightManager->removeOccludedLights(viewMatrix, frameNum, nodeBound, reaching, mOcclusionCache);
+                if (reaching.size() != mLightList.size())
+                {
+                    std::array<unsigned int, 4> mask{};
+                    for (const LightManager::LightSourceViewBound* light : mLightList)
+                    {
+                        const int index = light->mGpuIndex;
+                        if (index < 0 || index >= 128
+                            || std::find(reaching.begin(), reaching.end(), light) != reaching.end())
+                            continue;
+                        mask[static_cast<std::size_t>(index) / 32] |= 1u << (static_cast<unsigned int>(index) % 32);
+                        mBlockedAny = true;
+                    }
+                    if (mBlockedAny)
+                        mBlockedStateSet = mLightManager->getBlockedLightsStateSet(mask);
+                }
+            }
+        }
+
+        if (mBlockedAny)
+        {
+            cv->pushStateSet(mBlockedStateSet);
+            return 2;
+        }
+        // Inside an object whose mask hides lights from it, this one needs its own (empty) mask.
+        if (mLightManager->mBlockedMaskDepth > 0)
+        {
+            cv->pushStateSet(mLightManager->getBlockedLightsStateSet({}));
+            return 1;
+        }
+        return 0;
     }
 
     bool LightListCallback::pushLightState(osg::Node* node, osgUtil::CullVisitor* cv)
