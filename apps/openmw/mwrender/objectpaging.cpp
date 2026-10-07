@@ -654,7 +654,7 @@ namespace MWRender
     }
 
     osg::ref_ptr<const osg::Node> ObjectPaging::getAutoLod(
-        const VFS::Path::Normalized& model, const osg::Node& source, int level)
+        const VFS::Path::Normalized& model, const osg::Node& source, int level, bool mayCreate)
     {
         AutoLodKey key(std::string(model.value()), level);
         {
@@ -667,6 +667,11 @@ namespace MWRender
                     return found->second.mLod;
             }
         }
+
+        // A chunk built during the cull (not preloaded in the background) holds up the frame: don't add the
+        // simplification on top, use the full meshes this time.
+        if (!mayCreate)
+            return nullptr;
 
         // Outside the lock: chunks are built on several threads.
         SceneUtil::AutoLodStats stats;
@@ -905,7 +910,7 @@ namespace MWRender
                 {
                     const int level = std::min(
                         static_cast<int>(std::floor(std::log2(allowedError / sAutoLodBaseError))), sAutoLodMaxLevel);
-                    if (osg::ref_ptr<const osg::Node> simplified = getAutoLod(model, *cnode, level))
+                    if (osg::ref_ptr<const osg::Node> simplified = getAutoLod(model, *cnode, level, compile))
                         cnode = std::move(simplified);
                 }
             }

@@ -125,8 +125,9 @@ namespace MWRender
         std::atomic<unsigned long long> mAutoLodTrianglesBefore{ 0 };
         std::atomic<unsigned long long> mAutoLodTrianglesAfter{ 0 };
 
+        /// @param mayCreate false while drawing waits for the chunk: only an already made copy is used.
         osg::ref_ptr<const osg::Node> getAutoLod(
-            const VFS::Path::Normalized& model, const osg::Node& source, int level);
+            const VFS::Path::Normalized& model, const osg::Node& source, int level, bool mayCreate);
         void eraseAutoLodEntry(std::map<AutoLodKey, AutoLodEntry>::iterator it);
     };
 
