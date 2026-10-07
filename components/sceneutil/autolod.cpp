@@ -1,6 +1,8 @@
 #include "autolod.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <typeinfo>
@@ -256,13 +258,26 @@ namespace SceneUtil
         };
     }
 
+    namespace
+    {
+        std::atomic<unsigned long long> sAutoLodMicroseconds{ 0 };
+    }
+
+    unsigned long long getAutoLodMicroseconds()
+    {
+        return sAutoLodMicroseconds.load();
+    }
+
     osg::ref_ptr<osg::Node> createSimplifiedCopy(
         const osg::Node& node, float maxError, unsigned int minTriangles, AutoLodStats* stats, osg::Node::NodeMask mask)
     {
         if (!(maxError > 0.f))
             return nullptr;
+        const auto start = std::chrono::steady_clock::now();
         SimplifyCopyOp copyOp(maxError, minTriangles, stats, mask);
         osg::ref_ptr<osg::Node> copy = copyOp(&node);
+        sAutoLodMicroseconds += static_cast<unsigned long long>(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count());
         if (!copyOp.mChanged || copy == nullptr || copy.get() == &node)
             return nullptr;
         return copy;

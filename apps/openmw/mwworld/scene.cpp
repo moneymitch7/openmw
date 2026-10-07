@@ -20,6 +20,7 @@
 #include <components/misc/resourcehelpers.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
+#include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/settings/values.hpp>
 #include <components/terrain/terraingrid.hpp>
@@ -108,6 +109,25 @@ namespace
     // TODO: find a more clever way to make paging exclusion more reliable?
     static osg::ref_ptr<SceneUtil::PositionAttitudeTransform> pagedNode = new SceneUtil::PositionAttitudeTransform;
 
+    // OpenMGE XE: time spent in each step of adding objects to the scene, for the slow cell change log (main
+    // thread only).
+    struct InsertStepTimes
+    {
+        double mRenderMs = 0;
+        double mActorsMs = 0;
+        double mPhysicsMs = 0;
+        double mLuaMs = 0;
+    };
+    InsertStepTimes sInsertStepTimes;
+
+    double msSinceInsert(std::chrono::steady_clock::time_point& since)
+    {
+        const auto now = std::chrono::steady_clock::now();
+        const double ms = std::chrono::duration<double, std::milli>(now - since).count();
+        since = now;
+        return ms;
+    }
+
     void addObject(const MWWorld::Ptr& ptr, const MWWorld::World& world, const std::vector<ESM::RefNum>& pagedRefs,
         MWPhysics::PhysicsSystem& physics, MWRender::RenderingManager& rendering)
     {
@@ -120,12 +140,14 @@ namespace
         const VFS::Path::Normalized model = getModel(ptr);
         const auto rotation = makeDirectNodeRotation(ptr);
 
+        auto stepStart = std::chrono::steady_clock::now();
         ESM::RefNum refnum = ptr.getCellRef().getRefNum();
         if (!refnum.hasContentFile() || !std::binary_search(pagedRefs.begin(), pagedRefs.end(), refnum))
             ptr.getClass().insertObjectRendering(ptr, model, rendering);
         else
             ptr.getRefData().setBaseNode(pagedNode);
         setNodeRotation(ptr, rendering, rotation);
+        sInsertStepTimes.mRenderMs += msSinceInsert(stepStart);
 
         if (ptr.getClass().useAnim())
             MWBase::Environment::get().getMechanicsManager()->add(ptr);
@@ -135,11 +157,14 @@ namespace
 
         // Restore effect particles
         world.applyLoopingParticles(ptr);
+        sInsertStepTimes.mActorsMs += msSinceInsert(stepStart);
 
         if (!model.empty())
             ptr.getClass().insertObject(ptr, model, rotation, physics);
+        sInsertStepTimes.mPhysicsMs += msSinceInsert(stepStart);
 
         MWBase::Environment::get().getLuaManager()->objectAddedToScene(ptr);
+        sInsertStepTimes.mLuaMs += msSinceInsert(stepStart);
     }
 
     void addObject(const MWWorld::Ptr& ptr, const MWWorld::World& world, const MWPhysics::PhysicsSystem& physics,
@@ -536,7 +561,10 @@ namespace MWWorld
                 = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count();
             *mCellChangeReport += "; " + std::string(cell.getCell()->getDescription()) + " "
                 + std::to_string(static_cast<int>(totalMs)) + " ms (" + std::to_string(cell.count())
-                + " objects: scene graph " + std::to_string(static_cast<int>(mInsertRenderMs)) + " ms, physics "
+                + " objects: models " + std::to_string(static_cast<int>(sInsertStepTimes.mRenderMs)) + " ms, actors "
+                + std::to_string(static_cast<int>(sInsertStepTimes.mActorsMs)) + " ms, collision "
+                + std::to_string(static_cast<int>(sInsertStepTimes.mPhysicsMs)) + " ms, Lua "
+                + std::to_string(static_cast<int>(sInsertStepTimes.mLuaMs)) + " ms, navigator "
                 + std::to_string(static_cast<int>(mInsertPhysicsMs)) + " ms)";
         }
     }
@@ -662,6 +690,7 @@ namespace MWWorld
         const int unloadMs = msSince(changeStart);
         mNavigator.updateBounds(playerCellIndex.mWorldspace, cellGridBounds, pos, navigatorUpdateGuard.get());
         const auto terrainStart = Clock::now();
+        const unsigned long long lodStartUs = SceneUtil::getAutoLodMicroseconds();
 
         mHalfGridSize = halfGridSize;
         mCurrentGridCenter = osg::Vec2i(playerCellX, playerCellY);
@@ -677,6 +706,7 @@ namespace MWWorld
         if (!mPreloader->isTerrainLoaded(PositionCellGrid{ pos, newGrid }, mRendering.getReferenceTime()))
             preloadTerrain(pos, playerCellIndex.mWorldspace, true);
         const int terrainMs = msSince(terrainStart);
+        const int terrainLodMs = static_cast<int>((SceneUtil::getAutoLodMicroseconds() - lodStartUs) / 1000);
         const auto pagingStart = Clock::now();
         mPagedRefs.clear();
         mRendering.getPagedRefnums(newGrid, mPagedRefs);
@@ -723,8 +753,9 @@ namespace MWWorld
         const int totalMs = msSince(changeStart);
         if (totalMs >= 100)
             Log(Debug::Warning) << "Slow cell change: " << totalMs << " ms (unloading " << unloadMs << " ms, terrain "
-                                << terrainMs << " ms, paged objects " << pagingMs << " ms, navigator " << navigatorMs
-                                << " ms" << report << ")";
+                                << terrainMs << " ms (automatic LOD on all threads " << terrainLodMs
+                                << " ms), paged objects " << pagingMs << " ms, navigator " << navigatorMs << " ms"
+                                << report << ")";
 
         CellStore& current = mWorld.getWorldModel().getExterior(playerCellIndex);
         MWBase::Environment::get().getWindowManager()->changeCell(&current);
@@ -1067,6 +1098,7 @@ namespace MWWorld
         const bool isInterior = !cell.isExterior();
         InsertVisitor insertVisitor(cell, loadingListener);
         cell.forEach(insertVisitor);
+        sInsertStepTimes = InsertStepTimes{};
         const auto start = std::chrono::steady_clock::now();
         insertVisitor.insert(
             [&](const MWWorld::Ptr& ptr) { addObject(ptr, mWorld, mPagedRefs, *mPhysics, mRendering); });

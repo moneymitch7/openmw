@@ -11,6 +11,7 @@
 #include <sstream>
 #include <system_error>
 
+#include <osg/BufferObject>
 #include <osg/ContextData>
 #include <osg/GLExtensions>
 #include <osg/GraphicsThread>
@@ -42,6 +43,7 @@
 
 #include <components/stereo/stereomanager.hpp>
 
+#include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/glextensions.hpp>
 #include <components/sceneutil/workqueue.hpp>
 
@@ -114,6 +116,10 @@ namespace
         std::atomic<int> mOtherMb{ -1 };
         std::atomic<int> mTextureObjects{ -1 };
         std::atomic<int> mOrphanedTextureObjects{ -1 };
+        // OSG's own count of what it has put on the GPU: textures and vertex/index buffers, in MB
+        std::atomic<int> mTexturePoolMb{ -1 };
+        std::atomic<int> mBufferPoolMb{ -1 };
+        std::atomic<int> mBufferObjects{ -1 };
     };
     GpuMemory sGpuMemory;
 
@@ -159,6 +165,12 @@ namespace
             {
                 sGpuMemory.mTextureObjects = static_cast<int>(textures->getNumberActiveTextureObjects());
                 sGpuMemory.mOrphanedTextureObjects = static_cast<int>(textures->getNumberOrphanedTextureObjects());
+                sGpuMemory.mTexturePoolMb = static_cast<int>(textures->getCurrTexturePoolSize() / (1024 * 1024));
+            }
+            if (osg::GLBufferObjectManager* buffers = osg::get<osg::GLBufferObjectManager>(contextId))
+            {
+                sGpuMemory.mBufferPoolMb = static_cast<int>(buffers->getCurrGLBufferObjectPoolSize() / (1024 * 1024));
+                sGpuMemory.mBufferObjects = static_cast<int>(buffers->getNumberActiveGLBufferObjects());
             }
         }
 
@@ -193,7 +205,9 @@ namespace
             mFile << "time,cell,x,y,menu,fps,frame ms,worst frame ms";
             for (const Column& column : mColumns)
                 mFile << ',' << column.mHeading;
-            mFile << ",vram free MB,vram other MB,gl textures,gl released textures";
+            mFile
+                << ",vram free MB,vram other MB,gl textures,gl released textures,gl texture MB,gl buffer MB,gl buffers"
+                << ",auto lod ms";
             mFile << '\n';
             mFile.flush();
         }
@@ -257,7 +271,13 @@ namespace
             for (Column& column : mColumns)
                 mFile << ',' << std::setprecision(column.mScale == 1.0 ? 0 : 2) << column.mSum.take();
             mFile << ',' << sGpuMemory.mFreeMb.load() << ',' << sGpuMemory.mOtherMb.load() << ','
-                  << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load();
+                  << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load() << ','
+                  << sGpuMemory.mTexturePoolMb.load() << ',' << sGpuMemory.mBufferPoolMb.load() << ','
+                  << sGpuMemory.mBufferObjects.load();
+            // Time spent simplifying meshes for automatic LOD during this second, on all threads together.
+            const unsigned long long lodUs = SceneUtil::getAutoLodMicroseconds();
+            mFile << ',' << std::setprecision(0) << static_cast<double>(lodUs - mLastAutoLodUs) / 1000.0;
+            mLastAutoLodUs = lodUs;
             mFile << '\n';
             mFile.flush();
 
@@ -371,6 +391,7 @@ namespace
         unsigned int mLastFrame = 0;
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
+        unsigned long long mLastAutoLodUs = 0;
         std::array<Column, 33> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },

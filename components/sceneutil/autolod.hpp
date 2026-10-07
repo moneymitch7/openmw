@@ -24,6 +24,9 @@ namespace SceneUtil
     /// @return nullptr if nothing could be simplified usefully (use @a node itself then).
     osg::ref_ptr<osg::Node> createSimplifiedCopy(const osg::Node& node, float maxError, unsigned int minTriangles,
         AutoLodStats* stats = nullptr, osg::Node::NodeMask mask = ~0u);
+
+    /// Time spent in createSimplifiedCopy so far, on all threads together, in microseconds.
+    unsigned long long getAutoLodMicroseconds();
 }
 
 #endif
