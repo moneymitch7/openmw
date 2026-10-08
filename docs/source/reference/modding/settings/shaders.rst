@@ -322,6 +322,18 @@ Shaders Settings
    Scales the direct light of the sun and moons outside.
 
 .. omw-setting::
+   :title: low sun brightness
+   :type: float32
+   :range: 0.25-1.0
+   :default: 1.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   How strong the sunlight is when the sun is lowest, just after sunrise and before nightfall, as a fraction of its
+   strength at midday (13:00 with Morrowind's sunrise and nightfall times). In between it follows the sun's height
+   above the horizon, as the air the light passes through thins: about 0.8 of midday at 9:00 and 16:00 and 0.75 at
+   18:00 with 0.6. The weather's own sunrise and sunset colours still apply on top. 1.0 keeps it the same all day.
+
+.. omw-setting::
    :title: moonlight brightness
    :type: float32
    :range: 0.25-8.0

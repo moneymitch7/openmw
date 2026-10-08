@@ -732,6 +732,7 @@ namespace MWGui
         Settings::shaders().mInteriorAmbient.reset();
         Settings::shaders().mSunlightBrightness.reset();
         Settings::shaders().mMoonlightBrightness.reset();
+        Settings::shaders().mLowSunBrightness.reset();
         Settings::shaders().mSeparateOutdoorLights.reset();
         Settings::shaders().mOutdoorLightRadiusMultiplier.reset();
         Settings::shaders().mOutdoorLightBrightness.reset();

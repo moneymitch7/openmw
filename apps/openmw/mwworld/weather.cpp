@@ -918,6 +918,10 @@ namespace MWWorld
         else
             mRendering.getSkyManager()->sunEnable();
 
+        // OpenMGE XE: how high the sun is, from 0 at its lowest (sunrise, nightfall) to 1 at midday, for 'low sun
+        // brightness'.
+        float sunHeight = 1.f;
+
         // Update the sun direction.  Run it east to west at a fixed angle from overhead.
         // The sun's speed at day and night may differ, since mSunriseTime and mNightStart
         // mark when the sun is level with the horizon.
@@ -948,6 +952,15 @@ namespace MWWorld
 
             // Hardcoded constant from Morrowind
             const osg::Vec3f sunDir(-400.f * orbit, 75.f, -100.f);
+            if (!isNight)
+            {
+                // The sine of the sun's height above the horizon, from its lowest (orbit +-1) to its highest (0).
+                const float lowest = 100.f / osg::Vec3f(400.f, 75.f, 100.f).length();
+                const float highest = 100.f / osg::Vec3f(0.f, 75.f, 100.f).length();
+                sunHeight = std::clamp((100.f / sunDir.length() - lowest) / (highest - lowest), 0.f, 1.f);
+            }
+            else
+                sunHeight = 0.f;
             mRendering.setSunDirection(sunDir);
             mRendering.setNight(isNight);
 
@@ -1012,6 +1025,12 @@ namespace MWWorld
                     MWRender::MoonState::phaseToInt(secundaState.mPhase));
                 moonlight *= 0.4f + 0.6f * static_cast<float>(fullest) / 4.f;
             }
+            // [Shaders] low sun brightness: the sun is strongest when highest and weakens as it sinks (its light
+            // crosses more air). The square root keeps most of the day near full strength and the drop near the
+            // horizon, where the light's path through the air grows fastest.
+            const float lowSun = Settings::shaders().mLowSunBrightness;
+            const float heightFactor = lowSun + (1.f - lowSun) * std::sqrt(sunHeight);
+            sunlight *= heightFactor + (1.f - heightFactor) * night;
             sunlight *= 1.f + (moonlight - 1.f) * night;
         }
         sun.r() *= sunlight;

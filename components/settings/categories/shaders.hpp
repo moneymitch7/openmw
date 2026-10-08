@@ -62,6 +62,8 @@ namespace Settings
             makeClampSanitizerFloat(0.25f, 3) };
         SettingValue<float> mMoonlightBrightness{ mIndex, "Shaders", "moonlight brightness",
             makeClampSanitizerFloat(0.25f, 8) };
+        SettingValue<float> mLowSunBrightness{ mIndex, "Shaders", "low sun brightness",
+            makeClampSanitizerFloat(0.25f, 1) };
         SettingValue<bool> mMoonlightFollowsMoonPhases{ mIndex, "Shaders", "moonlight follows moon phases" };
         SettingValue<float> mExteriorAmbient{ mIndex, "Shaders", "exterior ambient", makeClampSanitizerFloat(0, 2) };
         SettingValue<float> mInteriorAmbient{ mIndex, "Shaders", "interior ambient", makeClampSanitizerFloat(0, 2) };
