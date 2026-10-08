@@ -1,6 +1,7 @@
 #include "lightmanager.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include <osg/ComputeBoundsVisitor>
@@ -1057,14 +1058,18 @@ namespace SceneUtil
         else
             bound = node->getBound();
 
-        // Small things (people, furniture) are tested around their bounding sphere; a box is worth it for walls,
-        // floors and other large pieces, whose centres can be far from the surface a light shines on.
-        constexpr float minRadius = 64.f;
+        // Only tiny things are tested around their bounding sphere. For anything bigger the box matters: walls,
+        // floors, bay windows and hanging signs have their centres in or beside the wall they are on, far from the
+        // side a light shines on.
+        constexpr float minRadius = 24.f;
         if (!bound.valid() || bound.radius() < minRadius)
             return nullptr;
 
-        if (!mHasOcclusionBox || bound.center() != mOcclusionBoxFor.center()
-            || bound.radius() != mOcclusionBoxFor.radius())
+        // In the node's own space, so it changes only as an animation moves the parts (a walking NPC's bound
+        // shifts a little every frame): made again only once it has changed by a quarter of its size.
+        const float tolerance = 0.25f * bound.radius();
+        if (!mHasOcclusionBox || (bound.center() - mOcclusionBoxFor.center()).length() > tolerance
+            || std::abs(bound.radius() - mOcclusionBoxFor.radius()) > tolerance)
         {
             osg::ComputeBoundsVisitor visitor;
             if (transform)
