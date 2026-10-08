@@ -59,6 +59,20 @@ namespace
 
 namespace SceneUtil
 {
+    namespace
+    {
+        // blockedLights in lib/light/bindings.glsl: a uvec4 per 128 lights.
+        osg::ref_ptr<osg::Uniform> makeBlockedLightsUniform(const LightManager::BlockedLightsMask& mask)
+        {
+            constexpr unsigned int vectors = LightManager::sMaxBlockableLights / 128;
+            osg::ref_ptr<osg::Uniform> uniform
+                = new osg::Uniform(osg::Uniform::UNSIGNED_INT_VEC4, "blockedLights", vectors);
+            for (unsigned int i = 0; i < vectors; ++i)
+                uniform->setElement(i, mask[i * 4], mask[i * 4 + 1], mask[i * 4 + 2], mask[i * 4 + 3]);
+            return uniform;
+        }
+    }
+
     static int sLightId = 0;
 
     void configureStateSetSunOverride(const Light* light, osg::StateSet* stateset, int mode)
@@ -394,7 +408,7 @@ namespace SceneUtil
 
         getOrCreateStateSet()->addUniform(new osg::Uniform("PointLightCount", 0));
         // No light hidden unless a lit object's own state says otherwise.
-        getOrCreateStateSet()->addUniform(new osg::Uniform("blockedLights", 0u, 0u, 0u, 0u));
+        getOrCreateStateSet()->addUniform(makeBlockedLightsUniform(BlockedLightsMask{}));
         // Only lamps light their own model from inside (see uSelfLitRange in lib/light/util.glsl).
         getOrCreateStateSet()->addUniform(new osg::Uniform("uSelfLitRange", 0.f));
 
@@ -736,13 +750,13 @@ namespace SceneUtil
         return stateset;
     }
 
-    osg::ref_ptr<osg::StateSet> LightManager::getBlockedLightsStateSet(const std::array<unsigned int, 4>& mask)
+    osg::ref_ptr<osg::StateSet> LightManager::getBlockedLightsStateSet(const BlockedLightsMask& mask)
     {
         osg::ref_ptr<osg::StateSet>& stateset = mBlockedLightsStateSets[mask];
         if (!stateset)
         {
             stateset = new osg::StateSet;
-            stateset->addUniform(new osg::Uniform("blockedLights", mask[0], mask[1], mask[2], mask[3]));
+            stateset->addUniform(makeBlockedLightsUniform(mask));
         }
         return stateset;
     }
@@ -1126,11 +1140,11 @@ namespace SceneUtil
                     getOcclusionBox(node), cv->getModelViewMatrix());
                 if (reaching.size() != mLightList.size())
                 {
-                    std::array<unsigned int, 4> mask{};
+                    LightManager::BlockedLightsMask mask{};
                     for (const LightManager::LightSourceViewBound* light : mLightList)
                     {
                         const int index = light->mGpuIndex;
-                        if (index < 0 || index >= 128
+                        if (index < 0 || index >= static_cast<int>(LightManager::sMaxBlockableLights)
                             || std::find(reaching.begin(), reaching.end(), light) != reaching.end())
                             continue;
                         mask[static_cast<std::size_t>(index) / 32] |= 1u << (static_cast<unsigned int>(index) % 32);

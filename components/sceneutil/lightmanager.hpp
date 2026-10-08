@@ -309,7 +309,11 @@ namespace SceneUtil
 
         /// Clustered lighting has no per-object light lists, so hidden lights are left out by the shaders instead: a
         /// state set telling them which lights of the light buffer to skip (bit i of @a mask is the light at index i).
-        osg::ref_ptr<osg::StateSet> getBlockedLightsStateSet(const std::array<unsigned int, 4>& mask);
+        /// Lights of the light buffer the blocked-light masks can hide (bit i of word i / 32 is the light at index i).
+        static constexpr unsigned int sMaxBlockableLights = 1024;
+        using BlockedLightsMask = std::array<unsigned int, sMaxBlockableLights / 32>;
+
+        osg::ref_ptr<osg::StateSet> getBlockedLightsStateSet(const BlockedLightsMask& mask);
 
         /// How many blocked-light masks are pushed on the cull visitor's state right now (LightListCallback only).
         int mBlockedMaskDepth = 0;
@@ -391,7 +395,7 @@ namespace SceneUtil
         // reused for lookups, so a light list already seen this frame costs no allocation
         LightListStateSetKey mLightListStateSetKey;
 
-        std::map<std::array<unsigned int, 4>, osg::ref_ptr<osg::StateSet>> mBlockedLightsStateSets;
+        std::map<BlockedLightsMask, osg::ref_ptr<osg::StateSet>> mBlockedLightsStateSets;
 
         size_t mLightingMask;
 

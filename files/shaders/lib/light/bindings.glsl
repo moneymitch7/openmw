@@ -33,9 +33,9 @@ layout(std430, binding = 5) restrict buffer lightIndexCounterSSBO {
 uniform DirectionalLight sun;
 
 // Lights of pointLight[] the world hides from the object being drawn (bit i is light i), see LightListCallback.
-uniform uvec4 blockedLights;
+uniform uvec4 blockedLights[8];
 
 bool isLightBlocked(uint index)
 {
-    return index < 128u && ((blockedLights[index >> 5u] >> (index & 31u)) & 1u) != 0u;
+    return index < 1024u && ((blockedLights[index >> 7u][(index >> 5u) & 3u] >> (index & 31u)) & 1u) != 0u;
 }
