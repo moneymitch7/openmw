@@ -216,8 +216,12 @@ namespace MWPhysics
             {
                 if (!btCollisionWorld::RayResultCallback::needsCollision(proxy))
                     return false;
+                // Shapes around either end are left out: the lamp's own mesh, and the lit object or a room shell
+                // around it. Not a closed door near the lit end: a doorway is part of the room piece beyond it, and a
+                // ray to that piece ends close to the door, which then let a corridor's lamp light the room through it.
+                const bool door = proxy->m_collisionFilterGroup & CollisionType_Door;
                 if (containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mFrom)
-                    || containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mTo))
+                    || (!door && containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mTo)))
                     return false;
                 if (proxy->m_collisionFilterGroup & (CollisionType_Door | CollisionType_HeightMap))
                     return true;
