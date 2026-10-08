@@ -220,10 +220,17 @@ namespace MWPhysics
                     return false;
                 if (proxy->m_collisionFilterGroup & (CollisionType_Door | CollisionType_HeightMap))
                     return true;
-                // Wall-like: at least two sides of its bounds a couple of metres or more.
+                // Wall-like: a slab, two sides of its bounds a couple of metres or more and the third thin next to
+                // them (a wall, a floor between storeys). Chunky pieces (curved stairs, the rounded corners and
+                // alcoves of Dunmer interiors, cave rock) don't count: their bounds are mostly empty space or the
+                // room itself, so a ray through them says little about whether the light is really behind a wall,
+                // and they darkened things in the same room as the lamp.
                 constexpr btScalar minSide = 128;
+                constexpr btScalar maxThickness = 64;
                 const btVector3 size = proxy->m_aabbMax - proxy->m_aabbMin;
-                return (size.x() >= minSide) + (size.y() >= minSide) + (size.z() >= minSide) >= 2;
+                btScalar sides[3] = { size.x(), size.y(), size.z() };
+                std::sort(std::begin(sides), std::end(sides));
+                return sides[1] >= minSide && sides[0] <= std::max(maxThickness, sides[1] * btScalar(0.25));
             }
 
             btScalar addSingleResult(btCollisionWorld::LocalRayResult& rayResult, bool /*normalInWorldSpace*/) override

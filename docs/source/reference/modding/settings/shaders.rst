@@ -297,8 +297,9 @@ Shaders Settings
    other large shape) lies between the light and the object's centre and six points around it. Large objects (walls,
    floors, room pieces) are tested at the part of them nearest the light instead, so the walls of a lamp's own room keep
    its light.
-   Small shapes such as furniture, crates and pillars don't count, and neither do shapes around the light or the
-   object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
+   Only slab-shaped pieces count (walls, floors between storeys, doors): small shapes such as furniture, crates
+   and pillars don't, nor do chunky pieces such as curved stairs, rounded corners and cave rock, nor shapes around
+   the light or the object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
    Each light and object pair is tested once and retested when either moves or every few seconds (for doors).
    The test is per object, not per pixel: an object partly behind a wall keeps the light.
    Works with both lighting methods. With :ref:`clustered lighting` the shaders skip the hidden lights per object, for
