@@ -679,7 +679,7 @@ namespace MWRender
         // Objects bigger than this (merged chunks of statics, whole-room meshes) span both sides of a wall.
         constexpr float maxObjectRadius = 768.f;
         mSceneRoot->setLightOcclusion(mLightOcclusionTest.get(), Settings::shaders().mLightOcclusion,
-            static_cast<unsigned int>(Settings::shaders().mLightOcclusionRaysPerFrame), maxObjectRadius);
+            Settings::shaders().mLightOcclusionTimePerFrame, maxObjectRadius);
     }
 
     void RenderingManager::setSunShadowFade(float fade)
@@ -1686,7 +1686,7 @@ namespace MWRender
                 mMgeFogRangeUniform->set(getMgeFogRange());
             }
             else if (it->first == "Shaders"
-                && (it->second == "light occlusion" || it->second == "light occlusion rays per frame"))
+                && (it->second == "light occlusion" || it->second == "light occlusion time per frame"))
             {
                 applyLightOcclusion();
             }

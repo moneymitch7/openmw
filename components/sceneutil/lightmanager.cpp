@@ -1,6 +1,7 @@
 #include "lightmanager.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
@@ -435,12 +436,12 @@ namespace SceneUtil
         return mClusteredLighting;
     }
 
-    void LightManager::setLightOcclusion(
-        LightOcclusionTest* test, bool enabled, unsigned int raysPerFrame, float maxObjectRadius)
+    void LightManager::setLightOcclusion(LightOcclusionTest* test, bool enabled, float msPerFrame, float maxObjectRadius)
     {
         mOcclusionTest = test;
         mOcclusionEnabled = enabled && test != nullptr;
-        mOcclusionRaysPerFrame = raysPerFrame;
+        mOcclusionRetestBudget = 1000.0 * msPerFrame;
+        mOcclusionNewBudget = 4000.0 * msPerFrame;
         mOcclusionMaxObjectRadius = maxObjectRadius;
     }
 
@@ -448,10 +449,13 @@ namespace SceneUtil
     {
         // A cached result stands while neither end has moved further than this (world units)...
         constexpr float sOcclusionMoveTolerance2 = 24.f * 24.f;
-        // ...and is retested after this many frames anyway (doors open and close).
-        constexpr size_t sOcclusionRefreshFrames = 90;
-        // Results not used for this long are dropped.
-        constexpr size_t sOcclusionForgetFrames = 600;
+        // ...and is retested after this many frames anyway (doors open and close), when there is time for it.
+        constexpr size_t sOcclusionRefreshFrames = 180;
+        // Results not used for this long are dropped (about two minutes): coming back to a room soon after finds them
+        // still known, instead of the room lighting up until it has been tested again.
+        constexpr size_t sOcclusionForgetFrames = 7200;
+        // How often what light occlusion did is written to the log.
+        constexpr size_t sOcclusionLogFrames = 600;
     }
 
     bool LightManager::isLightHidden(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius)
@@ -476,42 +480,39 @@ namespace SceneUtil
         if (box.contains(lightPos))
             return false;
 
-        // Points just inside the box, so the ray ends in the object itself (whose own collision shape the test leaves
-        // out) rather than in front of it.
-        constexpr float inset = 16.f;
-        const osg::Vec3f center = box.center();
-        const auto inside = [&](osg::Vec3f point) {
-            for (int axis = 0; axis < 3; ++axis)
-            {
-                if (point[axis] > center[axis])
-                    point[axis] = std::max(center[axis], point[axis] - inset);
-                else
-                    point[axis] = std::min(center[axis], point[axis] + inset);
-            }
-            return point;
-        };
+        // Points on the sides of the box facing the light. The rays end this far short of them: a floor or wall is
+        // built of tiles lying level with each other, and a ray to the very edge of one tile, or to a point a little
+        // inside it, grazes or crosses the next tile along and found the light hidden from a floor right below it.
+        // Ending short of the side facing the light, the ray never reaches the object itself either.
+        constexpr float shortBy = 8.f;
         const auto visible = [&](const osg::Vec3f& point) {
+            osg::Vec3f toLight = lightPos - point;
+            const float length = toLight.normalize();
             ++mOcclusionRaysUsed;
-            return !mOcclusionTest->isBlocked(lightPos, point);
+            return !mOcclusionTest->isBlocked(lightPos, point + toLight * std::min(shortBy, 0.5f * length));
         };
 
         // The part of the object nearest the light goes first: a wall or floor beside a lamp is lit there.
         osg::Vec3f nearest;
         for (int axis = 0; axis < 3; ++axis)
             nearest[axis] = std::clamp(lightPos[axis], box._min[axis], box._max[axis]);
-        if (visible(inside(nearest)))
+        if (visible(nearest))
             return false;
-        // then the middle of each side facing the light, and the centre
+        // then the middle of each side facing the light
+        const osg::Vec3f center = box.center();
         for (int axis = 0; axis < 3; ++axis)
         {
             if (lightPos[axis] >= box._min[axis] && lightPos[axis] <= box._max[axis])
                 continue;
             osg::Vec3f faceCenter = center;
             faceCenter[axis] = lightPos[axis] < box._min[axis] ? box._min[axis] : box._max[axis];
-            if (visible(inside(faceCenter)))
+            if (visible(faceCenter))
                 return false;
         }
-        return !visible(center);
+        // and the centre, inside the object (whose own collision shape the test leaves out, as the ray ends within
+        // its bounds)
+        ++mOcclusionRaysUsed;
+        return mOcclusionTest->isBlocked(lightPos, center);
     }
 
     void LightManager::removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
@@ -525,29 +526,29 @@ namespace SceneUtil
         if (mOcclusionFrame != frameNum)
         {
             mOcclusionFrame = frameNum;
-            mOcclusionRaysUsed = 0;
+            mOcclusionTimeUsed = 0.0;
         }
         if (mOcclusionInverseViewFor != viewMatrix || mOcclusionInverseViewFrame != frameNum)
         {
-            mOcclusionInverseView = osg::Matrixf::inverse(*viewMatrix);
+            mOcclusionInverseView = osg::Matrixd::inverse(*viewMatrix);
             mOcclusionInverseViewFor = viewMatrix;
             mOcclusionInverseViewFrame = frameNum;
         }
 
         // View space is world space rotated and moved (mirrored for reflections), so distances carry over.
-        const osg::Vec3f objectPos = viewBound.center() * mOcclusionInverseView;
+        const osg::Vec3f objectPos = osg::Vec3d(viewBound.center()) * mOcclusionInverseView;
         const float radius = viewBound.radius();
 
         osg::BoundingBox worldBox;
         if (localBox != nullptr && modelView != nullptr && localBox->valid())
         {
-            const osg::Matrix toWorld = *modelView * osg::Matrix(mOcclusionInverseView);
+            const osg::Matrixd toWorld = osg::Matrixd(*modelView) * mOcclusionInverseView;
             for (unsigned int i = 0; i < 8; ++i)
-                worldBox.expandBy(localBox->corner(i) * toWorld);
+                worldBox.expandBy(osg::Vec3d(localBox->corner(i)) * toWorld);
         }
 
         const auto isHidden = [&](const LightSourceViewBound* light) {
-            const osg::Vec3f lightPos = light->mViewBound.center() * mOcclusionInverseView;
+            const osg::Vec3f lightPos = osg::Vec3d(light->mViewBound.center()) * mOcclusionInverseView;
             // A light within the object (a lamp's own mesh, a room around it) always reaches it.
             if ((lightPos - objectPos).length2() <= radius * radius)
                 return false;
@@ -565,15 +566,35 @@ namespace SceneUtil
             if (!moved && frameNum - entry->mFrame < sOcclusionRefreshFrames)
                 return entry->mBlocked;
 
-            // Out of tests for this frame: keep what was found last, even if an end has moved (a carried lantern, a
+            // Out of time for this frame: keep what was found last, even if an end has moved (a carried lantern, a
             // walking NPC), until it can be tested again. Letting the light through meanwhile made things flick
-            // between lit and dark as the player walked, whenever the tests ran out. A pair never tested yet gets
-            // the light.
-            if (mOcclusionRaysUsed >= mOcclusionRaysPerFrame)
+            // between lit and dark as the player walked. A pair never tested yet gets the light. Pairs not tested
+            // yet or moved come first: routine retests (for doors) only get the time they leave over, else they
+            // used it all up in a busy room and things coming into view stayed lit, then went dark seconds later.
+            const double budget = moved ? mOcclusionNewBudget : mOcclusionRetestBudget;
+            if (mOcclusionTimeUsed >= budget)
+            {
+                if (entry == nullptr)
+                    ++mOcclusionStats.mWaiting;
+                else
+                    ++mOcclusionStats.mPutOff;
                 return entry != nullptr && entry->mBlocked;
+            }
 
+            const auto start = std::chrono::steady_clock::now();
+            const unsigned int raysBefore = mOcclusionRaysUsed;
             const bool blocked = worldBox.valid() ? isLightHiddenFromBox(lightPos, worldBox)
                                                   : isLightHidden(lightPos, objectPos, radius);
+            const double time
+                = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count();
+            mOcclusionTimeUsed += time;
+            mOcclusionStats.mTime += time;
+            ++mOcclusionStats.mTests;
+            mOcclusionStats.mRays += mOcclusionRaysUsed - raysBefore;
+            if (blocked)
+                ++mOcclusionStats.mBlocked;
+            if (entry != nullptr && !moved && entry->mBlocked != blocked)
+                ++mOcclusionStats.mFlips;
             if (entry == nullptr)
             {
                 cache.emplace_back();
@@ -681,6 +702,26 @@ namespace SceneUtil
     {
         if (mPPLightBuffer)
             mPPLightBuffer->clear(frameNum);
+
+        if (mOcclusionEnabled)
+        {
+            OcclusionStats& stats = mOcclusionStats;
+            ++stats.mFrames;
+            stats.mWorstFrameTime = std::max(stats.mWorstFrameTime, mOcclusionTimeUsed);
+            mOcclusionTimeUsed = 0.0;
+            if (stats.mFrames >= sOcclusionLogFrames)
+            {
+                if (stats.mTests > 0 || stats.mWaiting > 0)
+                    Log(Debug::Info) << "Light occlusion, last " << stats.mFrames << " frames: " << stats.mTests
+                                     << " tests (" << stats.mRays << " rays, " << stats.mBlocked << " hidden), "
+                                     << stats.mTime / 1000.0 / static_cast<double>(stats.mFrames)
+                                     << " ms a frame, worst frame " << stats.mWorstFrameTime / 1000.0
+                                     << " ms; drawn lit while waiting for a first test " << stats.mWaiting
+                                     << " times; retests put off " << stats.mPutOff
+                                     << "; retests that changed with nothing moved " << stats.mFlips;
+                stats = OcclusionStats{};
+            }
+        }
 
         mLights.clear();
         mLightsInViewSpace.clear();

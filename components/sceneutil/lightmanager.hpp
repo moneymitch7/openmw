@@ -291,11 +291,11 @@ namespace SceneUtil
             const osg::BoundingSphere& bound, const std::set<LightSource*>& ignored, LightList& out);
 
         /// OpenMGE XE light occlusion: lights with world geometry between them and the whole of an object stop
-        /// lighting it, so a lamp doesn't light the next room through the wall. @a raysPerFrame caps the tests made
-        /// per frame (results are kept until the light or the object moves); objects with a bound radius above
-        /// @a maxObjectRadius (merged chunks, room shells) are never tested.
-        void setLightOcclusion(
-            LightOcclusionTest* test, bool enabled, unsigned int raysPerFrame, float maxObjectRadius);
+        /// lighting it, so a lamp doesn't light the next room through the wall. @a msPerFrame caps the time spent
+        /// re-testing results already known; lights and objects not tested yet (just come into view) or that have
+        /// moved may use four times as much. Results are kept until the light or the object moves; objects with a
+        /// bound radius above @a maxObjectRadius (merged chunks, room shells) are never tested.
+        void setLightOcclusion(LightOcclusionTest* test, bool enabled, float msPerFrame, float maxObjectRadius);
 
         /// Removes from @a lightList the lights the world hides from @a viewBound (in the view space of @a viewMatrix).
         /// With @a localBox (the object's bounding box, in the space @a modelView takes to view space) the light is
@@ -431,13 +431,35 @@ namespace SceneUtil
 
         osg::ref_ptr<LightOcclusionTest> mOcclusionTest;
         bool mOcclusionEnabled = false;
-        unsigned int mOcclusionRaysPerFrame = 0;
+        // per frame, in microseconds: for re-tests of known results, and for pairs not tested yet or moved
+        double mOcclusionRetestBudget = 0.0;
+        double mOcclusionNewBudget = 0.0;
         float mOcclusionMaxObjectRadius = 0.f;
         size_t mOcclusionFrame = 0;
+        double mOcclusionTimeUsed = 0.0;
         unsigned int mOcclusionRaysUsed = 0;
+        /// What light occlusion did, summed until it is logged (every few seconds).
+        struct OcclusionStats
+        {
+            size_t mFrames = 0;
+            size_t mTests = 0;
+            size_t mRays = 0;
+            double mTime = 0.0;
+            double mWorstFrameTime = 0.0;
+            // pairs drawn lit because they could not be tested yet
+            size_t mWaiting = 0;
+            // re-tests put off for lack of time (the old result stood)
+            size_t mPutOff = 0;
+            // re-tests of a pair that hadn't moved that came out the other way
+            size_t mFlips = 0;
+            size_t mBlocked = 0;
+        };
+        OcclusionStats mOcclusionStats;
+        double mOcclusionFrameTime = 0.0;
         const osg::RefMatrix* mOcclusionInverseViewFor = nullptr;
         size_t mOcclusionInverseViewFrame = 0;
-        osg::Matrixf mOcclusionInverseView;
+        // in double precision: the boxes and points it gives must not shift as the camera moves
+        osg::Matrixd mOcclusionInverseView;
     };
 
     class LightManagerCullCallback

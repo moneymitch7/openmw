@@ -301,17 +301,22 @@ Shaders Settings
    and pillars don't, nor do chunky pieces such as curved stairs, rounded corners and cave rock, nor shapes around
    the light or the object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
    Each light and object pair is tested once and retested when either moves or every few seconds (for doors).
+   Rays end just short of the object's surface, so the next floor or wall tile along doesn't hide a lamp from its
+   neighbour.
    The test is per object, not per pixel: an object partly behind a wall keeps the light.
    Works with both lighting methods. With :ref:`clustered lighting` the shaders skip the hidden lights per object, for
    the 1024 lights nearest the camera.
 
 .. omw-setting::
-   :title: light occlusion rays per frame
-   :type: int
-   :range: 8-2048
-   :default: 64
+   :title: light occlusion time per frame
+   :type: float32
+   :range: 0.1-8.0
+   :default: 1.0
 
-   How many wall tests :ref:`light occlusion` may make in one frame. Pairs not yet tested keep the light.
+   Milliseconds :ref:`light occlusion` may spend in one frame retesting light and object pairs it has tested
+   before. Pairs not tested yet (just come into view) or that have moved may use four times as much, so they are
+   tested as they appear. Pairs not yet tested keep the light. Every ten seconds or so the log says how much was
+   tested and how long it took.
 
 .. omw-setting::
    :title: sunlight brightness
