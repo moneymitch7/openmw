@@ -550,10 +550,12 @@ namespace SceneUtil
             if (!moved && frameNum - entry->mFrame < sOcclusionRefreshFrames)
                 return entry->mBlocked;
 
-            // Out of tests for this frame: keep what was found last unless either end has moved, then let the light
-            // through until it can be tested.
+            // Out of tests for this frame: keep what was found last, even if an end has moved (a carried lantern, a
+            // walking NPC), until it can be tested again. Letting the light through meanwhile made things flick
+            // between lit and dark as the player walked, whenever the tests ran out. A pair never tested yet gets
+            // the light.
             if (mOcclusionRaysUsed >= mOcclusionRaysPerFrame)
-                return !moved && entry->mBlocked;
+                return entry != nullptr && entry->mBlocked;
 
             const bool blocked = worldBox.valid() ? isLightHiddenFromBox(lightPos, worldBox)
                                                   : isLightHidden(lightPos, objectPos, radius);
