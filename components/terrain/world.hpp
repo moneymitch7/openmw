@@ -5,6 +5,7 @@
 #include <osg/Vec3f>
 #include <osg/ref_ptr>
 
+#include <atomic>
 #include <memory>
 #include <set>
 
@@ -30,6 +31,23 @@ namespace Loading
 
 namespace Terrain
 {
+    namespace Detail
+    {
+        inline std::atomic<unsigned int> sPreloadHelperThreads{ 0 };
+    }
+
+    /// While the game waits for a terrain preload (behind a loading screen), this many threads join the one building
+    /// its chunks. Background preloads, with the game running, stay on their one thread.
+    inline void setPreloadHelperThreads(unsigned int count)
+    {
+        Detail::sPreloadHelperThreads.store(count, std::memory_order_relaxed);
+    }
+
+    inline unsigned int getPreloadHelperThreads()
+    {
+        return Detail::sPreloadHelperThreads.load(std::memory_order_relaxed);
+    }
+
     class Storage;
 
     class TextureManager;

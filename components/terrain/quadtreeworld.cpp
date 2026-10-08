@@ -4,7 +4,10 @@
 #include <osg/ShapeDrawable>
 #include <osgUtil/CullVisitor>
 
+#include <exception>
 #include <limits>
+#include <thread>
+#include <vector>
 
 #include <components/esm/util.hpp>
 #include <components/loadinglistener/reporter.hpp>
@@ -557,14 +560,57 @@ namespace Terrain
         DefaultLodCallback lodCallback(mLodFactor, mMinSize, mViewDistance, grid, static_cast<int>(cellWorldSize));
         mRootNode->traverseNodes(vd, viewPoint, &lodCallback);
 
-        reporter.addTotal(vd->getNumEntries());
+        const unsigned int numEntries = vd->getNumEntries();
+        reporter.addTotal(numEntries);
 
-        for (unsigned int i = 0, n = vd->getNumEntries(); i < n && !abort; ++i)
-        {
-            ViewDataEntry& entry = vd->getEntry(i);
-            loadRenderingNode(entry, vd, cellWorldSize, grid, true);
+        // Each entry is built on its own, so threads can share the list. The one thing they share, the index of the
+        // view's nodes, is built first.
+        if (vd->hasChanged())
+            vd->buildNodeIndex();
+
+        std::atomic<unsigned int> next{ 0 };
+        std::atomic<bool> failed{ false };
+        std::exception_ptr error;
+        std::mutex errorMutex;
+        const auto loadNext = [&]() -> bool {
+            if (abort || failed)
+                return false;
+            const unsigned int i = next.fetch_add(1);
+            if (i >= numEntries)
+                return false;
+            try
+            {
+                loadRenderingNode(vd->getEntry(i), vd, cellWorldSize, grid, true);
+            }
+            catch (...)
+            {
+                std::lock_guard<std::mutex> lock(errorMutex);
+                if (!error)
+                    error = std::current_exception();
+                failed = true;
+                return false;
+            }
             reporter.addProgress(1);
-        }
+            return true;
+        };
+
+        // Helpers join in when the game starts waiting for this (see setPreloadHelperThreads), not before.
+        std::vector<std::thread> helpers;
+        do
+        {
+            const unsigned int wanted = getPreloadHelperThreads();
+            while (helpers.size() < wanted && next.load() + 1 < numEntries && !abort && !failed)
+                helpers.emplace_back([&] {
+                    while (loadNext())
+                    {
+                    }
+                });
+        } while (loadNext());
+        for (std::thread& helper : helpers)
+            helper.join();
+
+        if (error)
+            std::rethrow_exception(error);
     }
 
     void QuadTreeWorld::reportStats(unsigned int frameNumber, osg::Stats* stats)

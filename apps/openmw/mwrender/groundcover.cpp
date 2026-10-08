@@ -15,6 +15,7 @@
 #include <components/esm3/readerscache.hpp>
 #include <components/misc/convert.hpp>
 #include <components/sceneutil/lightmanager.hpp>
+#include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/nodecallback.hpp>
 #include <components/sceneutil/templateref.hpp>
 #include <components/settings/values.hpp>
@@ -328,6 +329,7 @@ namespace MWRender
     osg::ref_ptr<osg::Node> Groundcover::getChunk(float size, const osg::Vec2f& center, unsigned char lod,
         unsigned int lodFlags, bool activeGrid, const osg::Vec3f& viewPoint, bool compile)
     {
+        const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::Groundcover);
         if (lod > getMaxLodLevel())
             return nullptr;
         GroundcoverChunkId id = std::make_tuple(center, size);

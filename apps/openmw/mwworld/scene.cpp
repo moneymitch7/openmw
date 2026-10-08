@@ -3,6 +3,8 @@
 #include <atomic>
 #include <chrono>
 #include <limits>
+#include <span>
+#include <vector>
 
 #include <BulletCollision/CollisionDispatch/btCollisionObject.h>
 
@@ -21,6 +23,7 @@
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/sceneutil/autolod.hpp>
+#include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/settings/values.hpp>
 #include <components/terrain/terraingrid.hpp>
@@ -691,6 +694,7 @@ namespace MWWorld
         mNavigator.updateBounds(playerCellIndex.mWorldspace, cellGridBounds, pos, navigatorUpdateGuard.get());
         const auto terrainStart = Clock::now();
         const unsigned long long lodStartUs = SceneUtil::getAutoLodMicroseconds();
+        const SceneUtil::LoadProfile::Snapshot landStart = SceneUtil::LoadProfile::snapshot();
 
         mHalfGridSize = halfGridSize;
         mCurrentGridCenter = osg::Vec2i(playerCellX, playerCellY);
@@ -707,6 +711,24 @@ namespace MWWorld
             preloadTerrain(pos, playerCellIndex.mWorldspace, true);
         const int terrainMs = msSince(terrainStart);
         const int terrainLodMs = static_cast<int>((SceneUtil::getAutoLodMicroseconds() - lodStartUs) / 1000);
+        if (terrainMs >= 100)
+        {
+            const SceneUtil::LoadProfile::Snapshot landEnd = SceneUtil::LoadProfile::snapshot();
+            const auto ms = [&](SceneUtil::LoadProfile::Step step) {
+                const std::size_t i = static_cast<std::size_t>(step);
+                return (landEnd[i] - landStart[i]) / 1000;
+            };
+            using SceneUtil::LoadProfile::Step;
+            const std::size_t chunks = static_cast<std::size_t>(Step::ObjectChunks);
+            Log(Debug::Info) << "Distant land took " << terrainMs << " ms on up to "
+                             << CellPreloader::getLoadingThreads() << " threads; on all threads together: terrain "
+                             << ms(Step::Terrain) << " ms, groundcover " << ms(Step::Groundcover) << " ms, objects "
+                             << ms(Step::Objects) << " ms (" << landEnd[chunks] - landStart[chunks]
+                             << " chunks: reading references " << ms(Step::ObjectRefs) << " ms, models "
+                             << ms(Step::ObjectModels) << " ms, automatic LOD " << terrainLodMs << " ms, placing "
+                             << ms(Step::ObjectCopies) << " ms, occluders " << ms(Step::ObjectOccluders)
+                             << " ms, merging " << ms(Step::ObjectMerging) << " ms)";
+        }
         const auto pagingStart = Clock::now();
         mPagedRefs.clear();
         mRendering.getPagedRefnums(newGrid, mPagedRefs);
@@ -727,7 +749,20 @@ namespace MWWorld
         Loading::Listener* loadingListener = MWBase::Environment::get().getWindowManager()->getLoadingScreen();
         Loading::ScopedLoad load(loadingListener);
         loadingListener->setLabel("#{OMWEngine:LoadingExterior}");
+
+        // Load the new cells' models all at once on several threads, rather than one after another as each object is
+        // inserted.
+        const auto modelsStart = Clock::now();
+        std::vector<CellStore*> cellsToLoad;
+        cellsToLoad.reserve(cellsPositionsToLoad.size());
+        for (const auto& [x, y] : cellsPositionsToLoad)
+            cellsToLoad.push_back(
+                &mWorld.getWorldModel().getExterior(ESM::ExteriorCellLocation(x, y, playerCellIndex.mWorldspace)));
+        const CellPreloader::LoadedModels loadedModels = mPreloader->loadModelsNow(cellsToLoad, *loadingListener);
+        const int modelsMs = msSince(modelsStart);
+
         loadingListener->setProgressRange(refsToLoad);
+        loadingListener->setProgress(0);
 
         sortCellsToLoad(playerCellX, playerCellY, cellsPositionsToLoad);
 
@@ -754,8 +789,9 @@ namespace MWWorld
         if (totalMs >= 100)
             Log(Debug::Warning) << "Slow cell change: " << totalMs << " ms (unloading " << unloadMs << " ms, terrain "
                                 << terrainMs << " ms (automatic LOD on all threads " << terrainLodMs
-                                << " ms), paged objects " << pagingMs << " ms, navigator " << navigatorMs << " ms"
-                                << report << ")";
+                                << " ms), paged objects " << pagingMs << " ms, loading models ("
+                                << loadedModels.mObjects.size() << ") " << modelsMs << " ms, navigator " << navigatorMs
+                                << " ms" << report << ")";
 
         CellStore& current = mWorld.getWorldModel().getExterior(playerCellIndex);
         MWBase::Environment::get().getWindowManager()->changeCell(&current);
@@ -1029,7 +1065,13 @@ namespace MWWorld
         }
         assert(mActiveCells.empty());
 
+        // The cell's models all at once on several threads, rather than one after another as each object is inserted.
+        CellStore* const cellToLoad = &cell;
+        const CellPreloader::LoadedModels loadedModels
+            = mPreloader->loadModelsNow(std::span(&cellToLoad, 1), *loadingListener);
+
         loadingListener->setProgressRange(cell.count());
+        loadingListener->setProgress(0);
 
         mNavigator.updateBounds(
             cell.getCell()->getWorldSpace(), std::nullopt, position.asVec3(), navigatorUpdateGuard.get());

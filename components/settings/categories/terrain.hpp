@@ -41,6 +41,7 @@ namespace Settings
         SettingValue<float> mObjectPagingLodPixelError{ mIndex, "Terrain", "object paging lod pixel error",
             makeClampSanitizerFloat(0, 16) };
         SettingValue<bool> mWaterCulling{ mIndex, "Terrain", "water culling" };
+        SettingValue<int> mLoadingThreads{ mIndex, "Terrain", "loading threads", makeClampSanitizerInt(0, 32) };
     };
 }
 

@@ -9,10 +9,13 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <span>
+#include <vector>
 
 namespace osg
 {
+    class Object;
     class Stats;
 }
 
@@ -87,6 +90,21 @@ namespace MWWorld
         void setTerrain(Terrain::World* terrain);
 
         void reportStats(unsigned int frameNumber, osg::Stats& stats) const;
+
+        /// What loadModelsNow loaded, kept in the caches while this lives.
+        struct LoadedModels
+        {
+            std::set<osg::ref_ptr<const osg::Object>> mObjects;
+            std::set<std::shared_ptr<const void>> mOwnedObjects;
+        };
+
+        /// Loads the models and collision shapes of the objects in @a cells (State_Loaded) on as many threads as a
+        /// loading screen can spare, so inserting the cells finds them loaded instead of loading them one by one.
+        /// Shows the progress on @a listener.
+        LoadedModels loadModelsNow(std::span<CellStore* const> cells, Loading::Listener& listener);
+
+        /// Threads to use while a loading screen waits (see the 'loading threads' setting).
+        static unsigned int getLoadingThreads();
 
     private:
         void clearAllTasks();

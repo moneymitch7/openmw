@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -39,6 +40,7 @@
 #include <components/resource/scenemanager.hpp>
 #include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/lightmanager.hpp>
+#include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/morphgeometry.hpp>
 #include <components/sceneutil/optimizer.hpp>
@@ -170,6 +172,8 @@ namespace MWRender
             return static_cast<osg::Node*>(obj.get());
 
         const unsigned char lod = static_cast<unsigned char>(lodFlags >> (4 * 4));
+        const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::Objects);
+        SceneUtil::LoadProfile::add(SceneUtil::LoadProfile::Step::ObjectChunks, 1);
         osg::ref_ptr<osg::Node> node = createChunk(size, center, activeGrid, viewPoint, compile, lod);
         mCache->addEntryToObjectCache(id, node.get());
         return node;
@@ -738,13 +742,12 @@ namespace MWRender
 
         std::map<ESM::RefNum, PagedCellRef> refs;
 
-        if (mWorldspace == ESM::Cell::sDefaultWorldspaceId)
         {
-            refs = collectESM3References(size, startCell, store);
-        }
-        else
-        {
-            refs = collectESM4References(size, startCell, mWorldspace);
+            const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectRefs);
+            if (mWorldspace == ESM::Cell::sDefaultWorldspaceId)
+                refs = collectESM3References(size, startCell, store);
+            else
+                refs = collectESM4References(size, startCell, mWorldspace);
         }
 
         if (activeGrid && !refs.empty())
@@ -832,6 +835,8 @@ namespace MWRender
             if (Misc::ResourceHelpers::isHiddenMarker(ref.mRefId))
                 continue;
 
+            std::optional<SceneUtil::LoadProfile::Scope> modelsProfile;
+            modelsProfile.emplace(SceneUtil::LoadProfile::Step::ObjectModels);
             const int type = store.findStatic(ref.mRefId);
             VFS::Path::Normalized model = getModel(type, ref.mRefId, store);
             if (model.empty())
@@ -873,6 +878,7 @@ namespace MWRender
             }
 
             osg::ref_ptr<const osg::Node> cnode = mSceneManager->getTemplate(model, false);
+            modelsProfile.reset();
 
             if (activeGrid)
             {
@@ -1011,7 +1017,10 @@ namespace MWRender
                 copyop.setCopyFlags(merge ? osg::CopyOp::DEEP_COPY_NODES | osg::CopyOp::DEEP_COPY_DRAWABLES
                                           : osg::CopyOp::DEEP_COPY_NODES);
                 copyop.mDistances = lodDistances / ref.mScale;
-                copyop.copy(cnode, trans);
+                {
+                    const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectCopies);
+                    copyop.copy(cnode, trans);
+                }
 
                 if (buildOccluders)
                 {
@@ -1025,6 +1034,7 @@ namespace MWRender
                             adaptiveRes
                                 = std::clamp(static_cast<int>(occluderMeshRes * (scaledRadius / occluderMinRadius)),
                                     occluderMeshRes, occluderMaxMeshRes);
+                        const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectOccluders);
                         OccluderMesh occMesh = buildSimplifiedMesh(trans, adaptiveRes, occluderShrinkFactor);
                         if (!occMesh.indices.empty())
                         {
@@ -1092,7 +1102,10 @@ namespace MWRender
             const unsigned int options = SceneUtil::Optimizer::FLATTEN_STATIC_TRANSFORMS
                 | SceneUtil::Optimizer::REMOVE_REDUNDANT_NODES | SceneUtil::Optimizer::MERGE_GEOMETRY;
 
-            optimizer.optimize(mergeGroup, options);
+            {
+                const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectMerging);
+                optimizer.optimize(mergeGroup, options);
+            }
 
             group->addChild(mergeGroup);
 

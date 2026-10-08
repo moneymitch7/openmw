@@ -2,13 +2,17 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <limits>
+#include <mutex>
 #include <span>
+#include <thread>
 
 #include <osg/Stats>
 
 #include <components/debug/debuglog.hpp>
 #include <components/esm3/loadcell.hpp>
+#include <components/loadinglistener/loadinglistener.hpp>
 #include <components/loadinglistener/reporter.hpp>
 #include <components/misc/constants.hpp>
 #include <components/misc/pathhelpers.hpp>
@@ -19,6 +23,7 @@
 #include <components/resource/keyframemanager.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
+#include <components/settings/values.hpp>
 #include <components/terrain/view.hpp>
 #include <components/terrain/world.hpp>
 #include <components/vfs/manager.hpp>
@@ -374,8 +379,105 @@ namespace MWWorld
 
     void CellPreloader::syncTerrainLoad(Loading::Listener& listener)
     {
-        if (mTerrainPreloadItem != nullptr && !mTerrainPreloadItem->isDone())
-            mTerrainPreloadItem->wait(listener);
+        if (mTerrainPreloadItem == nullptr || mTerrainPreloadItem->isDone())
+            return;
+
+        // Nothing else to do meanwhile, so more threads help.
+        const unsigned int threads = getLoadingThreads();
+        struct Helpers
+        {
+            explicit Helpers(unsigned int count) { Terrain::setPreloadHelperThreads(count); }
+            ~Helpers() { Terrain::setPreloadHelperThreads(0); }
+        } helpers(threads - 1);
+        mTerrainPreloadItem->wait(listener);
+    }
+
+    unsigned int CellPreloader::getLoadingThreads()
+    {
+        const int setting = Settings::terrain().mLoadingThreads;
+        if (setting > 0)
+            return static_cast<unsigned int>(setting);
+        return std::clamp(std::thread::hardware_concurrency(), 3u, 10u) - 2;
+    }
+
+    CellPreloader::LoadedModels CellPreloader::loadModelsNow(
+        std::span<CellStore* const> cells, Loading::Listener& listener)
+    {
+        LoadedModels result;
+
+        std::vector<VFS::Path::NormalizedView> meshes;
+        ListModelsVisitor visitor{ meshes };
+        for (CellStore* cell : cells)
+            cell->forEachConst(visitor);
+        std::sort(meshes.begin(), meshes.end());
+        meshes.erase(std::unique(meshes.begin(), meshes.end()), meshes.end());
+        if (meshes.empty())
+            return result;
+
+        Resource::SceneManager* const sceneManager = mResourceSystem->getSceneManager();
+        Resource::KeyframeManager* const keyframeManager = mResourceSystem->getKeyframeManager();
+        const VFS::Manager& vfs = *sceneManager->getVFS();
+
+        std::atomic<std::size_t> next{ 0 };
+        std::atomic<std::size_t> done{ 0 };
+        std::mutex resultMutex;
+        const auto work = [&] {
+            LoadedModels loaded;
+            VFS::Path::Normalized mesh;
+            VFS::Path::Normalized kfname;
+            for (std::size_t i; (i = next.fetch_add(1)) < meshes.size(); ++done)
+            {
+                // The same as PreloadItem does for one cell.
+                try
+                {
+                    mesh = Misc::ResourceHelpers::correctMeshPath(meshes[i]);
+                    mesh = Misc::ResourceHelpers::correctActorModelPath(mesh, &vfs);
+                    if (!vfs.exists(mesh))
+                        continue;
+
+                    constexpr VFS::Path::ExtensionView nif("nif");
+                    if (Misc::getFileName(mesh).starts_with('x') && mesh.extension() == nif)
+                    {
+                        kfname = mesh;
+                        constexpr VFS::Path::ExtensionView kf("kf");
+                        kfname.changeExtension(kf);
+                        if (vfs.exists(kfname))
+                            loaded.mObjects.insert(keyframeManager->get(kfname));
+                    }
+
+                    loaded.mObjects.insert(sceneManager->getTemplate(mesh));
+                    if (mPreloadInstances)
+                        loaded.mOwnedObjects.insert(mBulletShapeManager->cacheInstance(mesh));
+                    else
+                        loaded.mOwnedObjects.insert(mBulletShapeManager->getShape(mesh));
+                }
+                catch (const std::exception& e)
+                {
+                    Log(Debug::Warning) << "Failed to load mesh \"" << meshes[i] << "\": " << e.what();
+                }
+            }
+            std::lock_guard<std::mutex> lock(resultMutex);
+            result.mObjects.merge(loaded.mObjects);
+            result.mOwnedObjects.merge(loaded.mOwnedObjects);
+        };
+
+        const std::size_t threads = std::min<std::size_t>(getLoadingThreads(), meshes.size());
+        std::vector<std::thread> workers;
+        workers.reserve(threads);
+        for (std::size_t i = 0; i < threads; ++i)
+            workers.emplace_back(work);
+
+        // This thread keeps the loading screen going meanwhile.
+        listener.setProgressRange(meshes.size());
+        while (done.load() < meshes.size())
+        {
+            listener.setProgress(done.load());
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        for (std::thread& worker : workers)
+            worker.join();
+        listener.setProgress(meshes.size());
+        return result;
     }
 
     void CellPreloader::abortTerrainPreloadExcept(const PositionCellGrid* exceptPos)

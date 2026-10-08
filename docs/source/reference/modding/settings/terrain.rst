@@ -226,6 +226,18 @@ Terrain Settings
    0 disables automatic LOD.
 
 .. omw-setting::
+   :title: loading threads
+   :type: int
+   :range: 0 to 32
+   :default: 0
+
+   How many threads build the distant terrain, objects and groundcover while a loading screen waits for them
+   (loading a save, teleporting, entering an exterior from a door).
+   Out of loading screens the distant land is built in the background on one thread whatever this is set to.
+   0 picks the number from the processor: two less than it has hardware threads, at most 8.
+   1 turns the extra threads off.
+
+.. omw-setting::
    :title: water culling
    :type: boolean
    :range: true, false
