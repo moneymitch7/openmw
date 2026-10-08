@@ -126,6 +126,13 @@ namespace MWWorld
                 return mPhysics.isLightBlocked(from, to);
             }
 
+            unsigned int getChangeCount() const override { return mPhysics.getLightBlockerChangeCount(); }
+
+            bool getChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const override
+            {
+                return mPhysics.getLightBlockerChangesSince(count, out);
+            }
+
         private:
             const MWPhysics::PhysicsSystem& mPhysics;
         };

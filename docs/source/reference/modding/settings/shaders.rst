@@ -300,12 +300,13 @@ Shaders Settings
    Only slab-shaped pieces count (walls, floors between storeys, doors): small shapes such as furniture, crates
    and pillars don't, nor do chunky pieces such as curved stairs, rounded corners and cave rock, nor shapes around
    the light or the object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
-   Each light and object pair is tested once and retested when either moves or every few seconds (for doors).
-   Rays end just short of the object's surface, so the next floor or wall tile along doesn't hide a lamp from its
-   neighbour.
-   The test is per object, not per pixel: an object partly behind a wall keeps the light.
-   Works with both lighting methods. With :ref:`clustered lighting` the shaders skip the hidden lights per object, for
-   the 1024 lights nearest the camera.
+   Each light and object pair is tested once and retested when either moves, when a door turns across the way
+   between them, or every few seconds. Rays end just short of the object's surface, so the next floor or wall tile
+   along doesn't hide a lamp from its neighbour.
+   The test is per object, not per pixel. With :ref:`clustered lighting` an object gets the share of a light that
+   reaches it (a floor that sees a lamp only through a doorway gets part of its light), and a light fades in and out
+   over half a second when that changes, for the 1024 lights nearest the camera. With the other lighting methods an
+   object keeps a light while it reaches a quarter of it.
 
 .. omw-setting::
    :title: light occlusion time per frame

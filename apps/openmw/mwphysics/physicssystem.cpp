@@ -20,6 +20,7 @@
 #include <LinearMath/btVector3.h>
 
 #include <components/debug/debuglog.hpp>
+#include <components/esm3/loaddoor.hpp>
 #include <components/esm3/loadgmst.hpp>
 #include <components/esm3/loadmgef.hpp>
 #include <components/misc/convert.hpp>
@@ -255,6 +256,34 @@ namespace MWPhysics
         LightBlockerCallback callback(btFrom, btTo);
         mTaskScheduler->rayTest(btFrom, btTo, callback);
         return callback.hasHit();
+    }
+
+    void PhysicsSystem::noteLightBlockerMoved(const MWWorld::Ptr& ptr, const btCollisionObject* collisionObject)
+    {
+        if (ptr.getType() != ESM::Door::sRecordId || collisionObject == nullptr
+            || collisionObject->getCollisionShape() == nullptr)
+            return;
+        btVector3 min;
+        btVector3 max;
+        collisionObject->getCollisionShape()->getAabb(collisionObject->getWorldTransform(), min, max);
+        ++mLightBlockerChangeCount;
+        mLightBlockerChanges.emplace_back(mLightBlockerChangeCount,
+            osg::BoundingBox(Misc::Convert::toOsg(min), Misc::Convert::toOsg(max)));
+        while (mLightBlockerChanges.size() > 512)
+            mLightBlockerChanges.pop_front();
+    }
+
+    bool PhysicsSystem::getLightBlockerChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const
+    {
+        if (count == mLightBlockerChangeCount)
+            return true;
+        // the moves after count, if still kept
+        if (mLightBlockerChanges.empty() || mLightBlockerChanges.front().first > count + 1)
+            return false;
+        for (const auto& [changeCount, box] : mLightBlockerChanges)
+            if (changeCount > count)
+                out.push_back(box);
+        return true;
     }
 
     RayCastingResult PhysicsSystem::castRay(const osg::Vec3f& from, const osg::Vec3f& to,
@@ -599,6 +628,7 @@ namespace MWPhysics
         {
             foundObject->second->setRotation(rotate);
             mTaskScheduler->updateSingleAabb(foundObject->second);
+            noteLightBlockerMoved(ptr, foundObject->second->getCollisionObject());
         }
         else if (auto foundActor = mActors.find(ptr.mRef); foundActor != mActors.end())
         {
@@ -616,6 +646,7 @@ namespace MWPhysics
         {
             foundObject->second->updatePosition();
             mTaskScheduler->updateSingleAabb(foundObject->second);
+            noteLightBlockerMoved(ptr, foundObject->second->getCollisionObject());
         }
         else if (auto foundActor = mActors.find(ptr.mRef); foundActor != mActors.end())
         {

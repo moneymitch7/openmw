@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <osg/BoundingBox>
 #include <osg/BufferIndexBinding>
 #include <osg/BufferTemplate>
 #include <osg/DispatchCompute>
@@ -223,6 +224,16 @@ namespace SceneUtil
     {
     public:
         virtual bool isBlocked(const osg::Vec3f& from, const osg::Vec3f& to) = 0;
+
+        /// Counts the moves of things that hide light other than the static world (doors turning).
+        virtual unsigned int getChangeCount() const { return 0; }
+
+        /// Appends to @a out the world boxes of the moves after @a count. False if they are no longer known (there were
+        /// too many since), when anything may have changed.
+        virtual bool getChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const
+        {
+            return count == getChangeCount();
+        }
     };
 
     /// @brief Decorator node implementing the rendering of any number of LightSources that can be anywhere in the
@@ -254,8 +265,16 @@ namespace SceneUtil
             const LightSource* mLight = nullptr;
             osg::Vec3f mLightPos;
             osg::Vec3f mObjectPos;
+            // frame last tested, and last needed
             size_t mFrame = 0;
-            bool mBlocked = false;
+            size_t mUsedFrame = 0;
+            // LightOcclusionTest::getChangeCount when tested, or when last found clear of the doors moved since
+            unsigned int mChangeCount = 0;
+            // how much of the object the light reaches (0 to 1), as last tested
+            float mVisible = 1.f;
+            // changes fade in: from this, starting then
+            float mFadeFrom = 1.f;
+            double mFadeStart = 0.0;
         };
         using OcclusionCache = std::vector<OcclusionCacheEntry>;
         using SupportedMethods = std::array<bool, 3>;
@@ -297,21 +316,30 @@ namespace SceneUtil
         /// bound radius above @a maxObjectRadius (merged chunks, room shells) are never tested.
         void setLightOcclusion(LightOcclusionTest* test, bool enabled, float msPerFrame, float maxObjectRadius);
 
-        /// Removes from @a lightList the lights the world hides from @a viewBound (in the view space of @a viewMatrix).
-        /// With @a localBox (the object's bounding box, in the space @a modelView takes to view space) the light is
-        /// tested against the object's nearest corner region instead of points around the bounding sphere's centre, so
-        /// large pieces (walls, floors, room parts) next to a light keep it.
-        void removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
+        /// Sets @a visibility (one per light of @a lightList) to how much of @a viewBound (in the view space of
+        /// @a viewMatrix) each light reaches past the world, from 0 (hidden) to 1, fading over half a second when it
+        /// changes. With @a localBox (the object's bounding box, in the space @a modelView takes to view space) the
+        /// light is tested against points on the sides of the box facing it instead of points around the bounding
+        /// sphere's centre, so large pieces (walls, floors, room parts) next to a light keep it, and a floor that sees
+        /// a lamp only through a doorway gets part of its light.
+        void getLightVisibility(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
+            const osg::BoundingSphere& viewBound, const LightList& lightList, std::vector<float>& visibility,
+            OcclusionCache& cache, const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr);
+
+        /// Removes from @a lightList the lights the world (nearly) hides from @a viewBound, for the lighting methods
+        /// with per-object light lists, which can't light an object with part of a light.
+        void removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
             const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
             const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr);
 
         bool getLightOcclusionEnabled() const { return mOcclusionEnabled; }
 
-        /// Clustered lighting has no per-object light lists, so hidden lights are left out by the shaders instead: a
-        /// state set telling them which lights of the light buffer to skip (bit i of @a mask is the light at index i).
-        /// Lights of the light buffer the blocked-light masks can hide (bit i of word i / 32 is the light at index i).
+        /// Clustered lighting has no per-object light lists, so hidden lights are dimmed by the shaders instead: a
+        /// state set telling them how much of each light of the light buffer to leave out, 4 bits a light (bits
+        /// 4 * (i % 8) of word i / 8 for the light at index i: 0 all of the light reaches the object, 15 none of it).
         static constexpr unsigned int sMaxBlockableLights = 1024;
-        using BlockedLightsMask = std::array<unsigned int, sMaxBlockableLights / 32>;
+        static constexpr unsigned int sLightShadeLevels = 15;
+        using BlockedLightsMask = std::array<unsigned int, sMaxBlockableLights / 8>;
 
         osg::ref_ptr<osg::StateSet> getBlockedLightsStateSet(const BlockedLightsMask& mask);
 
@@ -426,8 +454,12 @@ namespace SceneUtil
 
         osg::ref_ptr<LightManagerCullCallback> mCullCallback;
 
-        bool isLightHidden(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius);
-        bool isLightHiddenFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& worldBox);
+        // how much of the object the light reaches, 0 to 1
+        float testLightVisibility(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius);
+        float testLightVisibilityFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& worldBox);
+        // whether a door moved since @a entry was tested across the line from the light to the object
+        bool changedSince(const OcclusionCacheEntry& entry, const osg::Vec3f& lightPos, const osg::Vec3f& objectPos,
+            float objectRadius);
 
         osg::ref_ptr<LightOcclusionTest> mOcclusionTest;
         bool mOcclusionEnabled = false;
@@ -456,6 +488,8 @@ namespace SceneUtil
         };
         OcclusionStats mOcclusionStats;
         double mOcclusionFrameTime = 0.0;
+        unsigned int mOcclusionChangeCount = 0;
+        std::vector<osg::BoundingBox> mOcclusionChanges;
         const osg::RefMatrix* mOcclusionInverseViewFor = nullptr;
         size_t mOcclusionInverseViewFrame = 0;
         // in double precision: the boxes and points it gives must not shift as the camera moves
@@ -546,6 +580,7 @@ namespace SceneUtil
         LightManager* mLightManager;
         size_t mLastFrameNumber;
         LightManager::LightList mLightList;
+        std::vector<float> mLightVisibility;
         std::set<SceneUtil::LightSource*> mIgnoredLightSources;
         LightManager::OcclusionCache mOcclusionCache;
         // light occlusion: the node's box (see getOcclusionBox) and the bound it was made for

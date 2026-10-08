@@ -62,12 +62,12 @@ namespace SceneUtil
 {
     namespace
     {
-        // blockedLights in lib/light/bindings.glsl: a uvec4 per 128 lights.
+        // lightShade in lib/light/bindings.glsl: a uvec4 per 32 lights.
         osg::ref_ptr<osg::Uniform> makeBlockedLightsUniform(const LightManager::BlockedLightsMask& mask)
         {
-            constexpr unsigned int vectors = LightManager::sMaxBlockableLights / 128;
+            constexpr unsigned int vectors = LightManager::sMaxBlockableLights / 32;
             osg::ref_ptr<osg::Uniform> uniform
-                = new osg::Uniform(osg::Uniform::UNSIGNED_INT_VEC4, "blockedLights", vectors);
+                = new osg::Uniform(osg::Uniform::UNSIGNED_INT_VEC4, "lightShade", vectors);
             for (unsigned int i = 0; i < vectors; ++i)
                 uniform->setElement(i, mask[i * 4], mask[i * 4 + 1], mask[i * 4 + 2], mask[i * 4 + 3]);
             return uniform;
@@ -458,27 +458,73 @@ namespace SceneUtil
         constexpr size_t sOcclusionLogFrames = 600;
     }
 
-    bool LightManager::isLightHidden(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius)
+    namespace
     {
-        // Hidden only when no part of the object can be reached: its centre and six points halfway out. The centre
-        // goes first, and most lights see it.
+        // How long a light takes to fade in or out when what it reaches changes (seconds).
+        constexpr double sOcclusionFadeTime = 0.5;
+
+        bool segmentHitsBox(const osg::Vec3f& from, const osg::Vec3f& to, const osg::BoundingBox& box)
+        {
+            float enter = 0.f;
+            float leave = 1.f;
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                const float delta = to[axis] - from[axis];
+                if (std::abs(delta) < 1e-6f)
+                {
+                    if (from[axis] < box._min[axis] || from[axis] > box._max[axis])
+                        return false;
+                    continue;
+                }
+                float t0 = (box._min[axis] - from[axis]) / delta;
+                float t1 = (box._max[axis] - from[axis]) / delta;
+                if (t0 > t1)
+                    std::swap(t0, t1);
+                enter = std::max(enter, t0);
+                leave = std::min(leave, t1);
+                if (enter > leave)
+                    return false;
+            }
+            return true;
+        }
+
+        float fadedVisibility(const LightManager::OcclusionCacheEntry& entry, double time)
+        {
+            const double t = std::clamp((time - entry.mFadeStart) / sOcclusionFadeTime, 0.0, 1.0);
+            const float eased = static_cast<float>(t * t * (3.0 - 2.0 * t));
+            return entry.mFadeFrom + (entry.mVisible - entry.mFadeFrom) * eased;
+        }
+    }
+
+    float LightManager::testLightVisibility(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius)
+    {
+        // A small object: its centre and six points halfway out. The share of them the light reaches.
         const float r = objectRadius * 0.5f;
         const osg::Vec3f offsets[]
             = { { 0, 0, 0 }, { 0, 0, r }, { r, 0, 0 }, { -r, 0, 0 }, { 0, r, 0 }, { 0, -r, 0 }, { 0, 0, -r } };
+        // Most lights reach the centre and the point facing them: then the light reaches it all.
+        osg::Vec3f toLight = lightPos - objectPos;
+        toLight.normalize();
+        mOcclusionRaysUsed += 2;
+        const bool centre = !mOcclusionTest->isBlocked(lightPos, objectPos);
+        const bool facing = !mOcclusionTest->isBlocked(lightPos, objectPos + toLight * r);
+        if (centre && facing)
+            return 1.f;
+        unsigned int reached = 0;
         for (const osg::Vec3f& offset : offsets)
         {
             ++mOcclusionRaysUsed;
             if (!mOcclusionTest->isBlocked(lightPos, objectPos + offset))
-                return false;
+                ++reached;
         }
-        return true;
+        return static_cast<float>(reached) / static_cast<float>(std::size(offsets));
     }
 
-    bool LightManager::isLightHiddenFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& box)
+    float LightManager::testLightVisibilityFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& box)
     {
         // A light inside the object's box (a lamp in a room part, a candle on a table) always reaches it.
         if (box.contains(lightPos))
-            return false;
+            return 1.f;
 
         // Points on the sides of the box facing the light. The rays end this far short of them: a floor or wall is
         // built of tiles lying level with each other, and a ray to the very edge of one tile, or to a point a little
@@ -492,33 +538,83 @@ namespace SceneUtil
             return !mOcclusionTest->isBlocked(lightPos, point + toLight * std::min(shortBy, 0.5f * length));
         };
 
-        // The part of the object nearest the light goes first: a wall or floor beside a lamp is lit there.
+        // The part of the object nearest the light, and the middle of each side facing the light.
         osg::Vec3f nearest;
         for (int axis = 0; axis < 3; ++axis)
             nearest[axis] = std::clamp(lightPos[axis], box._min[axis], box._max[axis]);
-        if (visible(nearest))
-            return false;
-        // then the middle of each side facing the light
+        unsigned int tested = 1;
+        unsigned int reached = visible(nearest) ? 1 : 0;
+
         const osg::Vec3f center = box.center();
+        int widest = -1;
+        float widestArea = 0.f;
         for (int axis = 0; axis < 3; ++axis)
         {
             if (lightPos[axis] >= box._min[axis] && lightPos[axis] <= box._max[axis])
                 continue;
             osg::Vec3f faceCenter = center;
             faceCenter[axis] = lightPos[axis] < box._min[axis] ? box._min[axis] : box._max[axis];
+            ++tested;
             if (visible(faceCenter))
-                return false;
+                ++reached;
+            // the side the light sees the most of: its area seen from the light
+            const int u = (axis + 1) % 3;
+            const int v = (axis + 2) % 3;
+            osg::Vec3f toFace = faceCenter - lightPos;
+            const float distance = toFace.normalize();
+            const float area = (box._max[u] - box._min[u]) * (box._max[v] - box._min[v]) * std::abs(toFace[axis])
+                / std::max(distance * distance, 1.f);
+            if (area > widestArea)
+            {
+                widestArea = area;
+                widest = axis;
+            }
         }
-        // and the centre, inside the object (whose own collision shape the test leaves out, as the ray ends within
-        // its bounds)
-        ++mOcclusionRaysUsed;
-        return mOcclusionTest->isBlocked(lightPos, center);
+
+        // All reached or none: the light reaches all of the object or none of it (a room's own walls and floor, the
+        // room beyond a wall). Some: part of the object sees the light (a floor through a doorway), so four more
+        // points across the side the light sees most tell how much.
+        if (reached == 0 || reached == tested || widest < 0)
+            return static_cast<float>(reached) / static_cast<float>(tested);
+        const int u = (widest + 1) % 3;
+        const int v = (widest + 2) % 3;
+        for (const float fu : { 0.25f, 0.75f })
+            for (const float fv : { 0.25f, 0.75f })
+            {
+                osg::Vec3f point;
+                point[widest] = lightPos[widest] < box._min[widest] ? box._min[widest] : box._max[widest];
+                point[u] = box._min[u] + fu * (box._max[u] - box._min[u]);
+                point[v] = box._min[v] + fv * (box._max[v] - box._min[v]);
+                ++tested;
+                if (visible(point))
+                    ++reached;
+            }
+        return static_cast<float>(reached) / static_cast<float>(tested);
     }
 
-    void LightManager::removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
-        const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
-        const osg::BoundingBox* localBox, const osg::Matrix* modelView)
+    bool LightManager::changedSince(const OcclusionCacheEntry& entry, const osg::Vec3f& lightPos,
+        const osg::Vec3f& objectPos, float objectRadius)
     {
+        mOcclusionChanges.clear();
+        if (!mOcclusionTest->getChangesSince(entry.mChangeCount, mOcclusionChanges))
+            return true;
+        // A door can change what the light reaches only if it moved across the way from the light to the object.
+        const float margin = objectRadius + 16.f;
+        for (osg::BoundingBox box : mOcclusionChanges)
+        {
+            box._min -= osg::Vec3f(margin, margin, margin);
+            box._max += osg::Vec3f(margin, margin, margin);
+            if (segmentHitsBox(lightPos, objectPos, box))
+                return true;
+        }
+        return false;
+    }
+
+    void LightManager::getLightVisibility(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
+        const osg::BoundingSphere& viewBound, const LightList& lightList, std::vector<float>& visibility,
+        OcclusionCache& cache, const osg::BoundingBox* localBox, const osg::Matrix* modelView)
+    {
+        visibility.assign(lightList.size(), 1.f);
         if (!mOcclusionEnabled || lightList.empty() || viewMatrix == nullptr || !viewBound.valid()
             || viewBound.radius() > mOcclusionMaxObjectRadius)
             return;
@@ -527,6 +623,7 @@ namespace SceneUtil
         {
             mOcclusionFrame = frameNum;
             mOcclusionTimeUsed = 0.0;
+            mOcclusionChangeCount = mOcclusionTest->getChangeCount();
         }
         if (mOcclusionInverseViewFor != viewMatrix || mOcclusionInverseViewFrame != frameNum)
         {
@@ -547,11 +644,13 @@ namespace SceneUtil
                 worldBox.expandBy(osg::Vec3d(localBox->corner(i)) * toWorld);
         }
 
-        const auto isHidden = [&](const LightSourceViewBound* light) {
+        for (std::size_t i = 0; i < lightList.size(); ++i)
+        {
+            const LightSourceViewBound* light = lightList[i];
             const osg::Vec3f lightPos = osg::Vec3d(light->mViewBound.center()) * mOcclusionInverseView;
             // A light within the object (a lamp's own mesh, a room around it) always reaches it.
             if ((lightPos - objectPos).length2() <= radius * radius)
-                return false;
+                continue;
 
             OcclusionCacheEntry* entry = nullptr;
             for (OcclusionCacheEntry& candidate : cache)
@@ -561,58 +660,100 @@ namespace SceneUtil
                     break;
                 }
 
-            const bool moved = entry == nullptr || (entry->mLightPos - lightPos).length2() > sOcclusionMoveTolerance2
+            if (entry != nullptr)
+                entry->mUsedFrame = frameNum;
+            bool moved = entry == nullptr || (entry->mLightPos - lightPos).length2() > sOcclusionMoveTolerance2
                 || (entry->mObjectPos - objectPos).length2() > sOcclusionMoveTolerance2;
+            // A door turned across the way from the light: as urgent as a move.
+            if (!moved && entry->mChangeCount != mOcclusionChangeCount)
+            {
+                if (changedSince(*entry, lightPos, objectPos, radius))
+                    moved = true;
+                else
+                    entry->mChangeCount = mOcclusionChangeCount;
+            }
+
             if (!moved && frameNum - entry->mFrame < sOcclusionRefreshFrames)
-                return entry->mBlocked;
+            {
+                visibility[i] = fadedVisibility(*entry, time);
+                continue;
+            }
 
             // Out of time for this frame: keep what was found last, even if an end has moved (a carried lantern, a
             // walking NPC), until it can be tested again. Letting the light through meanwhile made things flick
             // between lit and dark as the player walked. A pair never tested yet gets the light. Pairs not tested
-            // yet or moved come first: routine retests (for doors) only get the time they leave over, else they
-            // used it all up in a busy room and things coming into view stayed lit, then went dark seconds later.
+            // yet or moved come first: routine retests only get the time they leave over, else they used it all up
+            // in a busy room and things coming into view stayed lit, then went dark seconds later.
             const double budget = moved ? mOcclusionNewBudget : mOcclusionRetestBudget;
             if (mOcclusionTimeUsed >= budget)
             {
                 if (entry == nullptr)
                     ++mOcclusionStats.mWaiting;
                 else
+                {
                     ++mOcclusionStats.mPutOff;
-                return entry != nullptr && entry->mBlocked;
+                    visibility[i] = fadedVisibility(*entry, time);
+                }
+                continue;
             }
 
             const auto start = std::chrono::steady_clock::now();
             const unsigned int raysBefore = mOcclusionRaysUsed;
-            const bool blocked = worldBox.valid() ? isLightHiddenFromBox(lightPos, worldBox)
-                                                  : isLightHidden(lightPos, objectPos, radius);
-            const double time
+            const float visible = worldBox.valid() ? testLightVisibilityFromBox(lightPos, worldBox)
+                                                   : testLightVisibility(lightPos, objectPos, radius);
+            const double spent
                 = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count();
-            mOcclusionTimeUsed += time;
-            mOcclusionStats.mTime += time;
+            mOcclusionTimeUsed += spent;
+            mOcclusionStats.mTime += spent;
             ++mOcclusionStats.mTests;
             mOcclusionStats.mRays += mOcclusionRaysUsed - raysBefore;
-            if (blocked)
+            if (visible <= 0.f)
                 ++mOcclusionStats.mBlocked;
-            if (entry != nullptr && !moved && entry->mBlocked != blocked)
+            if (entry != nullptr && !moved && entry->mVisible != visible)
                 ++mOcclusionStats.mFlips;
+
             if (entry == nullptr)
             {
+                // Never tested: it was drawn with all of the light, so a hidden light fades out from there.
                 cache.emplace_back();
                 entry = &cache.back();
                 entry->mLight = light->mLightSource;
+                entry->mVisible = 1.f;
+                entry->mFadeFrom = 1.f;
+                entry->mFadeStart = time - sOcclusionFadeTime;
+            }
+            if (entry->mVisible != visible)
+            {
+                entry->mFadeFrom = fadedVisibility(*entry, time);
+                entry->mFadeStart = time;
+                entry->mVisible = visible;
             }
             entry->mLightPos = lightPos;
             entry->mObjectPos = objectPos;
             entry->mFrame = frameNum;
-            entry->mBlocked = blocked;
-            return blocked;
-        };
+            entry->mUsedFrame = frameNum;
+            entry->mChangeCount = mOcclusionChangeCount;
+            visibility[i] = fadedVisibility(*entry, time);
+        }
 
-        lightList.erase(std::remove_if(lightList.begin(), lightList.end(), isHidden), lightList.end());
-
+        // Results not needed for a long time (their light or object long out of view) are dropped.
         if (cache.size() > 32)
             std::erase_if(cache,
-                [&](const OcclusionCacheEntry& entry) { return frameNum - entry.mFrame > sOcclusionForgetFrames; });
+                [&](const OcclusionCacheEntry& entry) { return frameNum - entry.mUsedFrame > sOcclusionForgetFrames; });
+    }
+
+    void LightManager::removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
+        const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
+        const osg::BoundingBox* localBox, const osg::Matrix* modelView)
+    {
+        std::vector<float> visibility;
+        getLightVisibility(viewMatrix, frameNum, time, viewBound, lightList, visibility, cache, localBox, modelView);
+        // Per-object light lists take a light whole or not at all: kept while it reaches a fair part of the object.
+        std::size_t kept = 0;
+        for (std::size_t i = 0; i < lightList.size(); ++i)
+            if (visibility[i] >= 0.25f)
+                lightList[kept++] = lightList[i];
+        lightList.resize(kept);
     }
 
     int LightManager::getMaxLights() const
@@ -1176,24 +1317,25 @@ namespace SceneUtil
             mLightManager->getLightsIntersecting(cv, viewMatrix, frameNum, nodeBound, mIgnoredLightSources, mLightList);
             if (!mLightList.empty())
             {
-                LightManager::LightList reaching = mLightList;
-                mLightManager->removeOccludedLights(viewMatrix, frameNum, nodeBound, reaching, mOcclusionCache,
-                    getOcclusionBox(node), cv->getModelViewMatrix());
-                if (reaching.size() != mLightList.size())
+                mLightManager->getLightVisibility(viewMatrix, frameNum, cv->getFrameStamp()->getReferenceTime(),
+                    nodeBound, mLightList, mLightVisibility, mOcclusionCache, getOcclusionBox(node),
+                    cv->getModelViewMatrix());
+                LightManager::BlockedLightsMask mask{};
+                for (std::size_t i = 0; i < mLightList.size(); ++i)
                 {
-                    LightManager::BlockedLightsMask mask{};
-                    for (const LightManager::LightSourceViewBound* light : mLightList)
-                    {
-                        const int index = light->mGpuIndex;
-                        if (index < 0 || index >= static_cast<int>(LightManager::sMaxBlockableLights)
-                            || std::find(reaching.begin(), reaching.end(), light) != reaching.end())
-                            continue;
-                        mask[static_cast<std::size_t>(index) / 32] |= 1u << (static_cast<unsigned int>(index) % 32);
-                        mBlockedAny = true;
-                    }
-                    if (mBlockedAny)
-                        mBlockedStateSet = mLightManager->getBlockedLightsStateSet(mask);
+                    const int index = mLightList[i]->mGpuIndex;
+                    if (index < 0 || index >= static_cast<int>(LightManager::sMaxBlockableLights))
+                        continue;
+                    const unsigned int shade = static_cast<unsigned int>(std::lround(
+                        (1.f - std::clamp(mLightVisibility[i], 0.f, 1.f)) * LightManager::sLightShadeLevels));
+                    if (shade == 0)
+                        continue;
+                    const auto at = static_cast<unsigned int>(index);
+                    mask[at / 8] |= shade << (4 * (at % 8));
+                    mBlockedAny = true;
                 }
+                if (mBlockedAny)
+                    mBlockedStateSet = mLightManager->getBlockedLightsStateSet(mask);
             }
         }
 
@@ -1259,7 +1401,8 @@ namespace SceneUtil
             mLightManager->getLightsIntersecting(
                 cv, viewMatrix, mLastFrameNumber, nodeBound, mIgnoredLightSources, mLightList);
             if (mLightManager->getLightOcclusionEnabled())
-                mLightManager->removeOccludedLights(viewMatrix, mLastFrameNumber, nodeBound, mLightList,
+                mLightManager->removeOccludedLights(viewMatrix, mLastFrameNumber,
+                    cv->getFrameStamp()->getReferenceTime(), nodeBound, mLightList,
                     mOcclusionCache, getOcclusionBox(node), cv->getModelViewMatrix());
 
             const size_t maxLights = mLightManager->getMaxLights();

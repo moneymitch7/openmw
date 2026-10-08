@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <deque>
 #include <functional>
 #include <map>
 #include <memory>
@@ -229,6 +230,13 @@ namespace MWPhysics
         /// both) are ignored, as are small ones (crates, pillars, furniture) that would hide light too eagerly.
         bool isLightBlocked(const osg::Vec3f& from, const osg::Vec3f& to) const;
 
+        /// Light occlusion: counts the moves of doors (which hide light and turn), so the lights they may have
+        /// uncovered or hidden can be tested again.
+        unsigned int getLightBlockerChangeCount() const { return mLightBlockerChangeCount; }
+        /// Appends to @a out the world boxes of the doors that moved after @a count. False if they are no longer
+        /// known (only the last few hundred moves are kept).
+        bool getLightBlockerChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const;
+
         /// Return true if actor1 can see actor2.
         bool getLineOfSight(const MWWorld::ConstPtr& actor1, const MWWorld::ConstPtr& actor2) const override;
 
@@ -309,6 +317,10 @@ namespace MWPhysics
         std::unique_ptr<btCollisionDispatcher> mDispatcher;
         std::unique_ptr<btCollisionWorld> mCollisionWorld;
         std::unique_ptr<PhysicsTaskScheduler> mTaskScheduler;
+
+        void noteLightBlockerMoved(const MWWorld::Ptr& ptr, const btCollisionObject* collisionObject);
+        unsigned int mLightBlockerChangeCount = 0;
+        std::deque<std::pair<unsigned int, osg::BoundingBox>> mLightBlockerChanges;
 
         std::unique_ptr<Resource::BulletShapeManager> mShapeManager;
         Resource::ResourceSystem* mResourceSystem;
