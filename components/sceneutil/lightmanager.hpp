@@ -298,8 +298,12 @@ namespace SceneUtil
             LightOcclusionTest* test, bool enabled, unsigned int raysPerFrame, float maxObjectRadius);
 
         /// Removes from @a lightList the lights the world hides from @a viewBound (in the view space of @a viewMatrix).
+        /// With @a localBox (the object's bounding box, in the space @a modelView takes to view space) the light is
+        /// tested against the object's nearest corner region instead of points around the bounding sphere's centre, so
+        /// large pieces (walls, floors, room parts) next to a light keep it.
         void removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
-            const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache);
+            const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
+            const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr);
 
         bool getLightOcclusionEnabled() const { return mOcclusionEnabled; }
 
@@ -419,6 +423,7 @@ namespace SceneUtil
         osg::ref_ptr<LightManagerCullCallback> mCullCallback;
 
         bool isLightHidden(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius);
+        bool isLightHiddenFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& worldBox);
 
         osg::ref_ptr<LightOcclusionTest> mOcclusionTest;
         bool mOcclusionEnabled = false;
@@ -501,6 +506,10 @@ namespace SceneUtil
 
         bool pushLightState(osg::Node* node, osgUtil::CullVisitor* nv);
 
+        /// The node's bounding box in the space the cull visitor's model view matrix takes to view space, for light
+        /// occlusion of large objects; nullptr for small ones. Kept until the node's bound changes.
+        const osg::BoundingBox* getOcclusionBox(osg::Node* node);
+
         /// Clustered lighting with light occlusion: pushes the mask of lights the world hides from @a node, if any.
         /// @return 0 if nothing was pushed, 1 for an empty mask (undoing a parent's), 2 for a mask with lights in it.
         int pushBlockedLightsState(osg::Node* node, osgUtil::CullVisitor* cv);
@@ -513,6 +522,10 @@ namespace SceneUtil
         LightManager::LightList mLightList;
         std::set<SceneUtil::LightSource*> mIgnoredLightSources;
         LightManager::OcclusionCache mOcclusionCache;
+        // light occlusion: the node's box (see getOcclusionBox) and the bound it was made for
+        osg::BoundingBox mOcclusionBox;
+        osg::BoundingSphere mOcclusionBoxFor;
+        bool mHasOcclusionBox = false;
         // clustered lighting: the mask found for the last camera and frame
         const osg::Camera* mBlockedCamera = nullptr;
         size_t mBlockedFrame = 0;

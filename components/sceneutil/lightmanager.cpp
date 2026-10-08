@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include <osg/ComputeBoundsVisitor>
 #include <osgUtil/CullVisitor>
 
 #include <components/debug/debuglog.hpp>
@@ -452,8 +453,53 @@ namespace SceneUtil
         return true;
     }
 
+    bool LightManager::isLightHiddenFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& box)
+    {
+        // A light inside the object's box (a lamp in a room part, a candle on a table) always reaches it.
+        if (box.contains(lightPos))
+            return false;
+
+        // Points just inside the box, so the ray ends in the object itself (whose own collision shape the test leaves
+        // out) rather than in front of it.
+        constexpr float inset = 16.f;
+        const osg::Vec3f center = box.center();
+        const auto inside = [&](osg::Vec3f point) {
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (point[axis] > center[axis])
+                    point[axis] = std::max(center[axis], point[axis] - inset);
+                else
+                    point[axis] = std::min(center[axis], point[axis] + inset);
+            }
+            return point;
+        };
+        const auto visible = [&](const osg::Vec3f& point) {
+            ++mOcclusionRaysUsed;
+            return !mOcclusionTest->isBlocked(lightPos, point);
+        };
+
+        // The part of the object nearest the light goes first: a wall or floor beside a lamp is lit there.
+        osg::Vec3f nearest;
+        for (int axis = 0; axis < 3; ++axis)
+            nearest[axis] = std::clamp(lightPos[axis], box._min[axis], box._max[axis]);
+        if (visible(inside(nearest)))
+            return false;
+        // then the middle of each side facing the light, and the centre
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (lightPos[axis] >= box._min[axis] && lightPos[axis] <= box._max[axis])
+                continue;
+            osg::Vec3f faceCenter = center;
+            faceCenter[axis] = lightPos[axis] < box._min[axis] ? box._min[axis] : box._max[axis];
+            if (visible(inside(faceCenter)))
+                return false;
+        }
+        return !visible(center);
+    }
+
     void LightManager::removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum,
-        const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache)
+        const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
+        const osg::BoundingBox* localBox, const osg::Matrix* modelView)
     {
         if (!mOcclusionEnabled || lightList.empty() || viewMatrix == nullptr || !viewBound.valid()
             || viewBound.radius() > mOcclusionMaxObjectRadius)
@@ -474,6 +520,14 @@ namespace SceneUtil
         // View space is world space rotated and moved (mirrored for reflections), so distances carry over.
         const osg::Vec3f objectPos = viewBound.center() * mOcclusionInverseView;
         const float radius = viewBound.radius();
+
+        osg::BoundingBox worldBox;
+        if (localBox != nullptr && modelView != nullptr && localBox->valid())
+        {
+            const osg::Matrix toWorld = *modelView * osg::Matrix(mOcclusionInverseView);
+            for (unsigned int i = 0; i < 8; ++i)
+                worldBox.expandBy(localBox->corner(i) * toWorld);
+        }
 
         const auto isHidden = [&](const LightSourceViewBound* light) {
             const osg::Vec3f lightPos = light->mViewBound.center() * mOcclusionInverseView;
@@ -499,7 +553,8 @@ namespace SceneUtil
             if (mOcclusionRaysUsed >= mOcclusionRaysPerFrame)
                 return !moved && entry->mBlocked;
 
-            const bool blocked = isLightHidden(lightPos, objectPos, radius);
+            const bool blocked = worldBox.valid() ? isLightHiddenFromBox(lightPos, worldBox)
+                                                  : isLightHidden(lightPos, objectPos, radius);
             if (entry == nullptr)
             {
                 cache.emplace_back();
@@ -985,6 +1040,43 @@ namespace SceneUtil
             cv->popStateSet();
     }
 
+    const osg::BoundingBox* LightListCallback::getOcclusionBox(osg::Node* node)
+    {
+        // The bound in the same space as the box (see pushLightState).
+        osg::BoundingSphere bound;
+        const osg::Transform* transform = node->asTransform();
+        if (transform)
+        {
+            for (unsigned int i = 0; i < transform->getNumChildren(); ++i)
+                bound.expandBy(transform->getChild(i)->getBound());
+        }
+        else
+            bound = node->getBound();
+
+        // Small things (people, furniture) are tested around their bounding sphere; a box is worth it for walls,
+        // floors and other large pieces, whose centres can be far from the surface a light shines on.
+        constexpr float minRadius = 64.f;
+        if (!bound.valid() || bound.radius() < minRadius)
+            return nullptr;
+
+        if (!mHasOcclusionBox || bound.center() != mOcclusionBoxFor.center()
+            || bound.radius() != mOcclusionBoxFor.radius())
+        {
+            osg::ComputeBoundsVisitor visitor;
+            if (transform)
+            {
+                for (unsigned int i = 0; i < transform->getNumChildren(); ++i)
+                    const_cast<osg::Node*>(transform->getChild(i))->accept(visitor);
+            }
+            else
+                node->accept(visitor);
+            mOcclusionBox = visitor.getBoundingBox();
+            mOcclusionBoxFor = bound;
+            mHasOcclusionBox = true;
+        }
+        return mOcclusionBox.valid() ? &mOcclusionBox : nullptr;
+    }
+
     int LightListCallback::pushBlockedLightsState(osg::Node* node, osgUtil::CullVisitor* cv)
     {
         CullProfile::Scope profile(CullProfile::Section::LightLists);
@@ -1021,7 +1113,8 @@ namespace SceneUtil
             if (!mLightList.empty())
             {
                 LightManager::LightList reaching = mLightList;
-                mLightManager->removeOccludedLights(viewMatrix, frameNum, nodeBound, reaching, mOcclusionCache);
+                mLightManager->removeOccludedLights(viewMatrix, frameNum, nodeBound, reaching, mOcclusionCache,
+                    getOcclusionBox(node), cv->getModelViewMatrix());
                 if (reaching.size() != mLightList.size())
                 {
                     std::array<unsigned int, 4> mask{};
@@ -1101,7 +1194,9 @@ namespace SceneUtil
             mLightList.clear();
             mLightManager->getLightsIntersecting(
                 cv, viewMatrix, mLastFrameNumber, nodeBound, mIgnoredLightSources, mLightList);
-            mLightManager->removeOccludedLights(viewMatrix, mLastFrameNumber, nodeBound, mLightList, mOcclusionCache);
+            if (mLightManager->getLightOcclusionEnabled())
+                mLightManager->removeOccludedLights(viewMatrix, mLastFrameNumber, nodeBound, mLightList,
+                    mOcclusionCache, getOcclusionBox(node), cv->getModelViewMatrix());
 
             const size_t maxLights = mLightManager->getMaxLights();
 

@@ -294,7 +294,9 @@ Shaders Settings
 
    Point lights don't cast shadows, so a lamp lights everything within its reach, including the next room through
    the wall. With this on, a light stops lighting an object when solid world geometry (a wall, floor, closed door or
-   other large shape) lies between the light and the object's centre and six points around it.
+   other large shape) lies between the light and the object's centre and six points around it. Large objects (walls,
+   floors, room pieces) are tested at the part of them nearest the light instead, so the walls of a lamp's own room keep
+   its light.
    Small shapes such as furniture, crates and pillars don't count, and neither do shapes around the light or the
    object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
    Each light and object pair is tested once and retested when either moves or every few seconds (for doors).
