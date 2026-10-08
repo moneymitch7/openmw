@@ -413,6 +413,17 @@ Shaders Settings
    At 1.0 the brightest point is capped at about 4/3 of the full colour.
 
 .. omw-setting::
+   :title: held light bounce
+   :type: float32
+   :range: 0.0-1.0
+   :default: 0.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   :ref:`light bounce` for the lights characters carry: a soft glow in the light's colour on the walls, floor and
+   ceiling around whoever carries one. Only with :ref:`clustered lighting`; with the other lighting methods carried
+   lights use :ref:`light bounce`.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

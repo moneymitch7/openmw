@@ -342,6 +342,8 @@ namespace SceneUtil
                         .mRadius = bound.mLightSource->getRadius() * node->getPointLightRadiusMultiplier(),
                     };
 
+                    // w carries the light's own light bounce (negative: the scene's), see lib/light/util.glsl
+                    gpuLight.mPosition.w() = bound.mLightSource->getBounce();
                     bound.mGpuIndex = static_cast<int>(cache.mGPULights[frameId]->getData().size());
                     cache.mGPULights[frameId]->getData().push_back(gpuLight);
                 }
@@ -1210,6 +1212,7 @@ namespace SceneUtil
         : osg::Node(copy, copyop)
         , mRadius(copy.mRadius)
         , mActorFade(copy.mActorFade)
+        , mBounce(copy.mBounce)
         , mLastAppliedFrame(copy.mLastAppliedFrame)
     {
         mId = sLightId++;

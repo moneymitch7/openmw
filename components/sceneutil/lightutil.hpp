@@ -34,8 +34,14 @@ namespace SceneUtil
         /// usual attenuation settings): 0 leaves it, higher values dim the bright spot close to the light and brighten
         /// it further out. 1 caps the brightest point at about 4/3 of the full colour.
         float mSoftness = 0.f;
+        /// The light's own light bounce (see [Shaders] light bounce) instead of the scene's; negative uses the
+        /// scene's. Only with clustered lighting.
+        float mBounce = -1.f;
 
-        bool isDefault() const { return mBrightness == 1.f && mReach == 1.f && mSoftness == 0.f; }
+        bool isDefault() const
+        {
+            return mBrightness == 1.f && mReach == 1.f && mSoftness == 0.f && mBounce < 0.f;
+        }
     };
 
     /// @brief Set up global attenuation settings for a Light.

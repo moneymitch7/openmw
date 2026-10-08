@@ -188,6 +188,7 @@ namespace SceneUtil
 
         const TunedLight tuned = tuneLight(*light, esmLight, isExterior, tuning);
         lightSource->setRadius(tuned.mRadius);
+        lightSource->setBounce(tuning.mBounce);
 
         light->setDiffuse(tuned.mDiffuse);
         light->setAmbient(ambient);
@@ -226,6 +227,7 @@ namespace SceneUtil
             light.setSpecular(tuned.mSpecular);
         }
         lightSource.setRadius(tuned.mRadius);
+        lightSource.setBounce(tuning.mBounce);
 
         if (LightController* controller = findLightController(lightSource))
         {

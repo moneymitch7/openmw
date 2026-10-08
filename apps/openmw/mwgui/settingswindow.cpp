@@ -743,6 +743,7 @@ namespace MWGui
         Settings::shaders().mHeldLightBrightness.reset();
         Settings::shaders().mHeldLightReach.reset();
         Settings::shaders().mHeldLightSoftness.reset();
+        Settings::shaders().mHeldLightBounce.reset();
         Settings::shaders().mMaxLights.reset();
         Settings::shaders().mClusteredLighting.reset();
 

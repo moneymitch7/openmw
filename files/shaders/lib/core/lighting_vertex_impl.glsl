@@ -47,7 +47,7 @@ void pointLighting(vec2 screenCoord, vec3 viewDir, vec3 viewPos, vec3 viewNormal
 #else
     for (int i = 0; i < PointLightCount; ++i) {
         PointLight light = PointLight(
-            vec4(lcalcPosition(i), 1.0),
+            vec4(lcalcPosition(i), -1.0), // w: the scene's light bounce
             vec4(lcalcDiffuse(i), 0.0),
             vec4(lcalcAmbient(i), 0.0),
             lcalcSpecular(i),

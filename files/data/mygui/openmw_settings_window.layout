@@ -1287,6 +1287,34 @@
                                 <Property key="Caption" value="#{OMWEngine:HeldLightSoftnessDesc}"/>
                             </Widget>
 
+                            <!-- HeldLightBounce -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="HeldLightBounceText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:HeldLightBounceTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="101"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="1.0"/>
+                                <UserString key="SettingCategory" value="Shaders"/>
+                                <UserString key="SettingName" value="held light bounce"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="HeldLightBounceText"/>
+                                <UserString key="SettingLabelCaption" value="HeldLightBounceValue"/>
+                            </Widget>
+
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:HeldLightBounceDesc}"/>
+                            </Widget>
+
                             <Widget type="Widget" position="0 0 0 8" align="Top HStretch">
                                 <UserString key="HStretch" value="true"/>
                             </Widget>

@@ -90,10 +90,15 @@ float calcAttenuation(PointLight light, float dist) {
 // off far more gently than its direct light (the square root of its distance curve, whatever the falloff) and lighting
 // the sides facing away from it at half the strength of the side facing it. It adds to the ambient term, so it brings
 // out a room's shapes in the light's colour rather than raising the room's base light.
+// How much bounce a light gives: its own amount when it has one (held lights, in position.w), else the scene's.
+float pointLightBounceAmount(PointLight light) {
+    return light.position.w >= 0.0 ? light.position.w : pointLightTuning.z;
+}
+
 vec3 calcPointLightBounce(PointLight light, float dist, vec3 lightDir, vec3 viewNormal) {
     float bounce = sqrt(min(calcBaseAttenuation(light, dist), 1.0)) * calcRadiusFade(light, dist);
     float wrap = 0.5 + 0.25 * (1.0 + dot(viewNormal, lightDir));
-    return light.diffuse.xyz * (pointLightTuning.z * (1.0 + pointLightTuning.x) * bounce * wrap);
+    return light.diffuse.xyz * (pointLightBounceAmount(light) * (1.0 + pointLightTuning.x) * bounce * wrap);
 }
 
 int getClusterTileIndex(vec2 screenRes, vec3 gridSize, float near, vec2 screenCoord, float viewSpaceZ) {
@@ -141,7 +146,7 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
         lambertTerm = max(lambertTerm, 0.25 + 0.25 * abs(dot(viewNormal, lightDir)));
     diffuseLight += light.diffuse.xyz * lambertTerm * attenuation;
     ambientLight += light.ambient.xyz * attenuation;
-    if (pointLightTuning.z > 0.0)
+    if (pointLightBounceAmount(light) > 0.0)
         ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius);
     specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * attenuation;
 }

@@ -1717,6 +1717,7 @@ namespace MWRender
             tuning.mBrightness = Settings::shaders().mHeldLightBrightness;
             tuning.mReach = Settings::shaders().mHeldLightReach;
             tuning.mSoftness = Settings::shaders().mHeldLightSoftness;
+            tuning.mBounce = Settings::shaders().mHeldLightBounce;
             return tuning;
         }
     }

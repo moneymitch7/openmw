@@ -157,6 +157,7 @@ namespace SceneUtil
         int mId;
 
         float mActorFade;
+        float mBounce = -1.f;
 
         size_t mLastAppliedFrame;
 
@@ -175,6 +176,10 @@ namespace SceneUtil
         void setRadius(float radius) { mRadius = radius; }
 
         void setActorFade(float alpha) { mActorFade = alpha; }
+
+        /// Its own light bounce, instead of the scene's (negative: the scene's). Clustered lighting only.
+        void setBounce(float bounce) { mBounce = bounce; }
+        float getBounce() const { return mBounce; }
 
         float getActorFade() const { return mActorFade; }
 
