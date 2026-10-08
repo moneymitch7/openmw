@@ -35,6 +35,7 @@
 #include <components/sdlutil/imagetosurface.hpp>
 #include <components/sdlutil/sdlgraphicswindow.hpp>
 
+#include <components/resource/imagemanager.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/resource/stats.hpp>
@@ -187,9 +188,11 @@ namespace
     class PerformanceLog
     {
     public:
-        PerformanceLog(const std::filesystem::path& path, osgViewer::Viewer& viewer)
+        PerformanceLog(
+            const std::filesystem::path& path, osgViewer::Viewer& viewer, Resource::ImageManager& imageManager)
             : mFile(path, std::ios::out | std::ios::trunc)
             , mViewer(viewer)
+            , mImageManager(imageManager)
         {
             mFxProfilePath = path.parent_path() / "postprocess-profile.txt";
             if (!mFile.is_open())
@@ -205,9 +208,8 @@ namespace
             mFile << "time,cell,x,y,menu,fps,frame ms,worst frame ms";
             for (const Column& column : mColumns)
                 mFile << ',' << column.mHeading;
-            mFile
-                << ",vram free MB,vram other MB,gl textures,gl released textures,gl texture MB,gl buffer MB,gl buffers"
-                << ",auto lod ms";
+            mFile << ",vram free MB,vram other MB,gl textures,gl released textures,image MB,gl buffer MB,gl buffers"
+                  << ",auto lod ms";
             mFile << '\n';
             mFile.flush();
         }
@@ -272,8 +274,7 @@ namespace
                 mFile << ',' << std::setprecision(column.mScale == 1.0 ? 0 : 2) << column.mSum.take();
             mFile << ',' << sGpuMemory.mFreeMb.load() << ',' << sGpuMemory.mOtherMb.load() << ','
                   << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load() << ','
-                  << sGpuMemory.mTexturePoolMb.load() << ',' << sGpuMemory.mBufferPoolMb.load() << ','
-                  << sGpuMemory.mBufferObjects.load();
+                  << imageMb() << ',' << sGpuMemory.mBufferPoolMb.load() << ',' << sGpuMemory.mBufferObjects.load();
             // Time spent simplifying meshes for automatic LOD during this second, on all threads together.
             const unsigned long long lodUs = SceneUtil::getAutoLodMicroseconds();
             mFile << ',' << std::setprecision(0) << static_cast<double>(lodUs - mLastAutoLodUs) / 1000.0;
@@ -392,6 +393,10 @@ namespace
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
         unsigned long long mLastAutoLodUs = 0;
+        Resource::ImageManager& mImageManager;
+
+        // The textures loaded (OSG's own GPU pool counters stay at 0 with OpenMW's texture handling).
+        long long imageMb() const { return static_cast<long long>(mImageManager.getLoadedBytes() / (1024 * 1024)); }
         std::array<Column, 33> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
@@ -1132,6 +1137,7 @@ void OMW::Engine::prepareEngine()
     mResourceSystem->getSceneManager()->getShaderManager().setMaxTextureUnits(mGlMaxTextureImageUnits);
     mResourceSystem->getSceneManager()->setUnRefImageDataAfterApply(
         false); // keep to Off for now to allow better state sharing
+    mResourceSystem->getImageManager()->setMaxTextureSize(Settings::general().mMaxTextureSize);
     mResourceSystem->getSceneManager()->setFilterSettings(Settings::general().mTextureMagFilter,
         Settings::general().mTextureMinFilter, Settings::general().mTextureMipmap,
         static_cast<float>(Settings::general().mAnisotropy));
@@ -1418,7 +1424,8 @@ void OMW::Engine::go()
     std::unique_ptr<PerformanceLog> performanceLog;
     if (Settings::general().mPerformanceLog)
     {
-        performanceLog = std::make_unique<PerformanceLog>(mCfgMgr.getLogPath() / "performance-log.csv", *mViewer);
+        performanceLog = std::make_unique<PerformanceLog>(
+            mCfgMgr.getLogPath() / "performance-log.csv", *mViewer, *mResourceSystem->getImageManager());
         if (!performanceLog->isOpen())
             performanceLog.reset();
     }

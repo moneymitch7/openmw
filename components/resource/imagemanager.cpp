@@ -1,7 +1,10 @@
 #include "imagemanager.hpp"
 
+#include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <osgDB/Registry>
+#include <string_view>
 
 #include <components/debug/debuglog.hpp>
 #include <components/misc/pathhelpers.hpp>
@@ -53,6 +56,66 @@ namespace
                 return true;
         }
         return false;
+    }
+
+    // Interface textures stay as they are: shrinking them would blur menus and text.
+    bool mayShrink(std::string_view path)
+    {
+        if (!path.starts_with("textures/"))
+            return false;
+        const std::string_view name = path.substr(9);
+        for (std::string_view prefix : { "menu", "tx_menubook", "scroll", "compass", "target", "cursor", "book",
+                 "mygui", "splash", "levelup", "birthsigns", "bookart", "icons", "fonts", "ui/", "interface" })
+            if (name.starts_with(prefix))
+                return false;
+        return true;
+    }
+
+    // An image no larger than maxSize on either side, made by leaving out its largest mipmaps (or by scaling it when it
+    // has none and isn't compressed). Returns nullptr if it can't or needn't be made smaller.
+    osg::ref_ptr<osg::Image> shrinkImage(const osg::Image& image, int maxSize)
+    {
+        if (image.s() <= maxSize && image.t() <= maxSize)
+            return nullptr;
+        if (image.r() != 1)
+            return nullptr;
+
+        const unsigned int levels = image.getNumMipmapLevels();
+        if (levels > 1)
+        {
+            unsigned int skip = 0;
+            while (skip + 1 < levels && ((image.s() >> skip) > maxSize || (image.t() >> skip) > maxSize))
+                ++skip;
+            if (skip == 0)
+                return nullptr;
+
+            const unsigned int offset = image.getMipmapOffset(skip);
+            const unsigned int total = image.getTotalSizeInBytesIncludingMipmaps();
+            if (offset == 0 || offset >= total || !image.isDataContiguous())
+                return nullptr;
+            unsigned char* data = new unsigned char[total - offset];
+            std::memcpy(data, image.data() + offset, total - offset);
+
+            osg::ref_ptr<osg::Image> result = new osg::Image;
+            result->setFileName(image.getFileName());
+            result->setImage(std::max(1, image.s() >> skip), std::max(1, image.t() >> skip), 1,
+                image.getInternalTextureFormat(), image.getPixelFormat(), image.getDataType(), data,
+                osg::Image::USE_NEW_DELETE, image.getPacking());
+            osg::Image::MipmapDataType mipmaps;
+            for (unsigned int level = skip + 1; level < levels; ++level)
+                mipmaps.push_back(image.getMipmapOffset(level) - offset);
+            result->setMipmapLevels(mipmaps);
+            result->setOrigin(image.getOrigin());
+            return result;
+        }
+
+        if (image.isCompressed())
+            return nullptr;
+        const float scale = static_cast<float>(maxSize) / static_cast<float>(std::max(image.s(), image.t()));
+        osg::ref_ptr<osg::Image> result = new osg::Image(image, osg::CopyOp::DEEP_COPY_ALL);
+        result->scaleImage(
+            std::max(1, static_cast<int>(image.s() * scale)), std::max(1, static_cast<int>(image.t() * scale)), 1);
+        return result;
     }
 
     bool checkSupported(osg::Image* image)
@@ -210,6 +273,10 @@ namespace Resource
                 image->setOrigin(osg::Image::TOP_LEFT);
             }
 
+            if (mMaxTextureSize > 0 && mayShrink(path.value()))
+                if (osg::ref_ptr<osg::Image> smaller = shrinkImage(*image, mMaxTextureSize))
+                    image = std::move(smaller);
+
             mCache->addEntryToObjectCache(path.value(), image);
             return image;
         }
@@ -218,6 +285,17 @@ namespace Resource
     osg::Image* ImageManager::getWarningImage()
     {
         return mWarningImage;
+    }
+
+    std::size_t ImageManager::getLoadedBytes() const
+    {
+        std::size_t bytes = 0;
+        mCache->call([&](const auto& /*key*/, osg::Object* object) {
+            if (const osg::Image* image = dynamic_cast<const osg::Image*>(object))
+                if (image != mWarningImage.get())
+                    bytes += image->getTotalSizeInBytesIncludingMipmaps();
+        });
+        return bytes;
     }
 
     void ImageManager::reportStats(unsigned int frameNumber, osg::Stats* stats) const

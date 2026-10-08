@@ -33,6 +33,7 @@ namespace Settings
         SettingValue<std::size_t> mLogBufferSize{ mIndex, "General", "log buffer size" };
         SettingValue<std::size_t> mConsoleHistoryBufferSize{ mIndex, "General", "console history buffer size" };
         SettingValue<bool> mPerformanceLog{ mIndex, "General", "performance log" };
+        SettingValue<int> mMaxTextureSize{ mIndex, "General", "max texture size", makeClampSanitizerInt(0, 16384) };
     };
 }
 

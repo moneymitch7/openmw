@@ -54,6 +54,18 @@ General
    Mipmapping reduces processing power needed during minification by pre-generating a series of smaller textures.
 
 .. omw-setting::
+   :title: max texture size
+   :type: int
+   :range: 0 to 16384
+   :default: 0
+
+   Textures of the world (those under ``textures/``, not the interface's) larger than this on either side are loaded
+   at a smaller size, by leaving out their largest mipmap levels, which saves video memory: each halving of the size
+   takes three quarters off the texture. Textures without mipmaps are scaled down instead, unless compressed.
+   0 is no limit. 2048 only affects the very largest textures of high-resolution texture packs, 1024 saves much more
+   and is still sharp from a few steps away. Applies to textures loaded after it is set, so restart the game.
+
+.. omw-setting::
    :title: notify on saved screenshot
    :type: boolean
    :range: true, false
