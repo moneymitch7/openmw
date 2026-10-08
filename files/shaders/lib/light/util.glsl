@@ -47,6 +47,11 @@ float specularIntensity(vec3 viewNormal, vec3 viewDir, float shininess, vec3 lig
 // what a program drawn outside the scene root reads, leaves point lights unchanged.
 uniform vec4 pointLightTuning;
 
+// OpenMGE XE: a lamp's own model (the lantern's glass and frame, the candle) sits around its light, mostly facing away
+// from it, so it would get none of it. Within this distance of a light it takes the light from either side, at a
+// quarter to a half of full strength: the glass glows and the candle is lit by its flame. Set on lamps, 0 elsewhere.
+uniform float uSelfLitRange;
+
 // The light's own distance curve, as the game data and attenuation settings make it.
 float calcBaseAttenuation(PointLight light, float dist) {
     return 1.0 / (light.constant + light.linear * dist + light.quadratic * dist * dist);
@@ -131,7 +136,10 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
 
     float attenuation = calcAttenuation(light, lightDistance) * clusterFade(viewPos, light.radius);
 
-    diffuseLight += light.diffuse.xyz * lambert(viewNormal, lightDir, viewDir) * attenuation;
+    float lambertTerm = lambert(viewNormal, lightDir, viewDir);
+    if (lightDistance < uSelfLitRange)
+        lambertTerm = max(lambertTerm, 0.25 + 0.25 * abs(dot(viewNormal, lightDir)));
+    diffuseLight += light.diffuse.xyz * lambertTerm * attenuation;
     ambientLight += light.ambient.xyz * attenuation;
     if (pointLightTuning.z > 0.0)
         ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius);

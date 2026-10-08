@@ -394,6 +394,8 @@ namespace SceneUtil
         getOrCreateStateSet()->addUniform(new osg::Uniform("PointLightCount", 0));
         // No light hidden unless a lit object's own state says otherwise.
         getOrCreateStateSet()->addUniform(new osg::Uniform("blockedLights", 0u, 0u, 0u, 0u));
+        // Only lamps light their own model from inside (see uSelfLitRange in lib/light/util.glsl).
+        getOrCreateStateSet()->addUniform(new osg::Uniform("uSelfLitRange", 0.f));
 
         updateSettings(settings.mLightRadiusMultiplier, settings.mMaximumLightDistance, settings.mLightFadeStart);
     }

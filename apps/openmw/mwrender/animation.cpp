@@ -2135,6 +2135,14 @@ namespace MWRender
             addExtraLight(getOrCreateObjectRoot(), SceneUtil::LightCommon(*ptr.get<ESM::Light>()->mBase));
         if (ptr.getType() == ESM4::Light::sRecordId && allowLight)
             addExtraLight(getOrCreateObjectRoot(), SceneUtil::LightCommon(*ptr.get<ESM4::Light>()->mBase));
+        if (mExtraLightSource)
+        {
+            // OpenMGE XE: the lamp's own model (glass, frame, candle) is lit by its light from inside too.
+            constexpr float selfLitRange = 40.f;
+            const float scale = ptr.getCellRef().getScale();
+            getOrCreateObjectRoot()->getOrCreateStateSet()->addUniform(
+                new osg::Uniform("uSelfLitRange", selfLitRange * (scale > 0.f ? scale : 1.f)));
+        }
 
         if (!allowLight && mObjectRoot)
         {
