@@ -1718,6 +1718,7 @@ namespace MWRender
             tuning.mReach = Settings::shaders().mHeldLightReach;
             tuning.mSoftness = Settings::shaders().mHeldLightSoftness;
             tuning.mBounce = Settings::shaders().mHeldLightBounce;
+            tuning.mFlameFlicker = Settings::shaders().mHeldLightFlicker;
             return tuning;
         }
     }

@@ -429,6 +429,17 @@ Shaders Settings
    lights use :ref:`light bounce`.
 
 .. omw-setting::
+   :title: held light flicker
+   :type: float32
+   :range: 0.0-1.0
+   :default: 0.0
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   How much the lights characters carry waver like a flame: their glow dims and recovers unevenly, a slow sway under
+   a quicker flutter, by up to 40% at 1.0. 0.0 keeps them steady. Lights whose records already make them flicker or
+   pulse keep their own. Every light wavers on its own, so two torches never flicker together.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

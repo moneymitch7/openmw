@@ -207,6 +207,7 @@ namespace SceneUtil
             ctrl->setType(SceneUtil::LightController::LT_Pulse);
         if (esmLight.mPulseSlow)
             ctrl->setType(SceneUtil::LightController::LT_PulseSlow);
+        ctrl->setFlameFlicker(tuning.mFlameFlicker);
 
         lightSource->addUpdateCallback(ctrl);
 
@@ -233,6 +234,7 @@ namespace SceneUtil
         {
             controller->setDiffuse(tuned.mDiffuse);
             controller->setSpecular(tuned.mSpecular);
+            controller->setFlameFlicker(tuning.mFlameFlicker);
         }
     }
 }

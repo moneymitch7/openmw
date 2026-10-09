@@ -29,6 +29,9 @@ namespace SceneUtil
         void setDiffuse(const osg::Vec4f& color);
         void setSpecular(const osg::Vec4f& color);
 
+        /// How strongly a steady light (LT_Normal) wavers like a flame, 0 (steady) to 1.
+        void setFlameFlicker(float strength) { mFlameFlicker = strength; }
+
         void operator()(SceneUtil::LightSource* node, osg::NodeVisitor* nv);
 
     private:
@@ -40,6 +43,9 @@ namespace SceneUtil
         double mStartTime;
         double mLastTime;
         float mTicksToAdvance;
+        float mFlameFlicker = 0.f;
+        // sets this light's flame apart from others lit at the same moment
+        unsigned int mFlameSeed;
     };
 
 }

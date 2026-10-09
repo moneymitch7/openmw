@@ -73,6 +73,7 @@ namespace Settings
         SettingValue<float> mHeldLightSoftness{ mIndex, "Shaders", "held light softness",
             makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mHeldLightBounce{ mIndex, "Shaders", "held light bounce", makeClampSanitizerFloat(0, 1) };
+        SettingValue<float> mHeldLightFlicker{ mIndex, "Shaders", "held light flicker", makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };
         SettingValue<bool> mSoftParticles{ mIndex, "Shaders", "soft particles" };

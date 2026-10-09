@@ -1704,7 +1704,8 @@ namespace MWRender
             }
             else if (it->first == "Shaders"
                 && (it->second == "held light brightness" || it->second == "held light reach"
-                    || it->second == "held light softness" || it->second == "held light bounce"))
+                    || it->second == "held light softness" || it->second == "held light bounce"
+                    || it->second == "held light flicker"))
             {
                 if (mPlayerAnimation)
                     mPlayerAnimation->retuneExtraLight();
