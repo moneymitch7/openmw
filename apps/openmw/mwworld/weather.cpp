@@ -968,14 +968,16 @@ namespace MWWorld
             // in over the first half hour after sunrise, and are not drawn at night. The night light is the moon's,
             // so low that every shadow stretches across a town (several ms of cull and draw) and speckles the
             // surfaces it grazes.
+            // [Shadows] shadows end before night moves that half hour earlier, ending them that many hours before
+            // night (and starting them as long after sunrise): the sun is then at its lowest, its shadows long, faint
+            // and the costliest of the day.
             float shadowFade = 1.f;
             if (!Settings::shadows().mNightShadows)
             {
                 constexpr float fadeHours = 0.5f;
-                shadowFade = isNight ? 0.f
-                                     : std::clamp(std::min(adjustedNightStart - adjustedHour, adjustedHour - mSunriseTime)
-                                             / fadeHours,
-                                         0.f, 1.f);
+                const float hoursOfSun = std::min(adjustedNightStart - adjustedHour, adjustedHour - mSunriseTime)
+                    - Settings::shadows().mShadowsEndBeforeNight;
+                shadowFade = isNight ? 0.f : std::clamp(hoursOfSun / fadeHours, 0.f, 1.f);
             }
             // OpenMGE XE weather shadows: shadows go with the sun's glare, the weather's own measure of how much of
             // the sun gets through: full in clear and cloudy weather, a quarter in fog, none when overcast, in rain,
@@ -983,9 +985,12 @@ namespace MWWorld
             // none to draw, which saves their cost in bad weather).
             // A lightning strike lights the scene through the sun's light (see calculateWeatherResult), so for its
             // split second it casts hard shadows along it, by night too, fading as the flash does.
+            // [Shadows] weather shadow fade: how much of that the weather takes, 1 all of it, 0.5 leaving faint shadows
+            // when overcast (for sky shaders that keep a sun in view then).
             if (Settings::shadows().mWeatherShadows)
             {
-                shadowFade *= std::clamp(mResult.mGlareView, 0.f, 1.f);
+                const float weatherFade = Settings::shadows().mWeatherShadowFade;
+                shadowFade *= 1.f - weatherFade * (1.f - std::clamp(mResult.mGlareView, 0.f, 1.f));
                 // (above 1: strong under storm clouds, which otherwise weaken shadows, see mgeShadowMult)
                 shadowFade = std::max(shadowFade, std::clamp(mLightningFlash * 2.f, 0.f, 2.f));
             }
