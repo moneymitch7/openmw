@@ -21,6 +21,7 @@
 #include <components/resource/resourcesystem.hpp>
 #include <components/sceneutil/clusteredlighting.hpp>
 #include <components/sceneutil/nodecallback.hpp>
+#include <components/sceneutil/positionattitudetransform.hpp>
 
 namespace SceneUtil
 {
@@ -158,6 +159,9 @@ namespace SceneUtil
 
         float mActorFade;
         float mBounce = -1.f;
+        osg::observer_ptr<PositionAttitudeTransform> mCarrier;
+        float mCarrierRadius = 0.f;
+        float mCarrierHeight = 0.f;
 
         size_t mLastAppliedFrame;
 
@@ -180,6 +184,19 @@ namespace SceneUtil
         /// Its own light bounce, instead of the scene's (negative: the scene's). Clustered lighting only.
         void setBounce(float bounce) { mBounce = bounce; }
         float getBounce() const { return mBounce; }
+
+        /// Who carries the light (its base node, at the feet), whose body then blocks the light's direct light as an
+        /// upright cylinder of @a radius and @a height (scaled with the node), leaving its light bounce. nullptr for
+        /// none. Clustered lighting only.
+        void setCarrier(PositionAttitudeTransform* carrier, float radius, float height)
+        {
+            mCarrier = carrier;
+            mCarrierRadius = radius;
+            mCarrierHeight = height;
+        }
+        PositionAttitudeTransform* getCarrier() const { return mCarrier.get(); }
+        float getCarrierRadius() const { return mCarrierRadius; }
+        float getCarrierHeight() const { return mCarrierHeight; }
 
         float getActorFade() const { return mActorFade; }
 

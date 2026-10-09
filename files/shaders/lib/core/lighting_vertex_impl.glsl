@@ -54,7 +54,9 @@ void pointLighting(vec2 screenCoord, vec3 viewDir, vec3 viewPos, vec3 viewNormal
             lcalcConstantAttenuation(i),
             lcalcLinearAttenuation(i),
             lcalcQuadraticAttenuation(i),
-            lcalcRadius(i)
+            lcalcRadius(i),
+            vec4(0.0), // no carrier
+            vec4(0.0)
         );
 #endif
 

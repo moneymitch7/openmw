@@ -440,6 +440,19 @@ Shaders Settings
    pulse keep their own. Every light wavers on its own, so two torches never flicker together.
 
 .. omw-setting::
+   :title: held light carrier shadow
+   :type: boolean
+   :range: true, false
+   :default: true
+   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
+
+   The body of whoever carries a light blocks its direct light: an upright cylinder from their feet to the top of
+   their head, kept clear of the light in their hand. A torch then no longer lights the floor and walls behind its
+   carrier as if they weren't there. The shadow's edge softens with distance, as from a small flame, and the light's
+   bounce (see :ref:`held light bounce`) isn't blocked, so it still wraps softly around them. The carrier's own body
+   and gear are lit as usual. Only with :ref:`clustered lighting`.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

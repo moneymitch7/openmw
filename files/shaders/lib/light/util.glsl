@@ -127,6 +127,36 @@ float clusterFade(vec3 viewPos, float radius) {
 #endif
 }
 
+// How much of a held light's direct light gets past whoever carries it, 1 for all: the carrier's body as an upright
+// cylinder, so the light no longer shines through them onto what lies behind. The edge softens with the distance
+// behind the body, as from a small flame. Their own body and gear are lit as usual, and the light's bounce is not
+// blocked, so it still wraps around them.
+float carrierShade(PointLight light, vec3 viewPos) {
+    float radius = light.carrierFoot.w;
+    if (radius <= 0.0)
+        return 1.0;
+    vec3 axis = light.carrierAxis.xyz;
+    float height = length(axis);
+    vec3 up = axis / height;
+    vec3 fromLight = light.position.xyz - light.carrierFoot.xyz;
+    vec3 toPoint = viewPos - light.carrierFoot.xyz;
+    vec3 pointAcross = toPoint - up * dot(toPoint, up);
+    float pointHeight = dot(toPoint, up);
+    if (dot(pointAcross, pointAcross) < radius * radius * 2.6 && pointHeight > -8.0 && pointHeight < height + 8.0)
+        return 1.0;
+    vec3 ray = toPoint - fromLight;
+    vec3 rayAcross = ray - up * dot(ray, up);
+    vec3 lightAcross = fromLight - up * dot(fromLight, up);
+    float across2 = dot(rayAcross, rayAcross);
+    float t = across2 > 1e-4 ? clamp(-dot(lightAcross, rayAcross) / across2, 0.0, 1.0) : 0.0;
+    float dist = length(lightAcross + rayAcross * t);
+    float h = dot(fromLight + ray * t, up);
+    float soft = 2.0 + 12.0 * (1.0 - t);
+    float past = smoothstep(radius - soft, radius + soft, dist);
+    float overHead = smoothstep(height - 6.0, height + 10.0, h);
+    return max(past, overHead);
+}
+
 void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNormal, float shininess, inout vec3 diffuseLight, inout vec3 ambientLight, inout vec3 specularLight) {
     vec3 lightPos = light.position.xyz - viewPos;
     float lightDistance = length(lightPos);
@@ -140,15 +170,16 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     vec3 lightDir = lightPos / lightDistance;
 
     float attenuation = calcAttenuation(light, lightDistance) * clusterFade(viewPos, light.radius);
+    float direct = attenuation * carrierShade(light, viewPos);
 
     float lambertTerm = lambert(viewNormal, lightDir, viewDir);
     if (lightDistance < uSelfLitRange)
         lambertTerm = max(lambertTerm, 0.25 + 0.25 * abs(dot(viewNormal, lightDir)));
-    diffuseLight += light.diffuse.xyz * lambertTerm * attenuation;
+    diffuseLight += light.diffuse.xyz * lambertTerm * direct;
     ambientLight += light.ambient.xyz * attenuation;
     if (pointLightBounceAmount(light) > 0.0)
         ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius);
-    specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * attenuation;
+    specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * direct;
 }
 
 #endif

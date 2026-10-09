@@ -308,6 +308,8 @@ namespace MWRender
 
         /** Adds an additional light to the given node using the specified ESM record. */
         void addExtraLight(osg::ref_ptr<osg::Group> parent, const SceneUtil::LightCommon& light);
+        // the held light setting: whether the carrier's body blocks the light
+        void updateExtraLightCarrier();
 
         void clearAnimSources();
 

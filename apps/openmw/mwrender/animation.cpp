@@ -1731,6 +1731,21 @@ namespace MWRender
         mExtraLightSource->setActorFade(mActorFade);
         mExtraLightData = esmLight;
         mExtraLightExterior = exterior;
+        updateExtraLightCarrier();
+    }
+
+    void Animation::updateExtraLightCarrier()
+    {
+        if (!mExtraLightSource)
+            return;
+        // The body of whoever carries the light, roughly: an upright cylinder from the feet to the top of the head.
+        constexpr float bodyRadius = 14.f;
+        constexpr float bodyHeight = 125.f;
+        auto* carrier = dynamic_cast<SceneUtil::PositionAttitudeTransform*>(mInsert.get());
+        if (carrier != nullptr && mPtr.getClass().isActor() && Settings::shaders().mHeldLightCarrierShadow)
+            mExtraLightSource->setCarrier(carrier, bodyRadius, bodyHeight);
+        else
+            mExtraLightSource->setCarrier(nullptr, 0.f, 0.f);
     }
 
     void Animation::retuneExtraLight()
@@ -1739,6 +1754,7 @@ namespace MWRender
             return;
         SceneUtil::retuneLightSource(
             *mExtraLightSource, *mExtraLightData, mExtraLightExterior, getCarriedLightTuning(mPtr));
+        updateExtraLightCarrier();
     }
 
     void Animation::addEffect(std::string_view model, std::string_view effectId, bool loop, std::string_view bonename,

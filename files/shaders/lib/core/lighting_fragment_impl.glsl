@@ -48,7 +48,9 @@ void doLighting(vec2 screenCoord, vec3 viewPos, vec3 viewNormal, float shininess
             lcalcConstantAttenuation(i),
             lcalcLinearAttenuation(i),
             lcalcQuadraticAttenuation(i),
-            lcalcRadius(i)
+            lcalcRadius(i),
+            vec4(0.0), // no carrier
+            vec4(0.0)
         );
 #endif
 

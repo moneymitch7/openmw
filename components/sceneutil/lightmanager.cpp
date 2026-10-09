@@ -350,6 +350,26 @@ namespace SceneUtil
 
                     // w carries the light's own light bounce (negative: the scene's), see lib/light/util.glsl
                     gpuLight.mPosition.w() = bound.mLightSource->getBounce();
+                    if (const PositionAttitudeTransform* carrier = bound.mLightSource->getCarrier())
+                    {
+                        // The carrier's body, an upright cylinder from the feet: kept clear of the light, which is
+                        // held beside it (a light inside it would be hidden from everything).
+                        const osg::Vec3f foot = carrier->getPosition();
+                        const float scale = carrier->getScale().z();
+                        const osg::Vec4f lightPosition = light->getPosition();
+                        osg::Vec3f offset = osg::Vec3f(lightPosition.x(), lightPosition.y(), lightPosition.z()) - foot;
+                        offset.z() = 0.f;
+                        const float clearance = offset.length();
+                        const float radius = std::min(bound.mLightSource->getCarrierRadius() * scale, 0.7f * clearance);
+                        if (radius >= 4.f)
+                        {
+                            gpuLight.mCarrierFoot = osg::Vec4f(foot * (*viewMatrix), radius);
+                            gpuLight.mCarrierAxis = osg::Vec4f(osg::Matrix::transform3x3(osg::Vec3f(0.f, 0.f,
+                                                                   bound.mLightSource->getCarrierHeight() * scale),
+                                                                   *viewMatrix),
+                                0.f);
+                        }
+                    }
                     bound.mGpuIndex = static_cast<int>(cache.mGPULights[frameId]->getData().size());
                     cache.mGPULights[frameId]->getData().push_back(gpuLight);
                 }
