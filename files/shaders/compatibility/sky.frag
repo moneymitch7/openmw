@@ -11,9 +11,6 @@
 // Sunshafts shader runs (that shader draws its own disc and rays); turn
 // this on when using the MGE XE / MGG Sunshafts post-processing shader,
 // otherwise the sun gets two glare stacks and reads far too hot.
-#ifndef MGE_SUPPRESS_SUNGLARE
-#define MGE_SUPPRESS_SUNGLARE 0
-#endif
 
 uniform int pass;
 uniform sampler2D diffuseMap;
@@ -125,16 +122,7 @@ void paintSun(inout vec4 color)
 
 void paintSunglare(inout vec4 color)
 {
-#if MGE_SUPPRESS_SUNGLARE
-    // MGE parity: the classic Sunshafts shader declares disableSunglare,
-    // and MGE suppresses the vanilla sunglare while it runs (its own disc
-    // + rays replace it). OpenMW has no annotation channel, so suppress
-    // here; without this both glare stacks draw and the sun reads far too
-    // hot (especially at sunset, amplified by bloom).
-    color = vec4(0.0);
-#else
     color = diffuseColor;
-#endif
 }
 
 void processSunflashQuery()
@@ -173,16 +161,6 @@ void main()
     if (mgeUwProbe())
         color.xyz = mix(color.xyz, vec3(0.0, 1.0, 0.0), 0.6);
 
-#if MGE_PARITY_PROBE
-    // v8: distinct colour per pass, alpha forced opaque - names both the
-    // full-screen coverer and the black horizon band's owner.
-    if (pass == PASS_ATMOSPHERE)            color = vec4(0.0, 0.0, 1.0, 1.0); // blue
-    else if (pass == PASS_CLOUDS)           color = vec4(0.0, 1.0, 0.0, color.a); // green, keep alpha
-    else if (pass == PASS_SUN)              color = vec4(1.0, 0.0, 0.0, color.a); // red
-    else if (pass == PASS_SUNGLARE)         color = vec4(1.0, 1.0, 0.0, 1.0); // yellow
-    else if (pass == PASS_ATMOSPHERE_NIGHT) color = vec4(0.0, 1.0, 1.0, color.a); // cyan
-    else if (pass == PASS_MOON)             color = vec4(1.0, 1.0, 1.0, color.a); // white
-#endif
 
     gl_FragData[0] = color;
 }

@@ -38,7 +38,7 @@ uniform mat4 osg_ViewMatrixInverse;
 #endif
 
 // Stock root uniform, fed per frame by the engine (groundcover wind uses
-// it). Here it is the height-fog baseline; see MGE_HEIGHT_FOG_PLAYER_BASELINE.
+// it). Here it is the height-fog baseline (fragment height minus the player's).
 #ifndef OMW_DECL_PLAYERPOS
 #define OMW_DECL_PLAYERPOS
 uniform vec3 playerPos;
@@ -96,130 +96,24 @@ uniform vec3 mgeOutscatterU;
 uniform vec3 mgeInscatterU;
 uniform float mgeScatterUniformsOn;
 
-// Scatter formula era. The constants changed between the 2020-era XE build
-// (MGE XE 0.11-era XE Common.fx, which the MGG preset was tuned against)
-// and the live 2023 install (0.18-style). Mixing MGG coefficients with the
-// live formula washes clear weather to white (doc §4f), so keep preset era
-// and formula era together. 1 = 2020/0.11-era, 0 = live/0.18-style.
-#define MGE_SCATTER_ERA_2020 1
+// Fixed choices from the port (each was once a switch, kept here so the code below reads right):
+// - Scatter constants are the 2020-era MGE XE ones (0.11-era XE Common.fx), which the MGG preset was tuned against;
+//   the live 0.18-style formula washes clear weather to white with those coefficients.
+// - Height-aware fog in dense weathers: summits shed fog, valleys gain it, measured from the player's height so every
+//   pass (the water reflection included) sees the same layer. STEP_SSAO_HQ.omwfx and MGG_Bloom_Soft.omwfx mirror it.
+// - Weather transitions between a nice weather (Clear, Cloudy) and a storm are decomposed into their two endpoints:
+//   the fog reveals the storm's palette instead of the blend (whose hidden nice-weather blue otherwise surfaced
+//   mid-transition), distant land is clamped to never read brighter than the sky behind it and its hue converges
+//   to that sky on silhouettes, and the sky colour input follows the same decomposed blend. Steady weathers are
+//   unaffected by all of it; nice<->nice transitions skip the storm-only parts.
+// - Mirrored (reflection) passes scatter the sky with the mirror-corrected sun, converge far land to the same dome
+//   model, and widen the horizon seal over the engine's sky-blend window.
 
-// Height-aware scene fog in dense weathers (summits shed fog, valleys
-// gain it). 0 = plain distance fog. The same switch exists in
-// STEP_SSAO_HQ.omwfx and MGG_Bloom_Soft.omwfx, which mirror the fog
-// curve; keep all three in the same state.
-#define MGE_HEIGHT_FOG 1
-
-// here (all units, the consumers are reader-flavor fragments); the
-// omwfx passes do not consume either feature (their paint terms are
-// deltas, base-independent).
-// MGE_CORRIDOR_REVEAL, in a nice<->storm transition the composition
-//   reveals the storm endpoint's palette fog instead of the blend. The
-//   blend carries the nice endpoint's palette (Clear fog 48,97,141,
-//   far bluer than anything its own steady state shows, since steady
-//   nice weather hides the palette behind full scatter), and nice²
-//   decays faster than the linear palette lerp, so mid-corridor the
-//   hidden blue surfaced at up to ~50% weight, the "intense blueing
-//   that reflects neither endpoint" (model and measured hump match).
-//   Race verdict: sim_corridor_fix_race.py, excursion
-//   0.052-0.107 (shipped) -> <=0.006 on every corridor in both scatter
-//   states, endpoints bit-exact, ash-glow metric 0. Also unlocks the
-//   lite search on Full during transitions only (the engine uniforms
-//   carry only blended colours; see mgeWxCompute).
-// MGE_WXT_NICE_GATE, the 101/102 scatter suppression and the fog.glsl
-//   sky-blend fade are gated off when both endpoints are nice weathers:
-//   their storm-glow justification cannot apply there, and on RP the
-//   suppression itself injected the palette blue mid-corridor
-//   (Cloudy->Clear; the Full sighting is the separate cloud-layer
-//   case).
-// MGE_FULL_LUM_CLAMP, the transition brightness clamp (the invariant:
-//   distant terrain must never read brighter than the sky) runs on the
-//   Full tier too, corridor-scoped. It was stock-only because Full had
-//   no decomposition at all when it shipped; the corridor unlock above
-//   now provides (i,j,conf) mid-transition, and a weather ladder showed
-//   the unclamped Full glow directly: Cloudy->Ashstorm far band up to
-//   +0.070 lum above the measured sky, Clear<->Blizzard +0.027
-//   (pre-existing; the old build measured +0.054 at the same alphas).
-//   Race verdict: sim_corridor_lum.py, Ash +0.058 -> +0.013 modelled,
-//   steady states and off-corridor bit-exact (conf 0), scatter
-//   suppression untouched
-//   (still stock-only). Frame-anchored model validated on 54 frames.
-#ifndef MGE_CORRIDOR_REVEAL
-#define MGE_CORRIDOR_REVEAL 1
-#endif
-#ifndef MGE_WXT_NICE_GATE
-#define MGE_WXT_NICE_GATE 1
-#endif
-#ifndef MGE_FULL_LUM_CLAMP
-#define MGE_FULL_LUM_CLAMP 1
-#endif
-// MGE_WXT_SKY_HUE, corridor hue convergence, the chroma sibling of the
-//   brightness clamp (on the clamped build the Ash-corridor ridges read
-//   blueish/purplish against the reddening ash sky: measured
-//   +0.055..+0.067 B-R above the sky at silhouette elevation through
-//   f 0.08-0.6; present pre-clamp too, hidden under the brightness
-//   glare). Mechanism: the wall's
-//   scatter/fog terms are cloud-blind in hue exactly as they were in
-//   luminance, the ash cloud sheet reddens the real sky, the analytic
-//   terms do not follow. Fix: after the luminance clamp, the fog term's
-//   hue converges to the measured sky behind (row-accurate RTT sample),
-//   luminance-preserving, at the same wxTc weight. Frame-applied race
-//   (exact pixel transform on the measured frames, no geometry model):
-//   k=1.0 collapses the mid-band to <=+0.007 on Ash and zeroes the
-//   Clear<->Blizzard warm side, strict contraction on every frame
-//   (sim_corridor_lum.py). Steady bit-exact (weight 0); skipped where
-//   the RTT is absent (reflections/refraction), a palette target would
-//   re-introduce palette hue, the exact thing being corrected.
-//   only on silhouette-class content, zero on thin near haze (which
-//   keeps the reveal's storm hue), see the block comment at the site.
-#ifndef MGE_WXT_SKY_HUE
-#define MGE_WXT_SKY_HUE 1
-#endif
-// MGE_SKYCOL_CORRIDOR_UNIFY, corridor unification of the stock skyCol
-//   mix(gl_Fog.color, est, nice) slides the wall's scatter/zenith input
-//   toward the fog colour as nice falls, invisible at every steady
-//   state (weight 1 on nice ends, consumer dead at nice 0 on storm
-//   ends), but mid nice->storm corridor it diverges from Full's engine
-//   sky. Where the departing fog is blue (Clear->Ashstorm) the stock
-//   wall runs measurably bluer than the sky it stands against (the
-//   reported pale-blue left mass), matched-pair-verified RP-only (the
-//   right-bank luminance excess measured identical on both tiers and
-//   is not the artifact). With this on,
-//   the mix weight rides to 1 at conf * min(1, 4*4a(1-a)) (the hue
-//   family's ramp, nice<->nice gated), so corridor skyCol = the
-//   decomposed palette-sky blend = Full's input by construction.
-//   Steady bit-exact (weight collapses to the nice mix at wxt 0).
-#ifndef MGE_SKYCOL_CORRIDOR_UNIFY
-#define MGE_SKYCOL_CORRIDOR_UNIFY 1
-#endif
-
-// Reflected-sky scatter in mirrored stock passes (queued alleviation,
-// losses item 8). 0 = the palette-base fallback (safe, current look);
-// 1 = let the reflected sky run the scatter with the mirror-corrected
-// sun (the same resolver that fixed reflected-terrain scatter). Flip for
-// one A/B; if the black/faint reflected-sky family returns, the
-// reflection RTT's sky program has no usable light 0 - flip back.
-#define MGE_STOCK_MIRRORED_SKY_SCATTER 1
-
-// Height baseline. 1 = fragment world height minus the player's height,
-// both absolute, so every pass measures the same fog layer (the water
-// reflection's mirrored camera included; fragment world positions are
-// real in that pass, only the camera is mirrored). 0 = the old camera-ray
-// form, which measured from whichever camera renders the pass. The SSAO
-// and bloom mirrors already compute fragment height minus the main eye,
-// so 1 also matches them (feet-vs-eye offset ~120u, negligible at H=4608).
-#define MGE_HEIGHT_FOG_PLAYER_BASELINE 1
-
-#if MGE_SCATTER_ERA_2020
 // newskycol = 0.38*sky + fixed blue; the fixed term keeps clear haze blue.
 const vec3 mgeSkyBase           = vec3(0.23, 0.39, 0.68);
 const float mgeSkyWeight        = 0.38;
 const float mgeExpFogDistScale  = 4.0;   // ini "Exponential Distance
                                          // Multiplier=4" was live in 0.11
-#else
-const vec3 mgeSkylightScatter   = vec3(0.4456, 0.6194, 1.0);
-const float mgeSkylightMix      = 0.44;
-const float mgeExpFogDistScale  = 4.4;   // constexpr in distantland.cpp
-#endif
 
 // MGE.ini [Distant Land] (live install) + hardcoded engine constants.
 const float mgeCell             = 8192.0;
@@ -366,9 +260,8 @@ void mgeMggSegmentSky(out vec3 skyEst, out float wEst, out float wGate)
 // the FPS-bisect C1 cluster): conf-0 stubs for the public entry points,
 // day-arm split ladder (no sun-hour recovery), no calm-hold. Repaired
 // post-127 rounds); rot-gated by check_glsl_decomposer section [5].
-#define MGE_ENDPOINT_DECOMPOSITION 1
 
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_WX_STAGE
+#if MGE_WX_STAGE
 // Forward declaration: defined with the endpoint-decomposition block below
 // (the tables it needs sit next to the other palette anchors). Returns conf;
 // outputs the decomposed blended sky colour and nice weight.
@@ -377,7 +270,6 @@ float mgeDecomposeSkyNice(out vec3 skyBlend, out float niceBlend);
 // at conf 0 - the 1720 brighter-than-sky band returns). Live A/B unit;
 // the est-model mirrors in MGE_SkyEst_Correct/Debug.omwfx carry the
 // same define and must flip together (est-model rule).
-#define MGE_CALM_HOLD_V2 1
 // The hold weight + calm sky for the current fragment's fog state, shared
 // by the est and nice consumers. Returns w = calm * (1 - confDec); 0
 // wherever the state is not calm-family, the fog range is invalid
@@ -496,7 +388,6 @@ float mgeGetNiceWeather()
     }
     niceHeur = max(max(blueGate, sunGate) * depthGate, segGate);
 
-#if MGE_ENDPOINT_DECOMPOSITION
     // Endpoint decomposition (block below): during a transition the gate
     // heuristics above read blended signals and produce the wrong trajectory
     // - the widened veto stretched the ramp but the weight still followed
@@ -511,7 +402,6 @@ float mgeGetNiceWeather()
         float niceDec;
         float conf = mgeDecomposeSkyNice(skyDec, niceDec);
         niceHeur = mix(niceHeur, niceDec, conf);
-#if MGE_CALM_HOLD_V2
         // the calm family at conf 0, the true nice is ~1 (Clear/Cloudy)
         // but the heuristic above reads the blended signals, at dawn the
         // dim sun kills sunGate outright (nice 0 vs true 0.9+, scatter
@@ -525,9 +415,7 @@ float mgeGetNiceWeather()
         vec3 calmSkyN;
         float wV2 = mgeCalmHoldV2(conf, calmSkyN);
         niceHeur = mix(niceHeur, 1.0, smoothstep(0.6, 1.0, wV2));
-#endif
     }
-#endif
     return niceHeur;
 }
 
@@ -691,10 +579,9 @@ vec2 mgeStockWeatherFF(float d, float wNight)
 // Cost: steady frames exit via the fast path of the first (day-branch)
 // candidate at a single anchor set; transition frames run <= 2 x 45 pairs
 // of a few ALU, all operands uniform per draw, branches fully coherent.
-// The gate (#define MGE_ENDPOINT_DECOMPOSITION) sits above
-// mgeGetNiceWeather, which consumes this block from earlier in the file.
+// mgeGetNiceWeather consumes this block from earlier in the file.
 
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_WX_STAGE
+#if MGE_WX_STAGE
 // WX_TABLES_BEGIN (generated by scripts/gen_wx_tables.py -- do not hand-edit; regenerate instead)
 // 4-phase anchors [i*4 + phase], phase: 0 Sunrise, 1 Day,
 // 2 Sunset, 3 Night. Engine registration order: Clear,
@@ -1090,13 +977,6 @@ vec2 mgeStockCalmHoldSky(vec3 fc, float d, vec3 sunC, float h1, float h2,
     float invW = 1.0 / accW;
     calmSky = mix(skyT, accSky * invW, sel);
     return vec2(max(aClassic, aCorr), mix(ffT, accFF * invW, sel));
-}
-
-// Returns (calmness, calm ff target).
-vec2 mgeStockCalmHold(vec3 fc, float d, vec3 sunC, float h1, float h2)
-{
-    vec3 calmSkyUnused;
-    return mgeStockCalmHoldSky(fc, d, sunC, h1, h2, calmSkyUnused);
 }
 
 // The RP dusk-corridor jumpiness has one cliff (176): conf drives the
@@ -1593,19 +1473,11 @@ float wxDecomposeCore(vec3 fc, float d, vec3 sunW, vec3 sunCIn,
 #endif // WX_NEED_FULL_CORE
 // WX_SHARED_END
 
-// S1d kill-switch (outside the sync span on purpose -- the span must not
-// gain preprocessor lines; the est-model replicas carry their own copy of
-// this define next to MGE_CALM_HOLD_V2 and must flip together, est-model
-// rule). 0 = the pre-S1d conf cliff returns (live A/B unit; rot-gated by
-// check_glsl_decomposer section [6], which compiles both variants and
-// proves 0 ≡ plain v3). Applies only to the lite-tier verdict: the
+// S1d stabilizer (always on). Applies only to the lite-tier verdict: the
 // full-core opt-ins (water: V4+rescue) solve twilight transitions
 // wrapping v3 alone -- capping the full core's correct confident
 // corridor verdicts with min(conf, s) would re-create the fallback
 // stretch S1d exists to remove.
-#ifndef MGE_WX_S1D
-#define MGE_WX_S1D 1
-#endif
 
 // LB4 -- the lite-race twilight bypass + donated sky-tent hour
 // decompose_scene_v3_s1e_lb4 + lb4_sky_from). At S1e tent > 0.999 the
@@ -1627,9 +1499,6 @@ float wxDecomposeCore(vec3 fc, float d, vec3 sunW, vec3 sunCIn,
 // kill-switch control + the sim oracle). est-model rule: the scene
 // and both omwfx replicas carry this define and must flip together
 // (shipped_kind enforces presence + value equality).
-#ifndef MGE_WX_LITE_BYPASS
-#define MGE_WX_LITE_BYPASS 1
-#endif
 
 // the all-units block at the top, the consumers are reader-flavor
 // fragments). This helper is stage-side (it needs the tables): pure
@@ -1701,13 +1570,13 @@ float wxG_dcCand = 0.0;   // resolver candidate conf (0 = none; the
 int wxG_dcI = 0;          // its anchor
 float wxG_dcHour = 12.0;  // its branch hour
 float wxG_dcDusk = 0.0;   // hoursOK (sun-derived branch hours valid)
-#if MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
 float wxG_dcTent = 0.0;   // the S1e tent (bypass gate + blend input)
 int wxG_dcWStar = -1;     // steadiness winner anchor (-1 = none)
 float wxG_dcS = 0.0;      // its steadiness
 float wxG_dcHSky = 12.0;  // the donated sky-tent hour (348 rule)
 #endif
-#if MGE_WX_LITE_BYPASS && MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
 float wxG_lb4Hour = 12.0; // out-of-gate donated hour (sky blend)
 float wxG_lb4W = 0.0;     // its smoothstep(0.90, 0.999, tent) weight
 #endif
@@ -1743,7 +1612,7 @@ void wxDuskChain(vec3 fc, float d, vec3 sunC, vec3 sunW)
     wxG_dcI = 0;
     wxG_dcHour = 12.0;
     wxG_dcDusk = 0.0;
-#if MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     wxG_dcTent = 0.0;
     wxG_dcWStar = -1;
     wxG_dcS = 0.0;
@@ -1772,7 +1641,7 @@ void wxDuskChain(vec3 fc, float d, vec3 sunC, vec3 sunW)
     // the old running race adopted the first-on-tie maximum among
     // candidates beating both 0.9 and the incumbent, which is exactly
     // argmax-then-compare (section [6] + the oracle gate it).
-#if MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     float s1A = 0.0;
     int s1WA = -1;
     float s1B = 0.0;
@@ -1838,7 +1707,7 @@ void wxDuskChain(vec3 fc, float d, vec3 sunC, vec3 sunW)
                     wxG_dcHour = h;
                 }
             }
-#if MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
             // -- wxS1dSteadiness's combination (per-branch best)
             if (duskOK)
             {
@@ -1903,7 +1772,7 @@ void wxDuskChain(vec3 fc, float d, vec3 sunC, vec3 sunW)
         }
     }
     wxG_dcDusk = hoursOK;
-#if MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     // -- wxS1dStabilize's branch race + S1e sun gate, verbatim on the
     // precomputed pair, exported (the conf rewrite + basis pin -- the
     // epilogue -- applies in mgeWxCompute after the races, on these
@@ -2072,9 +1941,7 @@ void mgeWxCompute()
     // the nice/sky/fog readers early-out to engine truth before their
     // est code.
     if (mgeWeatherUniforms > 0.5
-#if MGE_CORRIDOR_REVEAL
         && !(mgeFogParamsNext.z > 0.001 && mgeFogParamsNext.z < 0.999)
-#endif
     )
         return;
     // Fog-off sentinel / invalid range: no weather signal exists here.
@@ -2116,7 +1983,7 @@ void mgeWxCompute()
     // keep their conf-0 incumbents (i=j=0, alpha 0, hour 12), exactly
     // the sim kind's resolver-only front.
     bool lb4 = false;
-#if MGE_WX_LITE_BYPASS && MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     wxG_lb4Hour = 12.0;   // self-resetting (fail-safe + oracle harness)
     wxG_lb4W = 0.0;
     lb4 = wxG_dcTent > 0.999;
@@ -2162,7 +2029,7 @@ void mgeWxCompute()
         wxG_hour = wxG_dcHour;
         wxG_conf = wxG_dcCand;
     }
-#if MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     // -- wxS1dStabilize's epilogue (conf rewrite + basis pin), verbatim
     if (wxG_dcDusk > 0.5 && wxG_dcTent > 0.0)
     {
@@ -2181,7 +2048,7 @@ void mgeWxCompute()
             wxG_conf = (1.0 - wxG_dcTent) * wxG_conf;
     }
 #endif
-#if MGE_WX_LITE_BYPASS && MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     if (lb4)
     {
         // in-gate: donate the sky-tent hour (348 rule) unless the
@@ -2272,7 +2139,7 @@ float mgeDecomposeSkyNice(out vec3 skyBlend, out float niceBlend)
     // and this degenerates to the old Day/Night sky selection.
     vec4 wS = wxPhaseW(hour, wxWinSky);
     skyBlend = mix(MGE_WX_B4(wxSkyPh, i, wS), MGE_WX_B4(wxSkyPh, j, wS), alpha);
-#if MGE_WX_LITE_BYPASS && MGE_WX_S1D && !MGE_WX_V4 && !MGE_WX_RESCUE
+#if !MGE_WX_V4 && !MGE_WX_RESCUE
     // the bypass gate, when the search kept the lite 12/0 hour, blend
     // toward the donated hour's sky by gate proximity - continuous at
     // the gate boundary, weight 0 below tent 0.90 (byte identity).
@@ -2328,7 +2195,7 @@ float mgeDecomposeSkyNice(out vec3 skyBlend, out float niceBlend)
     niceBlend = 0.0;
     return 0.0;
 }
-#endif // MGE_ENDPOINT_DECOMPOSITION
+#endif // MGE_WX_STAGE (weather decomposition)
 
 #if MGE_WX_STAGE
 // call this repeatedly per fragment, mgeScatterWithSun reads .w for the
@@ -2381,17 +2248,13 @@ vec4 mgeGetFogParams() // (ff, fo, isExterior, isDay)
                     // At define-0 wNight stays 0 -> day-arm ladder, the
                     // pre-152 floor.
                     float wNight = 0.0;
-#if MGE_ENDPOINT_DECOMPOSITION
                     wNight = wxG_holdWNight;
-#endif
                     p.xy = mgeStockWeatherFF(d, wNight);
-#if MGE_ENDPOINT_DECOMPOSITION
                     // still fits the calm family, keep ff above the
                     // dense knees and fade fo - kills the onset
                     // cream-cutout regime flip.
                     p.x = max(p.x, wxG_holdSky.w * wxG_holdFF);
                     p.y *= 1.0 - wxG_holdSky.w;
-#endif
                 }
             }
         }
@@ -2401,7 +2264,7 @@ vec4 mgeGetFogParams() // (ff, fo, isExterior, isDay)
 }
 #endif // MGE_WX_STAGE (fog params)
 // WX_KILLSWITCH_COVERAGE_END (check_glsl_decomposer section [5] compiles
-// WX_TABLES_BEGIN..here under MGE_ENDPOINT_DECOMPOSITION 0/1 x scene/water
+// WX_TABLES_BEGIN..here for scene/water
 
 #if MGE_WX_STAGE
 // True weather sky colour: on a patched engine it is fed live; on stock
@@ -2410,11 +2273,9 @@ vec4 mgeGetFogParams() // (ff, fo, isExterior, isDay)
 // full provenance comment lives with the history in git; the short form:
 // weather-exact MGG ratios via the phase-segment classifier, vanilla
 // ratio-table fallback, decomposition mix (conf-gated), calm-hold v2.
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_SKYCOL_CORRIDOR_UNIFY
 float mgeWxtNiceGate(); // defined below; forward-declared for the
                         // corridor unification block (GLSL 120 needs
                         // declaration before call)
-#endif
 vec3 mgeSampleSkyCol()
 {
     if (mgeWeatherUniforms > 0.5)
@@ -2436,7 +2297,6 @@ vec3 mgeSampleSkyCol()
         est = mix(mgeLegacyFog().color.xyz, mgeLegacyFog().color.xyz * ratio, blueOK);
     }
     est = mix(est, segSky, segWEst);
-#if MGE_ENDPOINT_DECOMPOSITION
     // transitions: the decomposed sky is the per-weather sky anchors
     // lerped at the recovered endpoints - the correct trajectory by
     // 0 at steady off-palette states, where the chain above is the
@@ -2445,18 +2305,14 @@ vec3 mgeSampleSkyCol()
         vec3 skyDec; float niceDec;
         float confDec = mgeDecomposeSkyNice(skyDec, niceDec);
         est = mix(est, skyDec, confDec);
-#if MGE_CALM_HOLD_V2
         // the calm family at conf 0, pull the estimate toward the winning
         // calm anchor's sky tent (est rides the raw hold weight; the nice
         // consumer rides a knee - see mgeGetNiceWeather).
         vec3 calmSkyE;
         float wV2 = mgeCalmHoldV2(confDec, calmSkyE);
         est = mix(est, calmSkyE, wV2);
-#endif
     }
-#endif
     float wxSkyW = mgeGetNiceWeather();
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_SKYCOL_CORRIDOR_UNIFY
     // top): mid nice->storm corridor the nice mix below slides skyCol
     // toward the (blue, on Clear) fog colour while Full's engine sky
     // stays on the palette blend, ride the mix weight to 1 during
@@ -2468,12 +2324,9 @@ vec3 mgeSampleSkyCol()
         float uH;
         float uC = mgeDecomposeIdx(uI, uJ, uA, uH);
         float uT = (uI == uJ) ? 0.0 : 4.0 * uA * (1.0 - uA);
-#if MGE_WXT_NICE_GATE
         uT *= mgeWxtNiceGate();
-#endif
         wxSkyW = mix(wxSkyW, 1.0, uC * min(1.0, 4.0 * uT));
     }
-#endif
     return mix(mgeLegacyFog().color.xyz, est, wxSkyW);
 }
 
@@ -2482,23 +2335,15 @@ vec3 mgeSampleSkyCol()
 // is compiled out or the switches are off.
 vec3 mgeRevealFogBase()
 {
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_CORRIDOR_REVEAL
     int rvI; int rvJ; float rvA; float rvH;
     float rvC = mgeDecomposeIdx(rvI, rvJ, rvA, rvH);
     return wxRevealFog(mgeLegacyFog().color.xyz, rvI, rvJ, rvC, rvH);
-#else
-    return mgeLegacyFog().color.xyz;
-#endif
 }
 float mgeWxtNiceGate()
 {
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_WXT_NICE_GATE
     int rvI; int rvJ; float rvA; float rvH;
     mgeDecomposeIdx(rvI, rvJ, rvA, rvH);
     return (wxNice[rvI] > 0.5 && wxNice[rvJ] > 0.5) ? 0.0 : 1.0;
-#else
-    return 1.0;
-#endif
 }
 
 // The compute-mode emitters (mgeWxEmitVaryings for a compute-mode vertex stage,
@@ -2650,7 +2495,6 @@ MgeFogDerived mgeDerivedFog()
     }
     vec4 p = mgeGetFogParams();
     MgeFogDerived s = mgeDeriveFogAt(p.x, p.y);
-#if MGE_ENDPOINT_DECOMPOSITION
     // Stock tier: recover the transition endpoints and lerp derived values,
     // conf-mixed with the single-envelope path above, conf 0 (steady
     // mismatch, sentinel pass, lightning flash, dawn/dusk) is byte-identical
@@ -2673,7 +2517,6 @@ MgeFogDerived mgeDerivedFog()
             s.wLayer   = mix(s.wLayer,   mix(a.wLayer,   b.wLayer,   ea), conf);
         }
     }
-#endif
     return s;
 }
 
@@ -2796,7 +2639,6 @@ bool mgeStockMirrored()
 // what is camZ in the mirrored pass for a viewer above (+40 -> R 0.7,
 // mirrored -> R 0.3) and below - which decides the correct
 // mgeCamAboveWater mirrored-branch test.
-#define MGE_MIRROR_PROBE 0
 
 bool mgeCamAboveWater()
 {
@@ -2819,74 +2661,6 @@ bool mgeCamAboveWater()
     return !viewerUnderwater || isRefraction;
 }
 
-// ==== Parity input probe (diagnostic, normally 0) ====
-// False-colours every fog-touched fragment with the actual scatter
-// inputs, for pixel-decoding from screenshots when Full and Redux Plus
-// disagree visually while all reasoned inputs claim equality:
-//   R = sunWorld.z * 0.5 + 0.5  (the sun the scatter actually uses;
-//       also detects game-hour drift between comparison sessions)
-//   G = 1 when the light-0 guard fired (no usable sun in this program)
-//   B = niceWeather
-#define MGE_PARITY_PROBE 0
-// Probe v6 - the per-program sun. Every fog-touched fragment shows the
-// sun its own program's scatter would use:
-//   G = 1 when the light-0 guard fired (vertical-sun fallback)
-//   B = 0.5 constant (sanity)
-// Regions whose R/G differ from the near-field's have a degenerate sun -
-// the far-silhouette suspects.
-vec3 mgeParityProbe()
-{
-    float guard = 0.0;
-    vec3 sunWorld;
-    if (dot(mgeSunDir, mgeSunDir) > 1e-4)
-        sunWorld = normalize(mgeSunDir);
-    else
-    {
-        vec3 lp = mgeSunViewPos();
-        if (dot(lp, lp) > 1e-6)
-            sunWorld = normalize((osg_ViewMatrixInverse * vec4(normalize(lp), 0.0)).xyz);
-        else
-        {
-            guard = 1.0;
-            sunWorld = vec3(0.0, 0.0, 1.0);
-        }
-    }
-    return vec3(sunWorld.z * 0.5 + 0.5, guard, 0.5);
-}
-
-// Probe v3 - content probe: geometry is colour-striped by distance band
-// (one hue per cell, cycling 8), sky is black. A screenshot from each exe
-// shows exactly which geometry is submitted at which distance - the
-// far-band population difference the flat probes hid.
-vec3 mgeContentProbe(float dist)
-{
-    float band = floor(dist / 8192.0);
-    return 0.5 + 0.5 * cos(6.2832 * (band * 0.618 + vec3(0.0, 0.33, 0.67)));
-}
-
-// ==== Scatter-uniform link probe (diagnostic, normally 0) ====
-// patched engine yet the screen is pin-invariant, and the whole static
-// chain (declarations, consumers, mRootNode stateset, exe vintage) reads
-// intact. This probe splits the remaining runtime question in one capture:
-// every fog-touched fragment false-colours to the uniform state its own
-// program received:
-//   R = mgeScatterUniformsOn   (0 -> near-black frame: the values never
-//       reached this program - engine/stateset/apply side; 1 -> bright)
-//   G = mgeInscatterU.g * 1.5  (pin s3 expects ~0.41, pin s6 ~0.48)
-//   B = mgeOutscatterU.b * 0.7 (pin s3 expects ~0.66, pin s6 ~0.31)
-// Verdict table (Full install, MGE_SkyEst_Debug chain tolerated - hue
-// classes survive the post response): all-black = uniforms never
-// set/applied in GL; coloured but pin-invariant = stale values reach the
-// programs; pink (s3) vs orange (s6) flip = the engine link is live and
-// the gap sits in consumption or measurement. Stock exe (Redux Plus)
-// paints black by construction - the built-in negative control.
-#define MGE_SCATTER_UNIFORM_PROBE 0
-vec3 mgeScatterUniformProbe()
-{
-    return vec3(mgeScatterUniformsOn,
-                clamp(mgeInscatterU.g * 1.5, 0.0, 1.0),
-                clamp(mgeOutscatterU.b * 0.7, 0.0, 1.0));
-}
 
 // ==== Underwater source probe (diagnostic, normally 0) ====
 // False-colours the from-below view by source renderer so one screenshot
@@ -2898,14 +2672,9 @@ vec3 mgeScatterUniformProbe()
 // above-water path). Untinted bright areas inside the red surface region
 // point to reflection/refraction injection; untinted banding across all
 // regions points to the post chain (bisect with the F2 live toggles).
-#define MGE_UW_SOURCE_PROBE 0
 bool mgeUwProbe()
 {
-#if MGE_UW_SOURCE_PROBE
-    return !mgeCamAboveWater();
-#else
     return false;
-#endif
 }
 
 // Underwater exponential-murk fade distance (transmittance 1/e here). Shared
@@ -2999,7 +2768,6 @@ MgeScatterPrep mgeScatterPrepWithSun(vec3 dir, vec3 skyCol, vec3 sunWorld)
     MgeScatterPrep p;
     p.sunB = sunaltitude_b;
 
-#if MGE_SCATTER_ERA_2020
     // 0.11-era branch (2020 XE Common.fx): exp(-2) mie damping,
     // 1.62/(1.3-suncos), full mie in att, (1.1*atmdep+0.5) gain.
     float sunaltitude2 = clamp(exp(-2.0 * sunZ), 0.0, 1.0) * clamp(sunaltitude, 0.0, 1.0);
@@ -3017,22 +2785,6 @@ MgeScatterPrep mgeScatterPrepWithSun(vec3 dir, vec3 skyCol, vec3 sunWorld)
     p.att = atmdep * sunscatter * (sunaltitude_a + mie);
     p.colour = vec3(0.125 * mie) + newSkyCol * rayl;
     p.gain = 1.1 * atmdep + 0.5;
-#else
-    vec3 newSkyCol = mix(skyCol, mgeSkylightScatter, mgeSkylightMix);
-
-    float suncos = dot(dir, sunWorld);
-    float mie = (1.58 / (1.24 - suncos)) * sunaltitude_c;
-    float rayl = 1.0 - 0.09 * mie;
-
-    float atmdep = 1.33 * exp(-2.0 * clamp(dir.z, 0.0, 1.0));
-    vec3 scIn;
-    vec3 scOut;
-    mgeScatterTriplets(scOut, scIn);   // baseline + roll recovery (225)
-    vec3 sunscatter = mix(scIn, scOut, 0.5 * (1.0 + suncos));
-    p.att = atmdep * sunscatter * (sunaltitude_a + 0.7 * mie);
-    p.colour = vec3(0.125 * mie) + newSkyCol * rayl;
-    p.gain = 1.17 * atmdep + 0.89;
-#endif
     return p;
 }
 
@@ -3099,8 +2851,8 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
     return mgeScatterAt(mgeScatterPrep(dir, skyCol), fogdist);
 }
 
-// MGE_MIRROR_SEAL_WIDEN: in mirrored passes, start the horizon seal at
-// pairs with fog.glsl's MGE_SKY_BLEND_MIRROR_GATE). The main view
+// In mirrored passes, start the horizon seal at
+// pairs with fog.glsl's mirrored-pass sky-blend skip). The main view
 // conceals far geometry from skyBlendingStart outward by blending to
 // the real rendered sky; a mirrored pass cannot run that blend (the
 // sky RTT is main-camera-only), so with the gate alone its far land
@@ -3111,9 +2863,6 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
 // uses at the horizon. Main-camera rendering is untouched by
 // construction (the branch rides isReflection/mgeStockMirrored).
 // 0 restores the 0.88 seal in mirrors byte-exact for A/B.
-#ifndef MGE_MIRROR_SEAL_WIDEN
-#define MGE_MIRROR_SEAL_WIDEN 1
-#endif
 
 // converge the fog base toward the directional dome law at the
 // skyBehind term's own weight, and give the widened seal the same
@@ -3128,19 +2877,6 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
 // removes the skyBehind pattern's nice*(1-nice) scatter surplus at
 // mid-corridor (its I1 finding). Main view untouched by construction.
 // 0 = off byte-exact (the post-392, pre-conv mirror composition).
-#ifndef MGE_MIRROR_DOME_CONV
-#define MGE_MIRROR_DOME_CONV 1
-#endif
-
-// Scalar above-water fog transmittance at a distance: the XE
-// fogColourWater alpha (pure exp - water skips the near-linear fit and
-// the height layer), from the same derived envelope the full composer
-// uses, so there is exactly one law. Consumer: water.frag's displaced
-float mgeAWWaterTransmittance(float dist)
-{
-    MgeFogDerived dv = mgeDerivedFog();
-    return clamp(exp(-(dist - dv.expStart) / dv.expDiv), 0.0, 1.0);
-}
 
 // fogColour(): rgb = inscattered light, a = transmittance.
 // Apply as: scene' = a * scene + rgb   (XE Common.fx fogApply)
@@ -3148,28 +2884,6 @@ float mgeAWWaterTransmittance(float dist)
 // linear near fog inside nearViewRange; fogColourWater is pure exp.
 vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool useNearLinear, vec4 skyBehind)
 {
-#if MGE_PARITY_PROBE
-    return vec4(mgeParityProbe(), 0.0);
-#endif
-#if MGE_SCATTER_UNIFORM_PROBE
-    return vec4(mgeScatterUniformProbe(), 0.0);
-#endif
-#if MGE_MIRROR_PROBE
-    {
-        // probe painted every pass, so the water fragment's own main-pass
-        // paint replaced the sampled reflection and no mirrored data
-        // reached the screen. Now the main pass fogs normally and the
-        // water's reflection component displays the reflection pass's
-        // encoding: R = 0.5 + camZ/200 (0.5 = z 0), G = 1 (mirrored
-        // marker), B = 0.25. Bright green-tinted reflections = mirrored
-        // pass reached; R decodes its camera z. Compare the reflected
-        // colour above water vs submerged.
-        float camZmp = osg_ViewMatrixInverse[3].z;
-        mat3 vmP = mat3(osg_ViewMatrixInverse);
-        if (isReflection || dot(vmP[0], cross(vmP[1], vmP[2])) < 0.0)
-            return vec4(clamp(0.5 + camZmp / 200.0, 0.0, 1.0), 1.0, 0.25, 0.0);
-    }
-#endif
     // Fog-off convention: utility RTT cameras (local map, character preview)
     // "disable" fog by setting gl_Fog.start/end = 1e7 ("shaders don't
     // respect glDisable(GL_FOG)", localmap.cpp). The absolute world-unit
@@ -3257,7 +2971,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     // mwse_fog_volumetric.omwfx, currently passthrough).
     float wDense = dv.wDense;
     float distEff = dist;
-#if MGE_HEIGHT_FOG
     if (wDense > 0.001)
     {
         // Layer model: the fog-layer density falls off with altitude as
@@ -3275,11 +2988,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         // (max shed).
         const float mgeFogScaleHeight = 4608.0;
         float wLayer = dv.wLayer;
-#if MGE_HEIGHT_FOG_PLAYER_BASELINE
         float dz = (osg_ViewMatrixInverse[3].z + dirWorld.z * dist) - playerPos.z;
-#else
-        float dz = dirWorld.z * dist;
-#endif
         float F = 1.0;
         if (abs(dz) > 1.0)
             F = (mgeFogScaleHeight / dz) * (1.0 - exp(-clamp(dz / mgeFogScaleHeight, -30.0, 30.0)));
@@ -3290,7 +2999,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         F = clamp(F, mix(0.25, 0.08, steep), 2.5);
         distEff = dist * mix(1.0, F, wLayer);
     }
-#endif
     // ===== end height-aware scene fog (floor applied after the curve below) =====
 
     float x = (distEff - fogExpStart) / fogExpDivisor;
@@ -3341,9 +3049,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     // (whose nice-endpoint half is a blue no steady frame shows).
     // Steady/off-corridor/conf-0: identical to gl_Fog.color.
     vec3 fogBase = mgeLegacyFog().color.xyz;
-#if MGE_CORRIDOR_REVEAL
     fogBase = mgeRevealFogBase();
-#endif
     // Stock zenith fallback: skyCol (the direction-locked sky-RTT sample
     // on stock, see fog.glsl) instead of the old gl_Fog.color. With the
     // fog colour as zenith the whole convBase was fog-coloured, so far
@@ -3366,7 +3072,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     MgeScatterPrep scatPrep = MgeScatterPrep(vec3(1.0), vec3(0.0), 0.0, 0.0);
     if (mgeGetNiceWeather() > 0.001)
         scatPrep = mgeScatterPrep(dirWorld, skyCol);
-#if MGE_MIRROR_DOME_CONV
     // top): the skyBehind convergence above, with the dome law
     // standing in for the RTT a mirrored pass cannot have. The dome
     // is computed from the pre-convergence convBase (the sky pass's
@@ -3388,7 +3093,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         if (mcw > 0.001)
             convBase = mix(convBase, wxMirDome, mcw);
     }
-#endif
     vec3 rgb = (1.0 - fog) * convBase;
 
     // wxT is the retired 101/102 scatter-suppression weight: always 0
@@ -3398,7 +3102,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     float wxT = 0.0;   // scatter-suppression weight (retired, always 0)
     float wxTc = 0.0;  // clamp weight (steeper fade, see the clamp)
     float wxHs = 0.0;  // hue-convergence weight
-#if MGE_ENDPOINT_DECOMPOSITION
     // feeds it (i,j,conf) on Full mid-transition, and outside a
     // corridor the engine-uniform early-out leaves conf 0, steady
     // states bit-exact by the same mechanism as stock.
@@ -3409,17 +3112,10 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         float wxh;
         float wxc = mgeDecomposeIdx(wxi, wxj, wxa, wxh);
         float wxt = (wxi == wxj) ? 0.0 : 4.0 * wxa * (1.0 - wxa);
-#if MGE_WXT_NICE_GATE
         // nice<->nice pairs: the storm-glow justification cannot apply
         // and the suppression itself injected the palette blue
         wxt *= mgeWxtNiceGate();
-#endif
-#if MGE_FULL_LUM_CLAMP
         wxTc = wxc * min(1.0, 2.0 * wxt);
-#else
-        if (mgeWeatherUniforms < 0.5)
-            wxTc = wxc * min(1.0, 2.0 * wxt);
-#endif
         // at the family 2x curve the fix sat at 0.42 weight at f=0.055,
         // where the early-corridor cool fog bank is fully visible
         // (measured on matched frames: the artifact halved exactly
@@ -3429,7 +3125,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         // accepted against the 3-8x larger sustained artifact.
         wxHs = wxc * min(1.0, 4.0 * wxt);
     }
-#endif
 
     float nice = mgeGetNiceWeather() * (1.0 - wxT);
     // Mirrored stock passes need no scatter gate here: mgeScatter's
@@ -3447,7 +3142,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     // sky shows behind the far plane by construction.
     float sealA = 0.88;
     float sealB = 0.995;
-#if MGE_MIRROR_SEAL_WIDEN
     // mgeFogColourWorld): in mirrored passes the seal takes over the
     // engine sky-blend's window, so far land melts into the dome where
     // the direct view melts into the rendered sky. 0.80 mirrors the
@@ -3459,14 +3153,12 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         sealA = 0.80;
         sealB = 0.96;
     }
-#endif
     float seal = smoothstep(sealA, sealB, dist / far);
     if (seal > 0.001)
     {
         vec3 domeBad = convBase;
         vec3 domeCol = mix(domeBad,
             (nice > 0.001) ? mgeScatterAt(scatPrep, 1.0) : domeBad, nice);
-#if MGE_MIRROR_DOME_CONV
         // Mirrored passes seal to the same dome the convergence above
         // used (computed from the pre-convergence convBase):
         // recomputing from the converged convBase leaves a
@@ -3476,7 +3168,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         // epilogue, a mirror has no epilogue to hide it behind.
         if (wxMirOn > 0.5)
             domeCol = wxMirDome;
-#endif
         rgb = mix(rgb, domeCol, seal);
         fog *= 1.0 - seal;
     }
@@ -3490,7 +3181,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     // between analytic (cloudless) convergence and the cloud-textured sky
     // behind, which output-side convergence erases.
 
-#if MGE_ENDPOINT_DECOMPOSITION
     // transition brightness clamp (the invariant: distant terrain must
     // With the scatter mix suppressed above, this demotes from stopgap
     // to backstop, with two 102-round upgrades from the sim envelope:
@@ -3505,7 +3195,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
     //   excess through at the half-gate states (a ~ 0.15 / 0.85).
     // Chroma preserved (uniform scale). Bit-exact at every steady state
     // (weight 0 at i == j; on Full additionally conf 0 outside a
-    // clamp also runs on Full mid-corridor (MGE_FULL_LUM_CLAMP): the
+    // clamp also runs on Full mid-corridor: the
     // unclamped Full glow measured up to +0.070 lum above the sky on
     // Cloudy->Ashstorm.
     if (wxTc > 0.001)
@@ -3518,7 +3208,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
         float wxL = dot(rgb, wxLumW);
         if (wxL > wxCeil && wxL > 1e-5)
             rgb *= mix(1.0, wxCeil / wxL, wxTc);
-#if MGE_WXT_SKY_HUE
         // corridor hue convergence (the clamp's chroma sibling, switch
         // comment at the top): the fog term's hue converges to the
         // measured sky behind at the same weight, luminance-preserving.
@@ -3549,9 +3238,7 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
             if (wxSbL > 1e-5 && wxRl > 1e-5 && wxHw > 0.001)
                 rgb = mix(rgb, skyBehind.rgb * (wxRl / wxSbL), wxHw);
         }
-#endif
     }
-#endif
     return vec4(rgb, fog);
 }
 
@@ -3582,28 +3269,12 @@ vec4 mgeFogColour(vec3 viewPos, float far, vec3 skyCol)
 // horizon blend from fog colour up to the weather zenith colour.
 vec3 mgeFogColourSky(vec3 dirWorld, vec3 zenithCol, vec3 skyCol)
 {
-#if MGE_PARITY_PROBE
-    return mgeParityProbe(); // v6: the sky shows its program's sun too
-#endif
-#if MGE_SCATTER_UNIFORM_PROBE
-    return mgeScatterUniformProbe(); // the dome shows its program's uniforms
-#endif
     float h = mgeSkyFogH(dirWorld.z);
     // the wall: the corridor exposes the storm endpoint's palette, not
     // the blend. Steady/off-corridor/conf-0: identical to gl_Fog.color.
     vec3 fogBaseSky = mgeLegacyFog().color.xyz;
-#if MGE_CORRIDOR_REVEAL
     fogBaseSky = mgeRevealFogBase();
-#endif
     vec3 base = mix(fogBaseSky, zenithCol, h);
-#if !MGE_STOCK_MIRRORED_SKY_SCATTER
-    // Mirrored stock passes: the palette base is stable and bright; the
-    // historical black-reflected-sky family motivated this early-out,
-    // which predates the mirror sun z-unflip in mgeScatter - see the
-    // MGE_STOCK_MIRRORED_SKY_SCATTER toggle above.
-    if (mgeStockMirrored())
-        return base;
-#endif
     float nice = mgeGetNiceWeather();
     // The dome half of the 101/102 scatter suppression lived here;
     // ahead of the banks at corridor entry, the early pale-bright

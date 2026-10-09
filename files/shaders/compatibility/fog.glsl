@@ -36,24 +36,10 @@ const vec3 WATER_COLOR = vec3(0.090195, 0.115685, 0.12745);
 // Sky-blend helpers carried over from the 0.51 port. The "stock tier"
 // branches (mgeWeatherUniforms < 0.5) only matter for the shader-only
 // Redux package; this engine always feeds the MGE uniforms.
-#define MGE_STOCK_SKY_BLEND 1
-#define MGE_STOCK_RTT_REBASE 0
-// MGE_SKY_BLEND_MIRROR_GATE: skip the sky-blend epilogue in mirrored
-//   passes on every tier (the reported "reflection without a
-//   source"). The Full-tier tail of
-//   mgeSkyBlendGate ran in the water reflection pass, where
-//   sampleSkyColor reads the main camera's sky RTT at the mirror's own
-//   fragcoords, a wrong-position paste. Beyond skyBlendingStart the
-//   fadeValue tends to 0 and the fragment becomes that sample, so far
-//   mirrored distant land (fully concealed in the direct view by the
-//   correctly-positioned blend) rendered as pale ghost masses in the
-//   reflection. The stock branch (mgeStockMirrored) and mgeSkyBehind
-//   always carried this skip; the Full tail lacked it. Pairs with
-//   MGE_MIRROR_SEAL_WIDEN in mge_fog.glsl (the concealment-parity
-//   half). 0 restores the paste byte-exact for A/B.
-#ifndef MGE_SKY_BLEND_MIRROR_GATE
-#define MGE_SKY_BLEND_MIRROR_GATE 1
-#endif
+// Mirrored passes skip the sky-blend epilogue on every tier: there the main camera's sky RTT would be read at the
+// mirror's own fragcoords, a wrong-position paste that showed far land in reflections as pale ghost masses ("a
+// reflection without a source"). The horizon seal in mge_fog.glsl widens in mirrored passes to cover the same
+// window instead.
 
 vec3 mgeStockRttDelta(vec3 dirWorld)
 {
@@ -76,13 +62,8 @@ vec4 mgeSkyBehind(vec3 dirWorld)
     // above); mirrored/refraction passes keep the analytic fallback (the
     // main-camera RTT sample at their fragcoords is garbage). Gated with
     // the sky-blend toggle (same A/B unit).
-#if MGE_STOCK_SKY_BLEND
     if (mgeWeatherUniforms < 0.5 && (mgeStockMirrored() || !mgeCamAboveWater() || isRefraction))
         return vec4(0.0);
-#else
-    if (mgeWeatherUniforms < 0.5)
-        return vec4(0.0);
-#endif
     // Mirror detection needs both channels: isReflection binds per-program
     // and provably misses some of the reflection RTT's programs on stock,
     // where this main-camera RTT sample at the reflection's fragcoords is
@@ -106,56 +87,6 @@ vec4 mgeSkyBehind(vec3 dirWorld)
         // fog to black.
         if (dot(acc, acc) < 1e-6)
             return vec4(0.0);
-#ifndef MGE_CORRIDOR_SKYROW
-// the water-sky line during corridors and did not move the bank,
-// rolled back same-day; the row-direction/row-choice questions are the
-// next session's opening investigation. The code stays for it.
-#define MGE_CORRIDOR_SKYROW 0
-#endif
-#if MGE_ENDPOINT_DECOMPOSITION && MGE_CORRIDOR_SKYROW
-        // fogged far land converges to this sample, the RTT rows behind
-        // it, which during storm arrivals carry the horizon glow:
-        // measured brighter/paler than the visible sky above the ridge
-        // line (measured profile: hidden rows 0.636-0.643 lum against
-        // 0.626-0.631 visible; the reported pale-bright early bank).
-        // The eye compares silhouettes
-        // against the sky above them, so mid-corridor the target blends
-        // toward a sample 0.06 uv higher (the C8/147 one-step lesson).
-        // steady keeps the exact behind-row (weight 0 at i==j), that is
-        // the seamless-horizon invariant's own mechanism. Contraction
-        // toward a measured visible value: cannot recreate the
-        // white-wall class (which was over-bright vs everything).
-        // Weight: the hue family's 4x fade, conf-gated; nice<->nice
-        // gated with the rest of the family. Both tiers (the corridor
-        // unlock feeds conf on Full; tier consistency).
-        {
-            int rwI;
-            int rwJ;
-            float rwA;
-            float rwH;
-            float rwC = mgeDecomposeIdx(rwI, rwJ, rwA, rwH);
-            float rwT = (rwI == rwJ) ? 0.0 : 4.0 * rwA * (1.0 - rwA);
-#if MGE_WXT_NICE_GATE
-            rwT *= mgeWxtNiceGate();
-#endif
-            float rwW = rwC * min(1.0, 4.0 * rwT);
-            if (rwW > 0.001)
-            {
-                vec3 accUp = vec3(0.0);
-                for (int i = -3; i <= 3; ++i)
-                    accUp += sampleSkyColor(vec2(
-                        clamp(uv.x + float(i) * 0.07, 0.02, 0.98),
-                        min(uv.y + 0.06, 0.98)));
-                accUp /= 7.0;
-                if (dot(accUp, accUp) > 1e-6)
-                    acc = mix(acc, accUp, rwW);
-            }
-        }
-#endif
-#if MGE_STOCK_RTT_REBASE
-        if (mgeWeatherUniforms < 0.5)
-            acc += mgeStockRttDelta(dirWorld); // vertical-sun rebase (refuted; off)
-#endif
         return vec4(acc, 1.0);
     }
 #endif
@@ -165,7 +96,7 @@ vec4 mgeSkyBehind(vec3 dirWorld)
 // Sky-blend epilogue gate, shared by the three applyFog* variants below.
 // Returns the fadeValue to use and rebases skySample in place on stock.
 // Full tier semantics unchanged (bit-identical): skip underwater/refraction.
-// Stock tier (behind MGE_STOCK_SKY_BLEND): the blend is re-enabled with
+// Stock tier: the blend is re-enabled with
 // the vertical-sun rebase; skipped in mirrored passes, underwater, and
 // where the RTT pixel is black (below the atmosphere cylinder's bottom
 // edge, interiors) so far content is never pulled toward a black sample.
@@ -173,20 +104,11 @@ float mgeSkyBlendGate(inout vec3 skySample, vec3 dirWorld, float fadeValue)
 {
     if (mgeWeatherUniforms < 0.5)
     {
-#if MGE_STOCK_SKY_BLEND
         if (mgeStockMirrored() || !mgeCamAboveWater() || isRefraction
             || dot(skySample, skySample) < 1e-6)
             return 1.0;
-#if MGE_STOCK_RTT_REBASE
-        skySample += mgeStockRttDelta(dirWorld);
-#endif
-        // (MGE_STOCK_SKY_BLEND_FADE).
         return fadeValue;
-#else
-        return 1.0;
-#endif
     }
-#if MGE_SKY_BLEND_MIRROR_GATE
     // main-camera sky RTT is positionally meaningless in a mirrored
     // pass, never blend toward it there. On Full this rides
     // isReflection (the reflection camera's stateset uniform,
@@ -194,7 +116,6 @@ float mgeSkyBlendGate(inout vec3 skySample, vec3 dirWorld, float fadeValue)
     // per-program binding gaps (it returns false on Full by design).
     if (isReflection || mgeStockMirrored())
         return 1.0;
-#endif
     if (!mgeCamAboveWater() || isRefraction)
         return 1.0;
     return fadeValue;
