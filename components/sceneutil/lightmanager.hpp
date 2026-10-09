@@ -230,6 +230,11 @@ namespace SceneUtil
     public:
         virtual bool isBlocked(const osg::Vec3f& from, const osg::Vec3f& to) = 0;
 
+        /// Like isBlocked, for a ray to a point just off an object's surface (see LightManager::SurfaceSample): any
+        /// large solid counts, chunky ones and the lit object itself included, and only small shapes around the light
+        /// (its own lamp, brazier or candlestick) are left out.
+        virtual bool isBlockedToSurface(const osg::Vec3f& from, const osg::Vec3f& to) { return isBlocked(from, to); }
+
         /// Counts the moves of things that hide light other than the static world (doors turning).
         virtual unsigned int getChangeCount() const { return 0; }
 
@@ -282,6 +287,15 @@ namespace SceneUtil
             double mFadeStart = 0.0;
         };
         using OcclusionCache = std::vector<OcclusionCacheEntry>;
+
+        /// A point on an object's surface and the way the surface faces there, for light occlusion of large still
+        /// objects (see LightListCallback::getOcclusionSamples).
+        struct SurfaceSample
+        {
+            osg::Vec3f mPosition;
+            osg::Vec3f mNormal;
+        };
+        using SurfaceSamples = std::vector<SurfaceSample>;
         using SupportedMethods = std::array<bool, 3>;
 
         META_Node(SceneUtil, LightManager)
@@ -329,15 +343,18 @@ namespace SceneUtil
         /// a lamp only through a doorway gets part of its light.
         void getLightVisibility(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
             const osg::BoundingSphere& viewBound, const LightList& lightList, std::vector<float>& visibility,
-            OcclusionCache& cache, const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr);
+            OcclusionCache& cache, const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr,
+            const SurfaceSamples* localSamples = nullptr);
 
         /// Removes from @a lightList the lights the world (nearly) hides from @a viewBound, for the lighting methods
         /// with per-object light lists, which can't light an object with part of a light.
         void removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
             const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
-            const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr);
+            const osg::BoundingBox* localBox = nullptr, const osg::Matrix* modelView = nullptr,
+            const SurfaceSamples* localSamples = nullptr);
 
         bool getLightOcclusionEnabled() const { return mOcclusionEnabled; }
+        float getOcclusionMaxObjectRadius() const { return mOcclusionMaxObjectRadius; }
 
         /// Clustered lighting has no per-object light lists, so hidden lights are dimmed by the shaders instead: a
         /// state set telling them how much of each light of the light buffer to leave out, 4 bits a light (bits
@@ -462,6 +479,8 @@ namespace SceneUtil
         // how much of the object the light reaches, 0 to 1
         float testLightVisibility(const osg::Vec3f& lightPos, const osg::Vec3f& objectPos, float objectRadius);
         float testLightVisibilityFromBox(const osg::Vec3f& lightPos, const osg::BoundingBox& worldBox);
+        float testLightVisibilityFromSurface(const osg::Vec3f& lightPos, const SurfaceSamples& worldSamples);
+        SurfaceSamples mOcclusionWorldSamples;
         // whether a door moved since @a entry was tested across the line from the light to the object
         bool changedSince(const OcclusionCacheEntry& entry, const osg::Vec3f& lightPos, const osg::Vec3f& objectPos,
             float objectRadius);
@@ -575,6 +594,14 @@ namespace SceneUtil
         /// occlusion of large objects; nullptr for small ones. Kept until the node's bound changes.
         const osg::BoundingBox* getOcclusionBox(osg::Node* node);
 
+        /// Points spread over the surfaces of a large still object (in the same space as getOcclusionBox), for light
+        /// occlusion to test against instead of its box; nullptr for small or animated objects. Call after
+        /// getOcclusionBox, which makes them.
+        const LightManager::SurfaceSamples* getOcclusionSamples() const
+        {
+            return mHasOcclusionBox && !mOcclusionSamples.empty() ? &mOcclusionSamples : nullptr;
+        }
+
         /// Clustered lighting with light occlusion: pushes the mask of lights the world hides from @a node, if any.
         /// @return 0 if nothing was pushed, 1 for an empty mask (undoing a parent's), 2 for a mask with lights in it.
         int pushBlockedLightsState(osg::Node* node, osgUtil::CullVisitor* cv);
@@ -592,6 +619,7 @@ namespace SceneUtil
         osg::BoundingBox mOcclusionBox;
         osg::BoundingSphere mOcclusionBoxFor;
         bool mHasOcclusionBox = false;
+        LightManager::SurfaceSamples mOcclusionSamples;
         // clustered lighting: the mask found for the last camera and frame
         const osg::Camera* mBlockedCamera = nullptr;
         size_t mBlockedFrame = 0;

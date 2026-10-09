@@ -4,8 +4,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <limits>
 
 #include <osg/ComputeBoundsVisitor>
+#include <osg/Geometry>
+#include <osg/TriangleIndexFunctor>
 #include <osgUtil/CullVisitor>
 
 #include <components/debug/debuglog.hpp>
@@ -17,6 +20,9 @@
 
 #include "cullprofile.hpp"
 #include "memorybarrier.hpp"
+#include "morphgeometry.hpp"
+#include "riggeometry.hpp"
+#include "riggeometryosgaextension.hpp"
 
 namespace
 {
@@ -594,6 +600,47 @@ namespace SceneUtil
         return static_cast<float>(reached) / static_cast<float>(tested);
     }
 
+    float LightManager::testLightVisibilityFromSurface(const osg::Vec3f& lightPos, const SurfaceSamples& samples)
+    {
+        // Points on the object's own surfaces, each nudged off the surface into the open: the share of those facing
+        // the light that it reaches. Surfaces turned away from it (the outside of a tunnel's walls, seen from the room
+        // next door) take no light from it whatever lies between, so they don't count. Nothing between the light and
+        // a point facing it is left out, the object itself included: a tunnel's ceiling hides a lantern above from
+        // its steps. The points sit well off the surface: collision shapes are simpler than the meshes and stand up
+        // to 30 units in front of them (a ramp over a stair's treads, a wall's flat plane over its mouldings), and a
+        // point behind its own object's collision would see nothing.
+        constexpr float offset = 40.f;
+        unsigned int facing = 0;
+        unsigned int reached = 0;
+        for (const SurfaceSample& sample : samples)
+        {
+            osg::Vec3f toLight = lightPos - sample.mPosition;
+            const float distance = toLight.normalize();
+            if (distance < offset)
+                return 1.f;
+            if (toLight * sample.mNormal <= 0.05f)
+                continue;
+            ++facing;
+            ++mOcclusionRaysUsed;
+            if (!mOcclusionTest->isBlockedToSurface(lightPos, sample.mPosition + sample.mNormal * offset))
+                ++reached;
+        }
+        if (facing > 0)
+            return static_cast<float>(reached) / static_cast<float>(facing);
+        // Every surface turned away (a sign, a banner seen from behind, two-sided ones among them): judged by what the
+        // light reaches of the points themselves.
+        for (const SurfaceSample& sample : samples)
+        {
+            osg::Vec3f toLight = lightPos - sample.mPosition;
+            toLight.normalize();
+            ++facing;
+            ++mOcclusionRaysUsed;
+            if (!mOcclusionTest->isBlockedToSurface(lightPos, sample.mPosition + toLight * offset))
+                ++reached;
+        }
+        return facing > 0 ? static_cast<float>(reached) / static_cast<float>(facing) : 1.f;
+    }
+
     bool LightManager::changedSince(const OcclusionCacheEntry& entry, const osg::Vec3f& lightPos,
         const osg::Vec3f& objectPos, float objectRadius)
     {
@@ -614,7 +661,8 @@ namespace SceneUtil
 
     void LightManager::getLightVisibility(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
         const osg::BoundingSphere& viewBound, const LightList& lightList, std::vector<float>& visibility,
-        OcclusionCache& cache, const osg::BoundingBox* localBox, const osg::Matrix* modelView)
+        OcclusionCache& cache, const osg::BoundingBox* localBox, const osg::Matrix* modelView,
+        const SurfaceSamples* localSamples)
     {
         visibility.assign(lightList.size(), 1.f);
         if (!mOcclusionEnabled || lightList.empty() || viewMatrix == nullptr || !viewBound.valid()
@@ -645,13 +693,29 @@ namespace SceneUtil
             for (unsigned int i = 0; i < 8; ++i)
                 worldBox.expandBy(osg::Vec3d(localBox->corner(i)) * toWorld);
         }
+        const bool useSamples = localSamples != nullptr && !localSamples->empty() && modelView != nullptr;
+        // made when first needed: most calls find every light in the cache
+        mOcclusionWorldSamples.clear();
+        const auto makeWorldSamples = [&] {
+            if (!useSamples || !mOcclusionWorldSamples.empty())
+                return;
+            const osg::Matrixd toWorld = osg::Matrixd(*modelView) * mOcclusionInverseView;
+            for (const SurfaceSample& sample : *localSamples)
+            {
+                osg::Vec3f normal = osg::Matrixd::transform3x3(osg::Vec3d(sample.mNormal), toWorld);
+                normal.normalize();
+                mOcclusionWorldSamples.push_back({ osg::Vec3d(sample.mPosition) * toWorld, normal });
+            }
+        };
 
         for (std::size_t i = 0; i < lightList.size(); ++i)
         {
             const LightSourceViewBound* light = lightList[i];
             const osg::Vec3f lightPos = osg::Vec3d(light->mViewBound.center()) * mOcclusionInverseView;
-            // A light within the object (a lamp's own mesh, a room around it) always reaches it.
-            if ((lightPos - objectPos).length2() <= radius * radius)
+            // A light within the object (a lamp's own mesh) always reaches it. Not for objects tested at their
+            // surfaces, which see to that themselves: a stair tunnel's bound takes in the room beside it, whose lamp
+            // its walls hide.
+            if (!useSamples && (lightPos - objectPos).length2() <= radius * radius)
                 continue;
 
             OcclusionCacheEntry* entry = nullptr;
@@ -701,8 +765,10 @@ namespace SceneUtil
 
             const auto start = std::chrono::steady_clock::now();
             const unsigned int raysBefore = mOcclusionRaysUsed;
-            const float visible = worldBox.valid() ? testLightVisibilityFromBox(lightPos, worldBox)
-                                                   : testLightVisibility(lightPos, objectPos, radius);
+            makeWorldSamples();
+            const float visible = useSamples ? testLightVisibilityFromSurface(lightPos, mOcclusionWorldSamples)
+                : worldBox.valid() ? testLightVisibilityFromBox(lightPos, worldBox)
+                                   : testLightVisibility(lightPos, objectPos, radius);
             const double spent
                 = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - start).count();
             mOcclusionTimeUsed += spent;
@@ -746,10 +812,11 @@ namespace SceneUtil
 
     void LightManager::removeOccludedLights(const osg::RefMatrix* viewMatrix, size_t frameNum, double time,
         const osg::BoundingSphere& viewBound, LightList& lightList, OcclusionCache& cache,
-        const osg::BoundingBox* localBox, const osg::Matrix* modelView)
+        const osg::BoundingBox* localBox, const osg::Matrix* modelView, const SurfaceSamples* localSamples)
     {
         std::vector<float> visibility;
-        getLightVisibility(viewMatrix, frameNum, time, viewBound, lightList, visibility, cache, localBox, modelView);
+        getLightVisibility(
+            viewMatrix, frameNum, time, viewBound, lightList, visibility, cache, localBox, modelView, localSamples);
         // Per-object light lists take a light whole or not at all: kept while it reaches a fair part of the object.
         std::size_t kept = 0;
         for (std::size_t i = 0; i < lightList.size(); ++i)
@@ -1244,6 +1311,166 @@ namespace SceneUtil
             cv->popStateSet();
     }
 
+    namespace
+    {
+        struct SurfaceTriangle
+        {
+            osg::Vec3f mA, mB, mC;
+            osg::Vec3f mNormal;
+            float mArea;
+        };
+
+        struct SurfaceTriangleCollector
+        {
+            const osg::Vec3Array* mVertices = nullptr;
+            const osg::Vec3Array* mNormals = nullptr;
+            osg::Matrixd mMatrix;
+            std::vector<SurfaceTriangle>* mOut = nullptr;
+
+            void operator()(unsigned int i1, unsigned int i2, unsigned int i3)
+            {
+                if (i1 >= mVertices->size() || i2 >= mVertices->size() || i3 >= mVertices->size())
+                    return;
+                const osg::Vec3f a = osg::Vec3d((*mVertices)[i1]) * mMatrix;
+                const osg::Vec3f b = osg::Vec3d((*mVertices)[i2]) * mMatrix;
+                const osg::Vec3f c = osg::Vec3d((*mVertices)[i3]) * mMatrix;
+                osg::Vec3f normal = (b - a) ^ (c - a);
+                const float area = 0.5f * normal.normalize();
+                if (!(area > 1.f))
+                    return;
+                // the side it is drawn on, by its corners' normals where it has them
+                if (mNormals != nullptr)
+                {
+                    osg::Vec3f average;
+                    for (unsigned int i : { i1, i2, i3 })
+                        average += osg::Matrixd::transform3x3(osg::Vec3d((*mNormals)[i]), mMatrix);
+                    if (average * normal < 0.f)
+                        normal = -normal;
+                }
+                mOut->push_back({ a, b, c, normal, area });
+            }
+        };
+
+        // The triangles of a node's meshes in its own space; marks it animated if a skinned or morphing mesh is among
+        // them (an actor), whose triangles move.
+        class SurfaceSampleVisitor : public osg::NodeVisitor
+        {
+        public:
+            SurfaceSampleVisitor()
+                : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+            {
+                mMatrices.emplace_back();
+            }
+
+            void apply(osg::Transform& transform) override
+            {
+                osg::Matrix matrix = mMatrices.back();
+                transform.computeLocalToWorldMatrix(matrix, this);
+                mMatrices.push_back(matrix);
+                traverse(transform);
+                mMatrices.pop_back();
+            }
+
+            void apply(osg::Drawable& drawable) override
+            {
+                if (dynamic_cast<RigGeometry*>(&drawable) || dynamic_cast<MorphGeometry*>(&drawable)
+                    || dynamic_cast<RigGeometryHolder*>(&drawable))
+                {
+                    mAnimated = true;
+                    return;
+                }
+                osg::Geometry* geometry = drawable.asGeometry();
+                if (geometry == nullptr)
+                    return;
+                const auto* vertices = dynamic_cast<const osg::Vec3Array*>(geometry->getVertexArray());
+                if (vertices == nullptr || vertices->empty())
+                    return;
+                const auto* normals = dynamic_cast<const osg::Vec3Array*>(geometry->getNormalArray());
+                if (normals != nullptr
+                    && (geometry->getNormalBinding() != osg::Geometry::BIND_PER_VERTEX
+                        || normals->size() != vertices->size()))
+                    normals = nullptr;
+                osg::TriangleIndexFunctor<SurfaceTriangleCollector> functor;
+                functor.mVertices = vertices;
+                functor.mNormals = normals;
+                functor.mMatrix = mMatrices.back();
+                functor.mOut = &mTriangles;
+                geometry->accept(functor);
+            }
+
+            std::vector<SurfaceTriangle> mTriangles;
+            bool mAnimated = false;
+
+        private:
+            std::vector<osg::Matrix> mMatrices;
+        };
+
+        // 16 points spread over the surfaces: 128 picked across them by area, then the 16 furthest from each other.
+        LightManager::SurfaceSamples sampleSurfaces(const std::vector<SurfaceTriangle>& triangles)
+        {
+            LightManager::SurfaceSamples result;
+            if (triangles.empty())
+                return result;
+            std::vector<double> cumulative;
+            cumulative.reserve(triangles.size());
+            double total = 0.0;
+            for (const SurfaceTriangle& triangle : triangles)
+                cumulative.push_back(total += triangle.mArea);
+
+            constexpr unsigned int candidateCount = 128;
+            constexpr unsigned int sampleCount = 16;
+            static constexpr float weights[4][3]
+                = { { 1 / 3.f, 1 / 3.f, 1 / 3.f }, { 0.6f, 0.2f, 0.2f }, { 0.2f, 0.6f, 0.2f }, { 0.2f, 0.2f, 0.6f } };
+            LightManager::SurfaceSamples candidates;
+            candidates.reserve(candidateCount);
+            osg::Vec3f centre;
+            for (unsigned int i = 0; i < candidateCount; ++i)
+            {
+                const double at = (i + 0.5) / candidateCount * total;
+                const std::size_t index = std::min<std::size_t>(
+                    std::upper_bound(cumulative.begin(), cumulative.end(), at) - cumulative.begin(),
+                    triangles.size() - 1);
+                const SurfaceTriangle& triangle = triangles[index];
+                const float* w = weights[i % 4];
+                const osg::Vec3f position = triangle.mA * w[0] + triangle.mB * w[1] + triangle.mC * w[2];
+                candidates.push_back({ position, triangle.mNormal });
+                centre += position;
+            }
+            centre /= static_cast<float>(candidates.size());
+
+            std::vector<float> nearest(candidates.size(), std::numeric_limits<float>::max());
+            std::size_t next = 0;
+            float furthest = -1.f;
+            for (std::size_t i = 0; i < candidates.size(); ++i)
+            {
+                const float d = (candidates[i].mPosition - centre).length2();
+                if (d > furthest)
+                {
+                    furthest = d;
+                    next = i;
+                }
+            }
+            while (result.size() < sampleCount && result.size() < candidates.size())
+            {
+                result.push_back(candidates[next]);
+                const osg::Vec3f picked = candidates[next].mPosition;
+                furthest = -1.f;
+                for (std::size_t i = 0; i < candidates.size(); ++i)
+                {
+                    nearest[i] = std::min(nearest[i], (candidates[i].mPosition - picked).length2());
+                    if (nearest[i] > furthest)
+                    {
+                        furthest = nearest[i];
+                        next = i;
+                    }
+                }
+                if (furthest <= 0.f)
+                    break;
+            }
+            return result;
+        }
+    }
+
     const osg::BoundingBox* LightListCallback::getOcclusionBox(osg::Node* node)
     {
         // The bound in the same space as the box (see pushLightState).
@@ -1281,6 +1508,22 @@ namespace SceneUtil
             mOcclusionBox = visitor.getBoundingBox();
             mOcclusionBoxFor = bound;
             mHasOcclusionBox = true;
+
+            // Not for objects too big for light occlusion (merged chunks of statics), whose triangles are many.
+            mOcclusionSamples.clear();
+            if (bound.radius() <= mLightManager->getOcclusionMaxObjectRadius())
+            {
+                SurfaceSampleVisitor samples;
+                if (transform)
+                {
+                    for (unsigned int i = 0; i < transform->getNumChildren(); ++i)
+                        const_cast<osg::Node*>(transform->getChild(i))->accept(samples);
+                }
+                else
+                    node->accept(samples);
+                if (!samples.mAnimated)
+                    mOcclusionSamples = sampleSurfaces(samples.mTriangles);
+            }
         }
         return mOcclusionBox.valid() ? &mOcclusionBox : nullptr;
     }
@@ -1320,9 +1563,10 @@ namespace SceneUtil
             mLightManager->getLightsIntersecting(cv, viewMatrix, frameNum, nodeBound, mIgnoredLightSources, mLightList);
             if (!mLightList.empty())
             {
+                const osg::BoundingBox* box = getOcclusionBox(node);
                 mLightManager->getLightVisibility(viewMatrix, frameNum, cv->getFrameStamp()->getReferenceTime(),
-                    nodeBound, mLightList, mLightVisibility, mOcclusionCache, getOcclusionBox(node),
-                    cv->getModelViewMatrix());
+                    nodeBound, mLightList, mLightVisibility, mOcclusionCache, box, cv->getModelViewMatrix(),
+                    getOcclusionSamples());
                 LightManager::BlockedLightsMask mask{};
                 for (std::size_t i = 0; i < mLightList.size(); ++i)
                 {
@@ -1404,9 +1648,12 @@ namespace SceneUtil
             mLightManager->getLightsIntersecting(
                 cv, viewMatrix, mLastFrameNumber, nodeBound, mIgnoredLightSources, mLightList);
             if (mLightManager->getLightOcclusionEnabled())
+            {
+                const osg::BoundingBox* box = getOcclusionBox(node);
                 mLightManager->removeOccludedLights(viewMatrix, mLastFrameNumber,
-                    cv->getFrameStamp()->getReferenceTime(), nodeBound, mLightList,
-                    mOcclusionCache, getOcclusionBox(node), cv->getModelViewMatrix());
+                    cv->getFrameStamp()->getReferenceTime(), nodeBound, mLightList, mOcclusionCache, box,
+                    cv->getModelViewMatrix(), getOcclusionSamples());
+            }
 
             const size_t maxLights = mLightManager->getMaxLights();
 

@@ -294,12 +294,17 @@ Shaders Settings
 
    Point lights don't cast shadows, so a lamp lights everything within its reach, including the next room through
    the wall. With this on, a light stops lighting an object when solid world geometry (a wall, floor, closed door or
-   other large shape) lies between the light and the object's centre and six points around it. Large objects (walls,
-   floors, room pieces) are tested at the part of them nearest the light instead, so the walls of a lamp's own room keep
-   its light.
-   Only slab-shaped pieces count (walls, floors between storeys, doors): small shapes such as furniture, crates
-   and pillars don't, nor do chunky pieces such as curved stairs, rounded corners and cave rock, nor shapes around
-   the light or the object themselves. Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
+   other large shape) lies between the light and the object's centre and six points around it. Still objects that
+   aren't tiny (walls, floors, stairs, columns, room pieces) are tested instead at 16 points spread over their own
+   surfaces, each a little way off the surface: they get the share of the points facing the light that it reaches.
+   Surfaces turned away from a light take nothing from it, and anything large between it and a point counts, the
+   object itself and chunky pieces included, so a stair tunnel's ceiling hides a lamp above from its steps and the
+   walls of a lamp's own room keep its light. Animated objects (actors) are tested by their box, at the part nearest
+   the light.
+   For those, only slab-shaped pieces count (walls, floors between storeys, doors): small shapes such as furniture,
+   crates and pillars don't, nor do chunky pieces such as curved stairs, rounded corners and cave rock, nor shapes
+   around the light or the object themselves. Small shapes never count, nor brazier-sized ones around the light.
+   Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
    Each light and object pair is tested once and retested when either moves, when a door turns across the way
    between them, or every few seconds. Rays end just short of the object's surface, so the next floor or wall tile
    along doesn't hide a lamp from its neighbour.

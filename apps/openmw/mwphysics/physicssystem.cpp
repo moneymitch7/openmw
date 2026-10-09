@@ -204,9 +204,10 @@ namespace MWPhysics
         class LightBlockerCallback : public btCollisionWorld::RayResultCallback
         {
         public:
-            LightBlockerCallback(const btVector3& from, const btVector3& to)
+            LightBlockerCallback(const btVector3& from, const btVector3& to, bool toSurface = false)
                 : mFrom(from)
                 , mTo(to)
+                , mToSurface(toSurface)
             {
                 m_collisionFilterGroup = 0xff;
                 m_collisionFilterMask = CollisionType_World | CollisionType_Door | CollisionType_HeightMap;
@@ -216,6 +217,20 @@ namespace MWPhysics
             {
                 if (!btCollisionWorld::RayResultCallback::needsCollision(proxy))
                     return false;
+                if (mToSurface)
+                {
+                    // To a point just off a surface: every large solid counts, chunky ones and the lit object itself
+                    // included, as the ray ends in the open. Left out: small shapes, and shapes up to brazier size
+                    // around the light (its own lamp, candlestick or brazier).
+                    if (proxy->m_collisionFilterGroup & (CollisionType_Door | CollisionType_HeightMap))
+                        return true;
+                    const btVector3 size = proxy->m_aabbMax - proxy->m_aabbMin;
+                    btScalar sides[3] = { size.x(), size.y(), size.z() };
+                    std::sort(std::begin(sides), std::end(sides));
+                    if (sides[1] < 128)
+                        return false;
+                    return !(sides[2] < 256 && containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mFrom));
+                }
                 // Shapes around either end are left out: the lamp's own mesh, and the lit object or a room shell
                 // around it. Not a closed door near the lit end: a doorway is part of the room piece beyond it, and a
                 // ray to that piece ends close to the door, which then let a corridor's lamp light the room through it.
@@ -248,6 +263,7 @@ namespace MWPhysics
         private:
             btVector3 mFrom;
             btVector3 mTo;
+            bool mToSurface;
         };
     }
 
@@ -258,6 +274,17 @@ namespace MWPhysics
         const btVector3 btFrom = Misc::Convert::toBullet(from);
         const btVector3 btTo = Misc::Convert::toBullet(to);
         LightBlockerCallback callback(btFrom, btTo);
+        mTaskScheduler->rayTest(btFrom, btTo, callback);
+        return callback.hasHit();
+    }
+
+    bool PhysicsSystem::isLightBlockedToSurface(const osg::Vec3f& from, const osg::Vec3f& to) const
+    {
+        if (from == to)
+            return false;
+        const btVector3 btFrom = Misc::Convert::toBullet(from);
+        const btVector3 btTo = Misc::Convert::toBullet(to);
+        LightBlockerCallback callback(btFrom, btTo, true);
         mTaskScheduler->rayTest(btFrom, btTo, callback);
         return callback.hasHit();
     }

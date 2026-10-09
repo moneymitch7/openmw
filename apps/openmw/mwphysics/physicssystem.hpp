@@ -230,6 +230,11 @@ namespace MWPhysics
         /// both) are ignored, as are small ones (crates, pillars, furniture) that would hide light too eagerly.
         bool isLightBlocked(const osg::Vec3f& from, const osg::Vec3f& to) const;
 
+        /// Like isLightBlocked, for a ray to a point just off an object's surface: any large solid counts (chunky
+        /// pieces and the lit object itself too); only small shapes, and those up to brazier size around @a from, are
+        /// left out.
+        bool isLightBlockedToSurface(const osg::Vec3f& from, const osg::Vec3f& to) const;
+
         /// Light occlusion: counts the moves of doors (which hide light and turn), so the lights they may have
         /// uncovered or hidden can be tested again.
         unsigned int getLightBlockerChangeCount() const { return mLightBlockerChangeCount; }

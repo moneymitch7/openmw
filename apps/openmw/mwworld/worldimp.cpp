@@ -126,6 +126,11 @@ namespace MWWorld
                 return mPhysics.isLightBlocked(from, to);
             }
 
+            bool isBlockedToSurface(const osg::Vec3f& from, const osg::Vec3f& to) override
+            {
+                return mPhysics.isLightBlockedToSurface(from, to);
+            }
+
             unsigned int getChangeCount() const override { return mPhysics.getLightBlockerChangeCount(); }
 
             bool getChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const override
