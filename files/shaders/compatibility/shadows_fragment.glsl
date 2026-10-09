@@ -32,6 +32,10 @@
 
 // Steepest receiver plane slope (shadow depth per shadow map UV) the taps follow. Steeper surfaces are nearly
 // parallel to the light and get no direct light anyway; the clamp only keeps the maths finite.
+// How much wider than usual the edges are, 0 to 1 (twice as wide), set by the engine from the weather: crisp under a
+// clear sky, softer through cloud and haze, as the light scatters. Held to 10 texels.
+uniform float sunShadowSoftness;
+
 #ifndef SOFT_SHADOW_MAX_SLOPE
 #define SOFT_SHADOW_MAX_SLOPE 16.0
 #endif
@@ -72,7 +76,8 @@ vec2 receiverPlaneDepthSlope(vec3 uvzDx, vec3 uvzDy)
 
 float getFilteredShadowing(sampler2DShadow tex, vec3 uvz, vec2 depthSlope)
 {
-    float radius = float(SOFT_SHADOW_RADIUS_TEXELS) / @shadowMapResolution;
+    float radius = min(float(SOFT_SHADOW_RADIUS_TEXELS) * (1.0 + clamp(sunShadowSoftness, 0.0, 1.0)), 10.0)
+        / @shadowMapResolution;
 
     // ---- Sample shadow map with rotated spiral disc ----
     float rotation = getIGNRotation();

@@ -891,6 +891,7 @@ namespace MWWorld
             mRendering.setMgeWeather(0.f, mResult.mSkyColor, 1.f, 0.f, false);
             // indoor shadows keep their strength whatever the hour outside
             mRendering.setSunShadowFade(1.f);
+            mRendering.setSunShadowSoftness(0.f);
             return;
         }
 
@@ -995,6 +996,25 @@ namespace MWWorld
                 shadowFade = std::max(shadowFade, std::clamp(mLightningFlash * 2.f, 0.f, 2.f));
             }
             mRendering.setSunShadowFade(shadowFade);
+
+            // OpenMGE XE weather shadows: soft shadows' edges widen with the haze, as the sun's light scatters
+            // through it: crisp when clear, half as soft again when cloudy, twice as wide in fog and when grey
+            // (where Weather Shadow Fade leaves any), blending through transitions. Times [Shadows] weather shadow
+            // softening.
+            float shadowSoftness = 0.f;
+            if (Settings::shadows().mWeatherShadows)
+            {
+                const auto hazeOf = [](const Weather* w) {
+                    if (w == nullptr || w->mScriptId == 0)
+                        return 0.f;
+                    return w->mScriptId == 1 ? 0.5f : 1.f;
+                };
+                shadowSoftness = hazeOf(mWeatherStore->search(mCurrentWeather));
+                if (const Weather* next = mWeatherStore->search(mNextWeather))
+                    shadowSoftness = lerp(shadowSoftness, hazeOf(next), 1.f - mTransitionFactor);
+                shadowSoftness *= Settings::shadows().mWeatherShadowSoftening;
+            }
+            mRendering.setSunShadowSoftness(shadowSoftness);
         }
 
         float underwaterFog = mUnderwaterFog.getValue(time.getHour(), mTimeSettings, "Fog");

@@ -689,6 +689,11 @@ namespace MWRender
             mShadowManager->setSunShadowsSuppressed(fade <= 0.f);
     }
 
+    void RenderingManager::setSunShadowSoftness(float softness)
+    {
+        mSharedUniformStateUpdater->setSunShadowSoftness(softness);
+    }
+
     void RenderingManager::setNightEyeFactor(float factor)
     {
         if (factor != mNightEyeFactor)

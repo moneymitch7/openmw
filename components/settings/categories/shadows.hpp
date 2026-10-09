@@ -49,6 +49,8 @@ namespace Settings
         SettingValue<bool> mWeatherShadows{ mIndex, "Shadows", "weather shadows" };
         SettingValue<float> mWeatherShadowFade{ mIndex, "Shadows", "weather shadow fade",
             makeClampSanitizerFloat(0, 1) };
+        SettingValue<float> mWeatherShadowSoftening{ mIndex, "Shadows", "weather shadow softening",
+            makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mShadowsEndBeforeNight{ mIndex, "Shadows", "shadows end before night",
             makeClampSanitizerFloat(0, 3) };
         SettingValue<int> mShadowUpdateInterval{ mIndex, "Shadows", "shadow update interval",

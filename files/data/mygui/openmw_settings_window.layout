@@ -1677,6 +1677,33 @@
                                 <Property key="Caption" value="#{OMWEngine:ShadowWeatherShadowFadeDesc}"/>
                             </Widget>
 
+                            <!-- ShadowWeatherSoftening -->
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="TextBox" skin="NormalText" position_real="0 0 1 1" align="Stretch" name="ShadowWeatherSofteningText">
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ShadowWeatherSofteningTooltip}"/>
+                                </Widget>
+                            </Widget>
+                            <Widget type="ScrollBar" skin="MW_HScroll" position="0 0 0 18" align="HStretch Top">
+                                <UserString key="HStretch" value="true"/>
+                                <Property key="Range" value="101"/>
+                                <Property key="Page" value="5"/>
+                                <Property key="WheelPage" value="5"/>
+                                <UserString key="SettingType" value="Slider"/>
+                                <UserString key="SettingMin" value="0.0"/>
+                                <UserString key="SettingMax" value="1.0"/>
+                                <UserString key="SettingCategory" value="Shadows"/>
+                                <UserString key="SettingName" value="weather shadow softening"/>
+                                <UserString key="SettingValueType" value="Float"/>
+                                <UserString key="SettingLabelWidget" value="ShadowWeatherSofteningText"/>
+                                <UserString key="SettingLabelCaption" value="ShadowWeatherSofteningValue"/>
+                            </Widget>
+                            <Widget type="AutoSizedTextBox" skin="SandText">
+                                <Property key="Caption" value="#{OMWEngine:ShadowWeatherSofteningDesc}"/>
+                            </Widget>
+
                             <!-- ShadowEndBeforeNight -->
                             <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
                                 <UserString key="HStretch" value="true"/>

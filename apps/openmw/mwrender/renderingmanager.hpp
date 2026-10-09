@@ -164,6 +164,7 @@ namespace MWRender
 
         /// Sun shadow strength, 1 = full, 0 = none (and not drawn). Set by the weather each frame.
         void setSunShadowFade(float fade);
+        void setSunShadowSoftness(float softness);
 
         void configureAmbient(const MWWorld::Cell& cell);
         void configureFog(const MWWorld::Cell& cell);

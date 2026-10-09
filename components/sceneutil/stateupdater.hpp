@@ -75,6 +75,8 @@ namespace SceneUtil
 
         /// 1 = sun shadows at full strength, 0 = none (the MGE shadow receiver, compat.glsl).
         void setSunShadowFade(float fade);
+        /// How much wider than usual soft shadows' edges are, 0 (usual) to 1 (twice as wide): the weather's haze.
+        void setSunShadowSoftness(float softness);
 
         /// [Shaders] light brightness, light falloff and light bounce, applied to point lights (lib/light/util.glsl).
         void setPointLightTuning(float brightness, float falloff, float bounce, float hotspotSoftening);
@@ -88,6 +90,7 @@ namespace SceneUtil
         osg::Vec2f mScreenRes;
         bool mViewerUnderwater = false;
         float mSunShadowFade = 1.f;
+        float mSunShadowSoftness = 0.f;
         osg::Vec4f mPointLightTuning{ 1.f, 1.f, 0.f, 0.f };
     };
 
