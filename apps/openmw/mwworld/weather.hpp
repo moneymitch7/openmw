@@ -432,6 +432,8 @@ namespace MWWorld
         ESM::RefId mQueuedWeather;
         std::map<ESM::RefId, RegionWeather> mRegions;
         MWRender::WeatherResult mResult;
+        // brightness the lightning adds this frame (0 without a strike), for weather shadows
+        float mLightningFlash = 0.f;
 
         MWBase::Sound* mAmbientSound{ nullptr };
         ESM::RefId mPlayingAmbientSoundID;

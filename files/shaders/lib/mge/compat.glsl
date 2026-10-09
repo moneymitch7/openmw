@@ -75,7 +75,7 @@ vec3 perObjectTonemap(vec3 c)
 }
 
 // Sun shadow strength set by the engine each frame (SharedUniformStateUpdater): fades shadows out at night when
-// [Shadows] night shadows is off.
+// [Shadows] night shadows is off, and with weather shadows by the weather; up to 2 for a lightning flash.
 uniform float sunShadowFade;
 
 // User option: the cloud-cover shadow fade. 0.25 = MGE XE behaviour
@@ -103,7 +103,8 @@ vec3 mgeShadowMult(float shadowing, vec3 viewNormal)
     float x = lambert * dot(mgeSunDiffuse(), vec3(0.36, 0.53, 0.11));
     x *= MGE_CLOUD_SHADOW_FADE_FLOOR
         + (1.0 - MGE_CLOUD_SHADOW_FADE_FLOOR) * clamp(mgeSunSpecular().a, 0.0, 1.0);
-    float light = x / (0.4 + x) * sunShadowFade;
+    // sunShadowFade goes above 1 for a lightning flash, whose shadows stay strong under storm clouds
+    float light = min(x / (0.4 + x) * sunShadowFade, 0.9);
     return vec3(1.0) - (1.0 - shadowing) * light * vec3(1.0, 0.97, 0.81);
 }
 

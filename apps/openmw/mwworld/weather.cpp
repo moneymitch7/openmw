@@ -977,6 +977,18 @@ namespace MWWorld
                                              / fadeHours,
                                          0.f, 1.f);
             }
+            // OpenMGE XE weather shadows: shadows go with the sun's glare, the weather's own measure of how much of
+            // the sun gets through: full in clear and cloudy weather, a quarter in fog, none when overcast, in rain,
+            // storms and snow, blending as one weather turns into the next. No sun to see, no shadows to cast (and
+            // none to draw, which saves their cost in bad weather).
+            // A lightning strike lights the scene through the sun's light (see calculateWeatherResult), so for its
+            // split second it casts hard shadows along it, by night too, fading as the flash does.
+            if (Settings::shadows().mWeatherShadows)
+            {
+                shadowFade *= std::clamp(mResult.mGlareView, 0.f, 1.f);
+                // (above 1: strong under storm clouds, which otherwise weaken shadows, see mgeShadowMult)
+                shadowFade = std::max(shadowFade, std::clamp(mLightningFlash * 2.f, 0.f, 2.f));
+            }
             mRendering.setSunShadowFade(shadowFade);
         }
 
@@ -1426,6 +1438,7 @@ namespace MWWorld
             float nextFlash = next.calculateThunder(1 - mTransitionFactor, elapsedSeconds, isPaused);
             flash = currentFlash + nextFlash;
         }
+        mLightningFlash = flash;
         osg::Vec4f flashColor(flash, flash, flash, 0.0f);
 
         mResult.mFogColor += flashColor;

@@ -324,6 +324,8 @@ SunlightScattering: "Sunlight Scattering"
 ShadowSoftShadows: "Soft Shadows"
 ShadowSoftShadowsTooltip: "Smooth shadow edges. Decreases performance slightly but allows you to use a lower Shadow Map Resolution to compensate."
 ShadowNightShadows: "Night Shadows"
+ShadowWeatherShadows: "Weather Shadows"
+ShadowWeatherShadowsTooltip: "Outdoor shadows follow the weather: as strong as the sun shows through it, full when clear or cloudy, faint in fog, and none when overcast, in rain, storms, ash and snow. They fade as one weather turns into the next. Lightning casts hard shadows for the split second of its flash, by night too.\n\nNo shadows are drawn while none would show, which also saves their cost in bad weather."
 ShadowNightShadowsTooltip: "Keep shadows at night, cast by the moonlight.\n\nWhen off, outdoor shadows fade out over the last half hour before night falls and back in over the first half hour after sunrise, and none are drawn at night. The night light comes in so low that every shadow stretches across the town, costing several milliseconds each frame and speckling the surfaces it grazes."
 ShadowUpdateInterval: "Shadow Temporal Reuse"
 ShadowUpdateIntervalTooltip: |-
