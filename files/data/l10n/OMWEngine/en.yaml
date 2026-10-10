@@ -269,6 +269,11 @@ MgeFogEndTooltip: |-
     Where the world disappears into the fog in clear weather. Every other weather pulls it closer.
 
     MGE XE's default is 5. Keep it close to your View Distance: lower and the game draws land you can't see, higher and the edge of the world shows.
+MgeSunHazeValue: "Sun Haze ({value, number, percent})"
+MgeSunHazeTooltip: |-
+    The haze toward the sun takes the sun's own colour: golden at sunrise and sunset, near white at noon, and a little brighter. Clear and Cloudy weather.
+
+    0% keeps MGE XE's white glow.
 MgeFogFollowsViewDistance: "Fog Follows View Distance"
 MgeFogFollowsViewDistanceTooltip: |-
     The fog ends at your View Distance instead of at Fog End, so the edge of the world never shows and the game draws no land the fog hides.

@@ -480,6 +480,7 @@ namespace MWRender
         // mgeWeatherUniforms = 1 tells the shaders a patched engine provides
         // live values (stock builds leave these at the GLSL default of 0).
         mMgeNiceWeatherUniform = new osg::Uniform("mgeNiceWeather", 0.f);
+        mMgeSunHazeUniform = new osg::Uniform("mgeSunHaze", osg::Vec4f(1.f, 1.f, 1.f, 0.f));
         mMgeSkyColorUniform = new osg::Uniform("mgeSkyColor", osg::Vec3f(0.5f, 0.5f, 0.5f));
         // (weather Fog Ratio ff, weather Fog Offset fo, isExterior, isDay)
         mMgeFogParamsUniform = new osg::Uniform("mgeFogParams", osg::Vec4f(1.f, 0.f, 1.f, 1.f));
@@ -500,6 +501,7 @@ namespace MWRender
         mMgeInscatterUniform = new osg::Uniform("mgeInscatterU", osg::Vec3f(0.f, 0.f, 0.f));
         mMgeScatterOnUniform = new osg::Uniform("mgeScatterUniformsOn", 0.f);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeNiceWeatherUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mMgeSunHazeUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeSkyColorUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsCurUniform);
@@ -799,6 +801,14 @@ namespace MWRender
 
         mPostProcessor->getStateUpdater()->setSunColor(diffuse);
         mPostProcessor->getStateUpdater()->setSunVis(sunVis);
+
+        // [Fog] mge sun haze: the sun's colour, its brightest channel 1 (white at noon, orange at sunset), for the haze
+        // toward it
+        const float brightest = std::max({ diffuse.r(), diffuse.g(), diffuse.b() });
+        osg::Vec3f hue(1.f, 1.f, 1.f);
+        if (brightest > 1e-3f)
+            hue = osg::Vec3f(diffuse.r(), diffuse.g(), diffuse.b()) / brightest;
+        mMgeSunHazeUniform->set(osg::Vec4f(hue, Settings::fog().mMgeSunHaze));
     }
 
     void RenderingManager::setMgeWeather(float niceWeather, const osg::Vec4f& skyColor, float dlFogFactor,

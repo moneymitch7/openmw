@@ -76,6 +76,9 @@ uniform vec4 mgeFogParams;
 // pass but valid in every pass. RTT passes (e.g. the reflected sky) have
 // no usable light 0, and normalize(0) there produces NaN.
 uniform vec3 mgeSunDir;
+// [Fog] mge sun haze: rgb = the sun's colour at its brightest channel 1, a = how much of it the haze toward the sun
+// takes (0 = MGE XE's white glow).
+uniform vec4 mgeSunHaze;
 
 // Weather-transition endpoints (patched engine): Cur = (ff, fo, valid, 0),
 // Next = (ff, fo, blend, 0). Consumed by mgeDerivedFog (derivation policy
@@ -2783,7 +2786,14 @@ MgeScatterPrep mgeScatterPrepWithSun(vec3 dir, vec3 skyCol, vec3 sunWorld)
     mgeScatterTriplets(scOut, scIn);   // baseline + roll recovery (225)
     vec3 sunscatter = mix(scIn, scOut, 0.5 * (1.0 + suncos));
     p.att = atmdep * sunscatter * (sunaltitude_a + mie);
-    p.colour = vec3(0.125 * mie) + newSkyCol * rayl;
+    // Sun Haze: the glow around the sun (the mie term, strongest toward it) takes the sun's colour and a quarter more
+    // brightness, fading out away from the sun. The sky dome and the scene haze share this setup, so the land still
+    // melts into the sky behind it.
+    vec3 mieColour = vec3(1.0);
+    float sunHaze = clamp(mgeSunHaze.a, 0.0, 1.0) * clamp(suncos, 0.0, 1.0);
+    if (sunHaze > 0.0)
+        mieColour = mix(vec3(1.0), clamp(mgeSunHaze.rgb, 0.0, 1.0) * 1.25, sunHaze);
+    p.colour = 0.125 * mie * mieColour + newSkyCol * rayl;
     p.gain = 1.1 * atmdep + 0.5;
     return p;
 }

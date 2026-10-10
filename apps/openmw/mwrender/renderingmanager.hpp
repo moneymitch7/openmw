@@ -337,6 +337,7 @@ namespace MWRender
 
         osg::ref_ptr<osgViewer::Viewer> mViewer;
         osg::ref_ptr<osg::Uniform> mMgeNiceWeatherUniform;
+        osg::ref_ptr<osg::Uniform> mMgeSunHazeUniform; // [Fog] mge sun haze, with the sun's colour
         osg::ref_ptr<osg::Uniform> mMgeSkyColorUniform;
         osg::ref_ptr<osg::Uniform> mMgeFogParamsUniform;
         osg::ref_ptr<osg::Uniform> mMgeFogParamsCurUniform;

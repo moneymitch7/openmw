@@ -46,6 +46,8 @@ namespace Settings
             makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mMgeWeatherFogDensity{ mIndex, "Fog", "mge weather fog density",
             makeClampSanitizerFloat(0, 1) };
+        // the haze toward the sun takes the sun's colour, 0 to 1 (see settings-default.cfg)
+        SettingValue<float> mMgeSunHaze{ mIndex, "Fog", "mge sun haze", makeClampSanitizerFloat(0, 1) };
     };
 }
 
