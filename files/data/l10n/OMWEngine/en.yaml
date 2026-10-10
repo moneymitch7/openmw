@@ -249,8 +249,6 @@ MaxLights: "Max Lights"
 MaxLightsValue: "Max Lights ({value, number, :: group-off})"
 MaxLightsTooltip: "Default: 16\nMaximum number of lights per object.\n\nA low number near default will cause light popping similar to what you would see in Morrowind."
 MenuHelpDelay: "Menu Help Delay"
-MgeFogFull: "MGE XE"
-MgeFogThin: "Clear"
 MgeStormFogValue: "Storm Fog ({value, number, percent})"
 MgeStormFogTooltip: |-
     How thick ash, blight and blizzard storms are.
@@ -274,6 +272,14 @@ MgeSunHazeTooltip: |-
     The haze toward the sun takes the sun's own colour: golden at sunrise and sunset, near white at noon, and a little brighter. Clear and Cloudy weather.
 
     0% keeps MGE XE's white glow.
+MgeMorningMistValue: "Morning Mist ({value, number, percent})"
+MgeMorningMistTooltip: |-
+    Mist lying over the water and low land around sunrise: it builds before dawn, is thickest around sunrise and has burnt off three hours later. Some mornings are mistier than others.
+
+    Calm weather only (none in rain, storms or snow). 0% turns it off.
+MgeMistHeightValue: "Mist Height ({value})"
+MgeMistHeightTooltip: |-
+    How high the morning mist reaches above the water, in game units (a person is about 128). Low keeps it to the water and the shore, high fills the valleys inland.
 MgeFogFollowsViewDistance: "Fog Follows View Distance"
 MgeFogFollowsViewDistanceTooltip: |-
     The fog ends at your View Distance instead of at Fog End, so the edge of the world never shows and the game draws no land the fog hides.

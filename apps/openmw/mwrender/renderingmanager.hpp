@@ -166,6 +166,8 @@ namespace MWRender
         /// Sun shadow strength, 1 = full, 0 = none (and not drawn). Set by the weather each frame.
         void setSunShadowFade(float fade);
         void setSunShadowSoftness(float softness);
+        /// [Fog] mge morning mist: how thick it is now (0 for none), how high it reaches and its colour.
+        void setMgeMist(float density, float height, const osg::Vec3f& colour);
 
         void configureAmbient(const MWWorld::Cell& cell);
         void configureFog(const MWWorld::Cell& cell);
@@ -338,6 +340,8 @@ namespace MWRender
         osg::ref_ptr<osgViewer::Viewer> mViewer;
         osg::ref_ptr<osg::Uniform> mMgeNiceWeatherUniform;
         osg::ref_ptr<osg::Uniform> mMgeSunHazeUniform; // [Fog] mge sun haze, with the sun's colour
+        osg::ref_ptr<osg::Uniform> mMgeMistUniform; // [Fog] mge morning mist: density now, height
+        osg::ref_ptr<osg::Uniform> mMgeMistColourUniform;
         osg::ref_ptr<osg::Uniform> mMgeSkyColorUniform;
         osg::ref_ptr<osg::Uniform> mMgeFogParamsUniform;
         osg::ref_ptr<osg::Uniform> mMgeFogParamsCurUniform;

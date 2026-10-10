@@ -156,6 +156,22 @@ void main()
         return;
     }
 
+    // Morning mist: the band it makes low in the sky, the mist the whole way out (mge_fog.glsl). The dome takes its
+    // colour, the layers drawn over the dome (stars, clouds, sun, moons) fade into it.
+    if (mgeCamAboveWater())
+    {
+        float mistT = mgeMistTransmittance(skyWorldDir(), 1.0e6);
+        if (mistT < 1.0)
+        {
+            if (pass == PASS_ATMOSPHERE)
+                color.rgb = mix(mgeMistColour, color.rgb, mistT);
+            else if (pass == PASS_MOON)
+                color *= mistT; // premultiplied
+            else
+                color.a *= mistT;
+        }
+    }
+
     // Underwater source probe (mge_fog.glsl, normally off): everything the
     // sky program draws while the camera is submerged tints green.
     if (mgeUwProbe())

@@ -48,6 +48,9 @@ namespace Settings
             makeClampSanitizerFloat(0, 1) };
         // the haze toward the sun takes the sun's colour, 0 to 1 (see settings-default.cfg)
         SettingValue<float> mMgeSunHaze{ mIndex, "Fog", "mge sun haze", makeClampSanitizerFloat(0, 1) };
+        // morning mist lying low over the land and water around sunrise (see settings-default.cfg)
+        SettingValue<float> mMgeMorningMist{ mIndex, "Fog", "mge morning mist", makeClampSanitizerFloat(0, 1) };
+        SettingValue<int> mMgeMistHeight{ mIndex, "Fog", "mge mist height", makeClampSanitizerInt(100, 2000) };
     };
 }
 

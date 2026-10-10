@@ -79,6 +79,10 @@ uniform vec3 mgeSunDir;
 // [Fog] mge sun haze: rgb = the sun's colour at its brightest channel 1, a = how much of it the haze toward the sun
 // takes (0 = MGE XE's white glow).
 uniform vec4 mgeSunHaze;
+// [Fog] mge morning mist: x = how thick it is now (0 = none), y = how high it reaches (game units, its density
+// falling to 1/e there); mgeMistColour its colour.
+uniform vec2 mgeMist;
+uniform vec3 mgeMistColour;
 
 // Weather-transition endpoints (patched engine): Cur = (ff, fo, valid, 0),
 // Next = (ff, fo, blend, 0). Consumed by mgeDerivedFog (derivation policy
@@ -2888,6 +2892,45 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
 // mid-corridor (its I1 finding). Main view untouched by construction.
 // 0 = off byte-exact (the post-392, pre-conv mirror composition).
 
+// Morning mist: how much of the light from distance dist along dirWorld (world space) gets through the mist layer
+// lying on the water plane (z = 0). The mist's density falls off with the height above the plane as exp(-|z| / H);
+// the optical depth along the straight ray from the camera is integrated in closed form, in two pieces if the ray
+// crosses the plane. Taking |z| makes mirrored passes right as they are: their rays run on below the water plane,
+// and the stretch below it is the reflected light's path above it. dist may be huge (the sky): the result is the
+// mist the whole way out.
+float mgeMistTransmittance(vec3 dirWorld, float dist)
+{
+    if (mgeMist.x <= 0.0)
+        return 1.0;
+    // thick: at the mist's full density, about 95% of the light is lost over 2000 units
+    const float sigma = 1.5e-3;
+    float H = max(mgeMist.y, 50.0);
+    float z0 = osg_ViewMatrixInverse[3].z;
+    float dz = dirWorld.z;
+    // |z| changes at rate r along the ray (until the plane, if it is crossed)
+    float r = (z0 >= 0.0) ? dz : -dz;
+    float a = abs(z0);
+    float len1 = dist;
+    float len2 = 0.0;
+    if (r < 0.0)
+    {
+        float cross = a / max(-r, 1e-6);
+        if (cross < dist)
+        {
+            len1 = cross;
+            len2 = dist - cross;
+        }
+    }
+    float k1 = r / H;
+    float depth = exp(-a / H) * ((abs(k1 * len1) < 1e-4) ? len1 : (1.0 - exp(-clamp(k1 * len1, -80.0, 80.0))) / k1);
+    if (len2 > 0.0)
+    {
+        float k2 = abs(dz) / H;
+        depth += (abs(k2 * len2) < 1e-4) ? len2 : (1.0 - exp(-min(k2 * len2, 80.0))) / k2;
+    }
+    return exp(-sigma * mgeMist.x * min(depth, 1e5));
+}
+
 // fogColour(): rgb = inscattered light, a = transmittance.
 // Apply as: scene' = a * scene + rgb   (XE Common.fx fogApply)
 // useNearLinear: XE fogColour (land/objects) switches to the vanilla
@@ -3249,6 +3292,11 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
                 rgb = mix(rgb, skyBehind.rgb * (wxRl / wxSbL), wxHw);
         }
     }
+
+    // Morning mist, nearer than the haze: scene'' = T * (fog * scene + rgb) + (1 - T) * mist colour
+    float mistT = mgeMistTransmittance(dirWorld, dist);
+    rgb = rgb * mistT + (1.0 - mistT) * mgeMistColour;
+    fog *= mistT;
     return vec4(rgb, fog);
 }
 

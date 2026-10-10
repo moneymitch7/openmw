@@ -28,6 +28,7 @@
 #include "player.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 
 namespace MWWorld
@@ -896,6 +897,7 @@ namespace MWWorld
             // indoor shadows keep their strength whatever the hour outside
             mRendering.setSunShadowFade(1.f);
             mRendering.setSunShadowSoftness(0.f);
+            mRendering.setMgeMist(0.f, static_cast<float>(Settings::fog().mMgeMistHeight), osg::Vec3f());
             return;
         }
 
@@ -1019,6 +1021,64 @@ namespace MWWorld
                 shadowSoftness *= Settings::shadows().mWeatherShadowSoftening;
             }
             mRendering.setSunShadowSoftness(shadowSoftness);
+        }
+
+        // OpenMGE XE morning mist: builds over the two hours before sunrise, thickest from half an hour before it to
+        // three quarters of an hour after, burnt off by three hours after. Calm weather only: full when clear or
+        // foggy, less when cloudy or overcast, none in rain, storms and snow, blending through transitions. Some
+        // mornings mistier than others (half to all of it, the same all morning). Its colour is the weather's sky
+        // lit by the sun, pale and warm at dawn.
+        {
+            float mist = 0.f;
+            const float strength = Settings::fog().mMgeMorningMist;
+            if (strength > 0.f)
+            {
+                const auto smooth = [](float x) {
+                    x = std::clamp(x, 0.f, 1.f);
+                    return x * x * (3.f - 2.f * x);
+                };
+                const float t = time.getHour() - mSunriseTime;
+                float morning = 0.f;
+                if (t >= -2.f && t < -0.5f)
+                    morning = smooth((t + 2.f) / 1.5f);
+                else if (t >= -0.5f && t < 0.75f)
+                    morning = 1.f;
+                else if (t >= 0.75f && t < 3.f)
+                    morning = 1.f - smooth((t - 0.75f) / 2.25f);
+                const auto calmOf = [](const Weather* w) {
+                    if (w == nullptr)
+                        return 0.f;
+                    switch (w->mScriptId)
+                    {
+                        case 0: // Clear
+                        case 2: // Foggy
+                            return 1.f;
+                        case 1: // Cloudy
+                            return 0.7f;
+                        case 3: // Overcast
+                            return 0.4f;
+                        default:
+                            return 0.f;
+                    }
+                };
+                float calm = calmOf(mWeatherStore->search(mCurrentWeather));
+                if (const Weather* next = mWeatherStore->search(mNextWeather))
+                    calm = lerp(calm, calmOf(next), 1.f - mTransitionFactor);
+                // this morning's own share, from the day (dawn and the morning fall on the same day)
+                std::uint32_t h = static_cast<std::uint32_t>(time.getDay()) * 2654435761u;
+                h ^= h >> 15;
+                h *= 2246822519u;
+                h ^= h >> 13;
+                const float share = 0.5f + 0.5f * static_cast<float>(h & 0xffffu) / 65535.f;
+                mist = strength * morning * calm * share;
+            }
+            const osg::Vec4f sky = result.mSkyColor;
+            const osg::Vec4f sunColour = result.mSunColor;
+            osg::Vec3f mistColour(0.55f * sky.r() + 0.45f * sunColour.r(), 0.55f * sky.g() + 0.45f * sunColour.g(),
+                0.55f * sky.b() + 0.45f * sunColour.b());
+            for (int i = 0; i < 3; ++i)
+                mistColour[i] = std::clamp(mistColour[i], 0.f, 1.f);
+            mRendering.setMgeMist(mist, static_cast<float>(Settings::fog().mMgeMistHeight), mistColour);
         }
 
         float underwaterFog = mUnderwaterFog.getValue(time.getHour(), mTimeSettings, "Fog");

@@ -475,14 +475,6 @@
                             <UserString key="SettingLabelWidget" value="MgeStormFogText"/>
                             <UserString key="SettingLabelCaption" value="MgeStormFogValue"/>
                         </Widget>
-                        <Widget type="TextBox" skin="SandText" position="0 222 170 18" align="Left Top">
-                            <Property key="Caption" value="#{OMWEngine:MgeFogThin}"/>
-                            <Property key="TextAlign" value="Left"/>
-                        </Widget>
-                        <Widget type="TextBox" skin="SandText" position="0 222 170 18" align="Left Top">
-                            <Property key="Caption" value="#{OMWEngine:MgeFogFull}"/>
-                            <Property key="TextAlign" value="Right"/>
-                        </Widget>
 
                         <Widget type="TextBox" skin="NormalText" position="182 178 170 18" align="Right Top" name="MgeWeatherFogText">
                             <UserString key="ToolTipType" value="Layout"/>
@@ -502,22 +494,14 @@
                             <UserString key="SettingLabelWidget" value="MgeWeatherFogText"/>
                             <UserString key="SettingLabelCaption" value="MgeWeatherFogValue"/>
                         </Widget>
-                        <Widget type="TextBox" skin="SandText" position="182 222 170 18" align="Right Top">
-                            <Property key="Caption" value="#{OMWEngine:MgeFogThin}"/>
-                            <Property key="TextAlign" value="Left"/>
-                        </Widget>
-                        <Widget type="TextBox" skin="SandText" position="182 222 170 18" align="Right Top">
-                            <Property key="Caption" value="#{OMWEngine:MgeFogFull}"/>
-                            <Property key="TextAlign" value="Right"/>
-                        </Widget>
 
                         <!-- OpenMGE XE: the haze toward the sun -->
-                        <Widget type="TextBox" skin="NormalText" position="0 252 352 18" align="Left Top" name="MgeSunHazeText">
+                        <Widget type="TextBox" skin="NormalText" position="0 226 352 18" align="Left Top" name="MgeSunHazeText">
                             <UserString key="ToolTipType" value="Layout"/>
                             <UserString key="ToolTipLayout" value="TextToolTip"/>
                             <UserString key="Caption_Text" value="#{OMWEngine:MgeSunHazeTooltip}"/>
                         </Widget>
-                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 274 352 18" align="HStretch Top">
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 248 352 18" align="HStretch Top">
                             <Property key="Range" value="101"/>
                             <Property key="Page" value="1"/>
                             <Property key="WheelPage" value="5"/>
@@ -531,13 +515,51 @@
                             <UserString key="SettingLabelCaption" value="MgeSunHazeValue"/>
                         </Widget>
 
+                        <!-- OpenMGE XE: morning mist, side by side -->
+                        <Widget type="TextBox" skin="NormalText" position="0 274 170 18" align="Left Top" name="MgeMorningMistText">
+                            <UserString key="ToolTipType" value="Layout"/>
+                            <UserString key="ToolTipLayout" value="TextToolTip"/>
+                            <UserString key="Caption_Text" value="#{OMWEngine:MgeMorningMistTooltip}"/>
+                        </Widget>
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 296 170 18" align="Left Top">
+                            <Property key="Range" value="101"/>
+                            <Property key="Page" value="1"/>
+                            <Property key="WheelPage" value="5"/>
+                            <UserString key="SettingType" value="Slider"/>
+                            <UserString key="SettingCategory" value="Fog"/>
+                            <UserString key="SettingName" value="mge morning mist"/>
+                            <UserString key="SettingValueType" value="Float"/>
+                            <UserString key="SettingMin" value="0"/>
+                            <UserString key="SettingMax" value="1"/>
+                            <UserString key="SettingLabelWidget" value="MgeMorningMistText"/>
+                            <UserString key="SettingLabelCaption" value="MgeMorningMistValue"/>
+                        </Widget>
+                        <Widget type="TextBox" skin="NormalText" position="182 274 170 18" align="Right Top" name="MgeMistHeightText">
+                            <UserString key="ToolTipType" value="Layout"/>
+                            <UserString key="ToolTipLayout" value="TextToolTip"/>
+                            <UserString key="Caption_Text" value="#{OMWEngine:MgeMistHeightTooltip}"/>
+                        </Widget>
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="182 296 170 18" align="Right Top">
+                            <Property key="Range" value="39"/>
+                            <Property key="Page" value="1"/>
+                            <Property key="WheelPage" value="2"/>
+                            <UserString key="SettingType" value="Slider"/>
+                            <UserString key="SettingCategory" value="Fog"/>
+                            <UserString key="SettingName" value="mge mist height"/>
+                            <UserString key="SettingValueType" value="Integer"/>
+                            <UserString key="SettingMin" value="100"/>
+                            <UserString key="SettingMax" value="2000"/>
+                            <UserString key="SettingLabelWidget" value="MgeMistHeightText"/>
+                            <UserString key="SettingLabelCaption" value="MgeMistHeightValue"/>
+                        </Widget>
+
                         <!-- OpenMGE XE: distant scripted objects' update rate -->
-                        <Widget type="TextBox" skin="NormalText" position="0 318 352 18" align="Left Top" name="LuaDistantUpdateText">
+                        <Widget type="TextBox" skin="NormalText" position="0 322 352 18" align="Left Top" name="LuaDistantUpdateText">
                             <UserString key="ToolTipType" value="Layout"/>
                             <UserString key="ToolTipLayout" value="TextToolTip"/>
                             <UserString key="Caption_Text" value="#{OMWEngine:LuaDistantUpdateTooltip}"/>
                         </Widget>
-                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 340 352 18" align="HStretch Top">
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 344 352 18" align="HStretch Top">
                             <Property key="Range" value="4"/>
                             <Property key="Page" value="1"/>
                             <Property key="WheelPage" value="1"/>
