@@ -40,11 +40,6 @@ namespace SceneUtil
         /// How strongly a steady light (one its record doesn't make flicker or pulse) wavers like a flame, 0 to 1;
         /// 0 keeps it steady.
         float mFlameFlicker = 0.f;
-
-        bool isDefault() const
-        {
-            return mBrightness == 1.f && mReach == 1.f && mSoftness == 0.f && mBounce < 0.f && mFlameFlicker == 0.f;
-        }
     };
 
     /// @brief Set up global attenuation settings for a Light.

@@ -172,10 +172,20 @@ namespace
 {
     // [Fog] mge fog start/end cells as the shader's mgeFogRange. 0 keeps the shader's built-in MGE defaults
     // (start 2, end 5); the end is kept at least half a cell past the start so the fog curve stays valid.
-    osg::Vec2f getMgeFogRange()
+    // [Fog] mge fog follows view distance: the end is the viewing distance instead, and the start keeps its share of
+    // the way to the end.
+    osg::Vec2f getMgeFogRange(float viewDistance)
     {
-        const float start = Settings::fog().mMgeFogStartCells;
+        constexpr float cell = 8192.f;
+        float start = Settings::fog().mMgeFogStartCells;
         float end = Settings::fog().mMgeFogEndCells;
+        if (Settings::fog().mMgeFogFollowsViewDistance && viewDistance > 0.f)
+        {
+            const float setStart = start > 0.f ? start : 2.f;
+            const float setEnd = end > 0.f ? end : 5.f;
+            end = std::max(viewDistance / cell, 1.f);
+            start = end * std::clamp(setStart / setEnd, 0.f, 0.9f);
+        }
         if (start > 0.f && end > 0.f)
             end = std::max(end, start + 0.5f);
         return osg::Vec2f(start, end);
@@ -508,7 +518,7 @@ namespace MWRender
         mRootNode->getOrCreateStateSet()->addUniform(mClampActorsGateUniform);
         mRootNode->getOrCreateStateSet()->addUniform(new osg::Uniform("uClampLightingActor", 0.f));
         // MGE fog envelope from settings ([Fog] mge fog start/end cells, Options > Detail Level); updated live
-        mMgeFogRangeUniform = new osg::Uniform("mgeFogRange", getMgeFogRange());
+        mMgeFogRangeUniform = new osg::Uniform("mgeFogRange", getMgeFogRange(mViewDistance));
         mRootNode->getOrCreateStateSet()->addUniform(mMgeFogRangeUniform);
 
         mSky = std::make_unique<SkyManager>(
@@ -809,7 +819,7 @@ namespace MWRender
         mMgeFogEnvelope = osg::Vec2f();
         if (isExterior && dlFogFactorCur >= 0.f)
         {
-            const osg::Vec2f range = getMgeFogRange();
+            const osg::Vec2f range = getMgeFogRange(mViewDistance);
             const osg::Vec2f current = deriveMgeFogEnvelope(dlFogFactorCur, dlFogOffsetCur, range);
             const osg::Vec2f next = deriveMgeFogEnvelope(dlFogFactorNext, dlFogOffsetNext, range);
             const float t = std::clamp(dlFogBlend, 0.f, 1.f);
@@ -1710,9 +1720,11 @@ namespace MWRender
             {
                 mWater->processChangedSettings(changed);
             }
-            else if (it->first == "Fog" && (it->second == "mge fog start cells" || it->second == "mge fog end cells"))
+            else if (it->first == "Fog"
+                && (it->second == "mge fog start cells" || it->second == "mge fog end cells"
+                    || it->second == "mge fog follows view distance"))
             {
-                mMgeFogRangeUniform->set(getMgeFogRange());
+                mMgeFogRangeUniform->set(getMgeFogRange(mViewDistance));
             }
             else if (it->first == "Shaders"
                 && (it->second == "light occlusion" || it->second == "light occlusion time per frame"))
@@ -1878,6 +1890,8 @@ namespace MWRender
     void RenderingManager::setViewDistance(float distance, bool delay)
     {
         mViewDistance = distance;
+        if (mMgeFogRangeUniform)
+            mMgeFogRangeUniform->set(getMgeFogRange(mViewDistance));
 
         if (delay)
         {

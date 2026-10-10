@@ -512,12 +512,12 @@
                         </Widget>
 
                         <!-- OpenMGE XE: distant scripted objects' update rate -->
-                        <Widget type="TextBox" skin="NormalText" position="0 326 352 18" align="Left Top" name="LuaDistantUpdateText">
+                        <Widget type="TextBox" skin="NormalText" position="0 318 352 18" align="Left Top" name="LuaDistantUpdateText">
                             <UserString key="ToolTipType" value="Layout"/>
                             <UserString key="ToolTipLayout" value="TextToolTip"/>
                             <UserString key="Caption_Text" value="#{OMWEngine:LuaDistantUpdateTooltip}"/>
                         </Widget>
-                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 348 352 18" align="HStretch Top">
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 340 352 18" align="HStretch Top">
                             <Property key="Range" value="4"/>
                             <Property key="Page" value="1"/>
                             <Property key="WheelPage" value="1"/>
@@ -532,12 +532,12 @@
                         </Widget>
 
                         <!-- OpenMGE XE: MGE fog envelope (clear weather), side by side -->
-                        <Widget type="TextBox" skin="NormalText" position="0 378 170 18" align="Left Top" name="MgeFogStartText">
+                        <Widget type="TextBox" skin="NormalText" position="0 370 170 18" align="Left Top" name="MgeFogStartText">
                             <UserString key="ToolTipType" value="Layout"/>
                             <UserString key="ToolTipLayout" value="TextToolTip"/>
                             <UserString key="Caption_Text" value="#{OMWEngine:MgeFogStartTooltip}"/>
                         </Widget>
-                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 400 170 18" align="Left Top">
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="0 392 170 18" align="Left Top">
                             <Property key="Range" value="23"/>
                             <Property key="Page" value="1"/>
                             <Property key="WheelPage" value="2"/>
@@ -550,12 +550,12 @@
                             <UserString key="SettingLabelWidget" value="MgeFogStartText"/>
                             <UserString key="SettingLabelCaption" value="MgeFogStartValue"/>
                         </Widget>
-                        <Widget type="TextBox" skin="NormalText" position="182 378 170 18" align="Right Top" name="MgeFogEndText">
+                        <Widget type="TextBox" skin="NormalText" position="182 370 170 18" align="Right Top" name="MgeFogEndText">
                             <UserString key="ToolTipType" value="Layout"/>
                             <UserString key="ToolTipLayout" value="TextToolTip"/>
                             <UserString key="Caption_Text" value="#{OMWEngine:MgeFogEndTooltip}"/>
                         </Widget>
-                        <Widget type="ScrollBar" skin="MW_HScroll" position="182 400 170 18" align="Right Top">
+                        <Widget type="ScrollBar" skin="MW_HScroll" position="182 392 170 18" align="Right Top">
                             <Property key="Range" value="33"/>
                             <Property key="Page" value="1"/>
                             <Property key="WheelPage" value="2"/>
@@ -567,6 +567,17 @@
                             <UserString key="SettingMax" value="10"/>
                             <UserString key="SettingLabelWidget" value="MgeFogEndText"/>
                             <UserString key="SettingLabelCaption" value="MgeFogEndValue"/>
+                        </Widget>
+                        <Widget type="AutoSizedButton" skin="MW_Button" position="0 416 24 24" align="Left Top">
+                            <UserString key="SettingCategory" value="Fog"/>
+                            <UserString key="SettingName" value="mge fog follows view distance"/>
+                            <UserString key="SettingType" value="CheckButton"/>
+                        </Widget>
+                        <Widget type="AutoSizedTextBox" skin="SandText" position="28 420 300 16" align="Left Top">
+                            <Property key="Caption" value="#{OMWEngine:MgeFogFollowsViewDistance}"/>
+                            <UserString key="ToolTipType" value="Layout"/>
+                            <UserString key="ToolTipLayout" value="TextToolTip"/>
+                            <UserString key="Caption_Text" value="#{OMWEngine:MgeFogFollowsViewDistanceTooltip}"/>
                         </Widget>
 
                     </Widget>
