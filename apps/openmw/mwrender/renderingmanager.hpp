@@ -340,6 +340,7 @@ namespace MWRender
         osg::ref_ptr<osgViewer::Viewer> mViewer;
         osg::ref_ptr<osg::Uniform> mMgeNiceWeatherUniform;
         osg::ref_ptr<osg::Uniform> mMgeSunHazeUniform; // [Fog] mge sun haze, with the sun's colour
+        osg::ref_ptr<osg::Uniform> mTerrainPaintedShadingUniform; // [Shaders] terrain painted shading
         osg::ref_ptr<osg::Uniform> mMgeMistUniform; // [Fog] mge morning mist: density now, height
         osg::ref_ptr<osg::Uniform> mMgeMistColourUniform;
         osg::ref_ptr<osg::Uniform> mMgeSkyColorUniform;

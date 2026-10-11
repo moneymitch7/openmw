@@ -74,6 +74,9 @@ namespace Settings
             makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mHeldLightBounce{ mIndex, "Shaders", "held light bounce", makeClampSanitizerFloat(0, 1) };
         SettingValue<float> mHeldLightFlicker{ mIndex, "Shaders", "held light flicker", makeClampSanitizerFloat(0, 1) };
+        // how much of the shading painted onto the land (its vertex colours) darkens the ground, 0 to 1
+        SettingValue<float> mTerrainPaintedShading{ mIndex, "Shaders", "terrain painted shading",
+            makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mHeldLightCarrierShadow{ mIndex, "Shaders", "held light carrier shadow" };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };

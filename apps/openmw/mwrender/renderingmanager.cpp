@@ -481,6 +481,8 @@ namespace MWRender
         // live values (stock builds leave these at the GLSL default of 0).
         mMgeNiceWeatherUniform = new osg::Uniform("mgeNiceWeather", 0.f);
         mMgeSunHazeUniform = new osg::Uniform("mgeSunHaze", osg::Vec4f(1.f, 1.f, 1.f, 0.f));
+        mTerrainPaintedShadingUniform
+            = new osg::Uniform("terrainPaintedShading", Settings::shaders().mTerrainPaintedShading.get());
         mMgeMistUniform = new osg::Uniform("mgeMist", osg::Vec2f(0.f, 600.f));
         mMgeMistColourUniform = new osg::Uniform("mgeMistColour", osg::Vec3f(0.8f, 0.8f, 0.8f));
         mMgeSkyColorUniform = new osg::Uniform("mgeSkyColor", osg::Vec3f(0.5f, 0.5f, 0.5f));
@@ -504,6 +506,7 @@ namespace MWRender
         mMgeScatterOnUniform = new osg::Uniform("mgeScatterUniformsOn", 0.f);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeNiceWeatherUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeSunHazeUniform);
+        mRootNode->getOrCreateStateSet()->addUniform(mTerrainPaintedShadingUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeMistUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeMistColourUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeSkyColorUniform);
@@ -1739,6 +1742,10 @@ namespace MWRender
             else if (it->first == "Water")
             {
                 mWater->processChangedSettings(changed);
+            }
+            else if (it->first == "Shaders" && it->second == "terrain painted shading")
+            {
+                mTerrainPaintedShadingUniform->set(Settings::shaders().mTerrainPaintedShading.get());
             }
             else if (it->first == "Fog"
                 && (it->second == "mge fog start cells" || it->second == "mge fog end cells"

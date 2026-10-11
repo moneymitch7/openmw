@@ -36,6 +36,23 @@ centroid varying vec4 passColor;
 #define MGE_WX_VERTEX 1
 #include "mge_fog.glsl"
 
+// [Shaders] terrain painted shading: how much of the shading painted onto the land (its vertex colours) darkens it.
+// 1 keeps the colour as painted. 0 is the paint without its darkness: its hue at full brightness, faded to neutral the
+// darker the paint is (dark paint is shade, not a tint; brightened, a near-black green-grey would turn into a strong
+// green). Values in between blend the two, so the painted darkness fades out evenly.
+uniform float terrainPaintedShading;
+
+vec4 terrainPaint(vec4 colour)
+{
+    float keep = clamp(terrainPaintedShading, 0.0, 1.0);
+    if (keep >= 1.0)
+        return colour;
+    float brightest = max(max(colour.r, colour.g), colour.b);
+    vec3 hue = (brightest > 1e-3) ? colour.rgb / brightest : vec3(1.0);
+    vec3 unshaded = mix(vec3(1.0), hue, clamp(brightest / 0.7, 0.0, 1.0));
+    return vec4(mix(unshaded, colour.rgb, keep), colour.a);
+}
+
 void main(void)
 {
     Material material = getMaterial();
@@ -47,7 +64,7 @@ void main(void)
     euclideanDepth = length(viewPos.xyz);
     linearDepth = getLinearDepth(gl_Position.z, viewPos.z);
 
-    passColor = gl_Color;
+    passColor = terrainPaint(gl_Color);
     passNormal = gl_Normal.xyz;
     passViewPos = viewPos.xyz;
     normalToViewMatrix = gl_NormalMatrix;
