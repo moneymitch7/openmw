@@ -79,10 +79,6 @@ uniform vec3 mgeSunDir;
 // [Fog] mge sun haze: rgb = the sun's colour at its brightest channel 1, a = how much of it the haze toward the sun
 // takes (0 = MGE XE's white glow).
 uniform vec4 mgeSunHaze;
-// [Fog] mge morning mist: x = how thick it is now (0 = none), y = how high it reaches (game units, its density
-// falling to 1/e there), zw = how far its wisps have drifted; mgeMistColour its colour.
-uniform vec4 mgeMist;
-uniform vec3 mgeMistColour;
 
 // Weather-transition endpoints (patched engine): Cur = (ff, fo, valid, 0),
 // Next = (ff, fo, blend, 0). Consumed by mgeDerivedFog (derivation policy
@@ -2892,90 +2888,6 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
 // mid-corridor (its I1 finding). Main view untouched by construction.
 // 0 = off byte-exact (the post-392, pre-conv mirror composition).
 
-// Morning mist: how much of the light from distance dist along dirWorld (world space) gets through the mist bank
-// lying on the water plane (z = 0). The bank is a layer: full density up to its top (H, mgeMist.y), thinning quickly
-// above it (to 1/e every fifth of H), so it lies over the water and the low shore with a top that trees, ships and
-// buildings rise out of. Density goes by |z|, which makes mirrored passes right as they are: their rays run on below
-// the water plane, and the stretch below it is the reflected light's path above it. The optical depth along the
-// straight ray from the camera is integrated in closed form, piece by piece between the heights where the ray
-// crosses the bank's top, the water plane and the mirrored top. dist may be huge (the sky): the result is the mist
-// the whole way out.
-
-// The mist along one straight piece of the ray, from height zs to height ze over length len, which crosses neither
-// the water plane nor the bank's top.
-float mgeMistPiece(float zs, float ze, float len, float H, float S)
-{
-    float us = abs(zs);
-    float ue = abs(ze);
-    if (0.5 * (us + ue) <= H)
-        return len;                                   // inside the bank: full density
-    float k = (ue - us) / S;
-    float es = exp(-min((us - H) / S, 80.0));
-    if (abs(k) < 1e-4)
-        return len * es;
-    return len * (es - exp(-min((ue - H) / S, 80.0))) / k;
-}
-
-// Smooth value noise for the mist's wisps, 0 to 1.
-float mgeMistHash(vec2 p)
-{
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-float mgeMistNoise(vec2 p)
-{
-    vec2 i = floor(p);
-    vec2 f = p - i;
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mgeMistHash(i), mgeMistHash(i + vec2(1.0, 0.0)), f.x),
-        mix(mgeMistHash(i + vec2(0.0, 1.0)), mgeMistHash(i + vec2(1.0, 1.0)), f.x), f.y);
-}
-
-float mgeMistTransmittance(vec3 dirWorld, float dist)
-{
-    if (mgeMist.x <= 0.0)
-        return 1.0;
-    // thick: inside the bank at its full density, about 95% of the light is lost over 1500 units
-    const float sigma = 2.0e-3;
-    float H = max(mgeMist.y, 50.0);
-    float S = 0.2 * H;
-    float z0 = osg_ViewMatrixInverse[3].z;
-    float dz = dirWorld.z;
-    float L = min(dist, 1.0e6);
-
-    float depth = 0.0;
-    float prevT = 0.0;
-    float prevZ = z0;
-    if (abs(dz) > 1e-6)
-    {
-        // the heights the ray may cross, in the order it meets them
-        vec3 zb = (dz > 0.0) ? vec3(-H, 0.0, H) : vec3(H, 0.0, -H);
-        for (int i = 0; i < 3; ++i)
-        {
-            float t = (zb[i] - z0) / dz;
-            if (t > prevT && t < L)
-            {
-                depth += mgeMistPiece(prevZ, zb[i], t - prevT, H, S);
-                prevT = t;
-                prevZ = zb[i];
-            }
-        }
-    }
-    depth += mgeMistPiece(prevZ, z0 + dz * L, L - prevT, H, S);
-
-    // Wisps: thicker and thinner patches drifting slowly, from noise at the far end of the ray and half way along it
-    // (in plan; mirrored passes keep x and y), over a few hundred units to a few cells. Not on the sky.
-    if (dist < 1.0e5)
-    {
-        vec2 eye = osg_ViewMatrixInverse[3].xy + mgeMist.zw;
-        vec2 farXY = eye + dirWorld.xy * dist;
-        vec2 midXY = eye + dirWorld.xy * (0.5 * dist);
-        float n = 0.55 * mgeMistNoise(farXY / 1400.0) + 0.25 * mgeMistNoise(farXY / 520.0 + vec2(7.3, 1.9))
-            + 0.20 * mgeMistNoise(midXY / 3000.0 + vec2(3.1, 5.7));
-        depth *= mix(0.25, 1.75, smoothstep(0.3, 0.7, n));
-    }
-    return exp(-sigma * mgeMist.x * min(depth, 1e5));
-}
-
 // fogColour(): rgb = inscattered light, a = transmittance.
 // Apply as: scene' = a * scene + rgb   (XE Common.fx fogApply)
 // useNearLinear: XE fogColour (land/objects) switches to the vanilla
@@ -3337,11 +3249,6 @@ vec4 mgeFogColourWorld(float dist, vec3 dirWorld, float far, vec3 skyCol, bool u
                 rgb = mix(rgb, skyBehind.rgb * (wxRl / wxSbL), wxHw);
         }
     }
-
-    // Morning mist, nearer than the haze: scene'' = T * (fog * scene + rgb) + (1 - T) * mist colour
-    float mistT = mgeMistTransmittance(dirWorld, dist);
-    rgb = rgb * mistT + (1.0 - mistT) * mgeMistColour;
-    fog *= mistT;
     return vec4(rgb, fog);
 }
 

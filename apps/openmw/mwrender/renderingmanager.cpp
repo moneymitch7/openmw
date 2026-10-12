@@ -483,8 +483,6 @@ namespace MWRender
         mMgeSunHazeUniform = new osg::Uniform("mgeSunHaze", osg::Vec4f(1.f, 1.f, 1.f, 0.f));
         mTerrainPaintedShadingUniform
             = new osg::Uniform("terrainPaintedShading", Settings::shaders().mTerrainPaintedShading.get());
-        mMgeMistUniform = new osg::Uniform("mgeMist", osg::Vec4f(0.f, 600.f, 0.f, 0.f));
-        mMgeMistColourUniform = new osg::Uniform("mgeMistColour", osg::Vec3f(0.8f, 0.8f, 0.8f));
         mMgeSkyColorUniform = new osg::Uniform("mgeSkyColor", osg::Vec3f(0.5f, 0.5f, 0.5f));
         // (weather Fog Ratio ff, weather Fog Offset fo, isExterior, isDay)
         mMgeFogParamsUniform = new osg::Uniform("mgeFogParams", osg::Vec4f(1.f, 0.f, 1.f, 1.f));
@@ -507,8 +505,6 @@ namespace MWRender
         mRootNode->getOrCreateStateSet()->addUniform(mMgeNiceWeatherUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeSunHazeUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mTerrainPaintedShadingUniform);
-        mRootNode->getOrCreateStateSet()->addUniform(mMgeMistUniform);
-        mRootNode->getOrCreateStateSet()->addUniform(mMgeMistColourUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeSkyColorUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsUniform);
         mRootNode->getOrCreateStateSet()->addUniform(mMgeFogParamsCurUniform);
@@ -710,12 +706,6 @@ namespace MWRender
         mSharedUniformStateUpdater->setSunShadowFade(fade);
         if (mShadowManager)
             mShadowManager->setSunShadowsSuppressed(fade <= 0.f);
-    }
-
-    void RenderingManager::setMgeMist(float density, float height, const osg::Vec3f& colour, const osg::Vec2f& drift)
-    {
-        mMgeMistUniform->set(osg::Vec4f(density, height, drift.x(), drift.y()));
-        mMgeMistColourUniform->set(colour);
     }
 
     void RenderingManager::setSunShadowSoftness(float softness)
