@@ -80,8 +80,8 @@ uniform vec3 mgeSunDir;
 // takes (0 = MGE XE's white glow).
 uniform vec4 mgeSunHaze;
 // [Fog] mge morning mist: x = how thick it is now (0 = none), y = how high it reaches (game units, its density
-// falling to 1/e there); mgeMistColour its colour.
-uniform vec2 mgeMist;
+// falling to 1/e there), zw = how far its wisps have drifted; mgeMistColour its colour.
+uniform vec4 mgeMist;
 uniform vec3 mgeMistColour;
 
 // Weather-transition endpoints (patched engine): Cur = (ff, fo, valid, 0),
@@ -2898,12 +2898,26 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
 // crosses the plane. Taking |z| makes mirrored passes right as they are: their rays run on below the water plane,
 // and the stretch below it is the reflected light's path above it. dist may be huge (the sky): the result is the
 // mist the whole way out.
+// Smooth value noise for the mist's wisps, 0 to 1.
+float mgeMistHash(vec2 p)
+{
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float mgeMistNoise(vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = p - i;
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mgeMistHash(i), mgeMistHash(i + vec2(1.0, 0.0)), f.x),
+        mix(mgeMistHash(i + vec2(0.0, 1.0)), mgeMistHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
 float mgeMistTransmittance(vec3 dirWorld, float dist)
 {
     if (mgeMist.x <= 0.0)
         return 1.0;
-    // thick: at the mist's full density, about 95% of the light is lost over 2000 units
-    const float sigma = 1.5e-3;
+    // thick: at the mist's full density, about 99% of the light is lost over 2000 units
+    const float sigma = 2.5e-3;
     float H = max(mgeMist.y, 50.0);
     float z0 = osg_ViewMatrixInverse[3].z;
     float dz = dirWorld.z;
@@ -2927,6 +2941,17 @@ float mgeMistTransmittance(vec3 dirWorld, float dist)
     {
         float k2 = abs(dz) / H;
         depth += (abs(k2 * len2) < 1e-4) ? len2 : (1.0 - exp(-min(k2 * len2, 80.0))) / k2;
+    }
+    // Wisps: thicker and thinner patches drifting slowly, from noise at the far end of the ray and half way along it
+    // (in plan; mirrored passes keep x and y), over a few hundred units to a few cells. Not on the sky.
+    if (dist < 1.0e5)
+    {
+        vec2 eye = osg_ViewMatrixInverse[3].xy + mgeMist.zw;
+        vec2 farXY = eye + dirWorld.xy * dist;
+        vec2 mid = eye + dirWorld.xy * (0.5 * dist);
+        float n = 0.55 * mgeMistNoise(farXY / 1400.0) + 0.25 * mgeMistNoise(farXY / 520.0 + vec2(7.3, 1.9))
+            + 0.20 * mgeMistNoise(mid / 3000.0 + vec2(3.1, 5.7));
+        depth *= mix(0.25, 1.75, smoothstep(0.3, 0.7, n));
     }
     return exp(-sigma * mgeMist.x * min(depth, 1e5));
 }

@@ -483,7 +483,7 @@ namespace MWRender
         mMgeSunHazeUniform = new osg::Uniform("mgeSunHaze", osg::Vec4f(1.f, 1.f, 1.f, 0.f));
         mTerrainPaintedShadingUniform
             = new osg::Uniform("terrainPaintedShading", Settings::shaders().mTerrainPaintedShading.get());
-        mMgeMistUniform = new osg::Uniform("mgeMist", osg::Vec2f(0.f, 600.f));
+        mMgeMistUniform = new osg::Uniform("mgeMist", osg::Vec4f(0.f, 600.f, 0.f, 0.f));
         mMgeMistColourUniform = new osg::Uniform("mgeMistColour", osg::Vec3f(0.8f, 0.8f, 0.8f));
         mMgeSkyColorUniform = new osg::Uniform("mgeSkyColor", osg::Vec3f(0.5f, 0.5f, 0.5f));
         // (weather Fog Ratio ff, weather Fog Offset fo, isExterior, isDay)
@@ -712,9 +712,9 @@ namespace MWRender
             mShadowManager->setSunShadowsSuppressed(fade <= 0.f);
     }
 
-    void RenderingManager::setMgeMist(float density, float height, const osg::Vec3f& colour)
+    void RenderingManager::setMgeMist(float density, float height, const osg::Vec3f& colour, const osg::Vec2f& drift)
     {
-        mMgeMistUniform->set(osg::Vec2f(density, height));
+        mMgeMistUniform->set(osg::Vec4f(density, height, drift.x(), drift.y()));
         mMgeMistColourUniform->set(colour);
     }
 

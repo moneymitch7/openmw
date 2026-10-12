@@ -434,6 +434,9 @@ namespace MWWorld
         std::map<ESM::RefId, RegionWeather> mRegions;
         // the last sky colour outside, for the MGE fog indoors
         osg::Vec4f mLastSkyColor;
+        // how far the morning mist's wisps have drifted, and its thickness last logged (in tenths)
+        osg::Vec2f mMistDrift;
+        int mLoggedMistStep = -1;
 
         MWBase::Sound* mAmbientSound{ nullptr };
         ESM::RefId mPlayingAmbientSoundID;
