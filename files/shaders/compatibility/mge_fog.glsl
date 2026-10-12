@@ -2892,12 +2892,30 @@ vec3 mgeScatter(vec3 dir, float fogdist, vec3 skyCol)
 // mid-corridor (its I1 finding). Main view untouched by construction.
 // 0 = off byte-exact (the post-392, pre-conv mirror composition).
 
-// Morning mist: how much of the light from distance dist along dirWorld (world space) gets through the mist layer
-// lying on the water plane (z = 0). The mist's density falls off with the height above the plane as exp(-|z| / H);
-// the optical depth along the straight ray from the camera is integrated in closed form, in two pieces if the ray
-// crosses the plane. Taking |z| makes mirrored passes right as they are: their rays run on below the water plane,
-// and the stretch below it is the reflected light's path above it. dist may be huge (the sky): the result is the
-// mist the whole way out.
+// Morning mist: how much of the light from distance dist along dirWorld (world space) gets through the mist bank
+// lying on the water plane (z = 0). The bank is a layer: full density up to its top (H, mgeMist.y), thinning quickly
+// above it (to 1/e every fifth of H), so it lies over the water and the low shore with a top that trees, ships and
+// buildings rise out of. Density goes by |z|, which makes mirrored passes right as they are: their rays run on below
+// the water plane, and the stretch below it is the reflected light's path above it. The optical depth along the
+// straight ray from the camera is integrated in closed form, piece by piece between the heights where the ray
+// crosses the bank's top, the water plane and the mirrored top. dist may be huge (the sky): the result is the mist
+// the whole way out.
+
+// The mist along one straight piece of the ray, from height zs to height ze over length len, which crosses neither
+// the water plane nor the bank's top.
+float mgeMistPiece(float zs, float ze, float len, float H, float S)
+{
+    float us = abs(zs);
+    float ue = abs(ze);
+    if (0.5 * (us + ue) <= H)
+        return len;                                   // inside the bank: full density
+    float k = (ue - us) / S;
+    float es = exp(-min((us - H) / S, 80.0));
+    if (abs(k) < 1e-4)
+        return len * es;
+    return len * (es - exp(-min((ue - H) / S, 80.0))) / k;
+}
+
 // Smooth value noise for the mist's wisps, 0 to 1.
 float mgeMistHash(vec2 p)
 {
@@ -2916,41 +2934,43 @@ float mgeMistTransmittance(vec3 dirWorld, float dist)
 {
     if (mgeMist.x <= 0.0)
         return 1.0;
-    // thick: at the mist's full density, about 99% of the light is lost over 2000 units
-    const float sigma = 2.5e-3;
+    // thick: inside the bank at its full density, about 95% of the light is lost over 1500 units
+    const float sigma = 2.0e-3;
     float H = max(mgeMist.y, 50.0);
+    float S = 0.2 * H;
     float z0 = osg_ViewMatrixInverse[3].z;
     float dz = dirWorld.z;
-    // |z| changes at rate r along the ray (until the plane, if it is crossed)
-    float r = (z0 >= 0.0) ? dz : -dz;
-    float a = abs(z0);
-    float len1 = dist;
-    float len2 = 0.0;
-    if (r < 0.0)
+    float L = min(dist, 1.0e6);
+
+    float depth = 0.0;
+    float prevT = 0.0;
+    float prevZ = z0;
+    if (abs(dz) > 1e-6)
     {
-        float cross = a / max(-r, 1e-6);
-        if (cross < dist)
+        // the heights the ray may cross, in the order it meets them
+        vec3 zb = (dz > 0.0) ? vec3(-H, 0.0, H) : vec3(H, 0.0, -H);
+        for (int i = 0; i < 3; ++i)
         {
-            len1 = cross;
-            len2 = dist - cross;
+            float t = (zb[i] - z0) / dz;
+            if (t > prevT && t < L)
+            {
+                depth += mgeMistPiece(prevZ, zb[i], t - prevT, H, S);
+                prevT = t;
+                prevZ = zb[i];
+            }
         }
     }
-    float k1 = r / H;
-    float depth = exp(-a / H) * ((abs(k1 * len1) < 1e-4) ? len1 : (1.0 - exp(-clamp(k1 * len1, -80.0, 80.0))) / k1);
-    if (len2 > 0.0)
-    {
-        float k2 = abs(dz) / H;
-        depth += (abs(k2 * len2) < 1e-4) ? len2 : (1.0 - exp(-min(k2 * len2, 80.0))) / k2;
-    }
+    depth += mgeMistPiece(prevZ, z0 + dz * L, L - prevT, H, S);
+
     // Wisps: thicker and thinner patches drifting slowly, from noise at the far end of the ray and half way along it
     // (in plan; mirrored passes keep x and y), over a few hundred units to a few cells. Not on the sky.
     if (dist < 1.0e5)
     {
         vec2 eye = osg_ViewMatrixInverse[3].xy + mgeMist.zw;
         vec2 farXY = eye + dirWorld.xy * dist;
-        vec2 mid = eye + dirWorld.xy * (0.5 * dist);
+        vec2 midXY = eye + dirWorld.xy * (0.5 * dist);
         float n = 0.55 * mgeMistNoise(farXY / 1400.0) + 0.25 * mgeMistNoise(farXY / 520.0 + vec2(7.3, 1.9))
-            + 0.20 * mgeMistNoise(mid / 3000.0 + vec2(3.1, 5.7));
+            + 0.20 * mgeMistNoise(midXY / 3000.0 + vec2(3.1, 5.7));
         depth *= mix(0.25, 1.75, smoothstep(0.3, 0.7, n));
     }
     return exp(-sigma * mgeMist.x * min(depth, 1e5));

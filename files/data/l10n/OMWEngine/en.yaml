@@ -277,12 +277,12 @@ MgeSunHazeTooltip: |-
     0% keeps MGE XE's white glow.
 MgeMorningMistValue: "Morning Mist ({value, number, percent})"
 MgeMorningMistTooltip: |-
-    Mist lying over the water and low land around sunrise: it builds before dawn, is thickest around sunrise and has burnt off three hours later. Some mornings are mistier than others.
+    A bank of mist lying on the water and the low shore around sunrise, with wisps drifting through it: it builds before dawn, is thickest around sunrise and has burnt off three hours later. Some mornings are mistier than others.
 
     Calm weather only (none in rain, storms or snow). 0% turns it off.
 MgeMistHeightValue: "Mist Height ({value})"
 MgeMistHeightTooltip: |-
-    How high the morning mist reaches above the water, in game units (a person is about 128). Low keeps it to the water and the shore, high fills the valleys inland.
+    How high the mist bank reaches above the water, in game units (a person is about 128). It is thick up to there and thins quickly above, so trees, ships and buildings taller than this rise out of it.
 MgeFogFollowsViewDistance: "Fog Follows View Distance"
 MgeFogFollowsViewDistanceTooltip: |-
     The fog ends at your View Distance instead of at Fog End, so the edge of the world never shows and the game draws no land the fog hides.
