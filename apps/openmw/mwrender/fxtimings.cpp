@@ -33,6 +33,9 @@ namespace MWRender::FxTimings
 
     void record(const std::string& technique, double ms)
     {
+        // the GPU's clock jumping (timer queries coming back as days on some drivers), not a measurement
+        if (!(ms < 10000.0))
+            return;
         const std::lock_guard lock(sMutex);
         Totals& totals = sTotals[technique];
         totals.mSum += ms;

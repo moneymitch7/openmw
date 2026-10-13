@@ -3,9 +3,13 @@
 #include <osg/PolygonMode>
 #include <osg/ShapeDrawable>
 #include <osgUtil/CullVisitor>
+#include <osgUtil/IntersectionVisitor>
+#include <osgUtil/LineSegmentIntersector>
 
 #include <exception>
 #include <limits>
+#include <optional>
+#include <utility>
 #include <thread>
 #include <vector>
 
@@ -367,8 +371,8 @@ namespace Terrain
         return lodFlags;
     }
 
-    void QuadTreeWorld::loadRenderingNode(
-        ViewDataEntry& entry, ViewData* vd, float cellWorldSize, const osg::Vec4i& gridbounds, bool compile)
+    void QuadTreeWorld::loadRenderingNode(ViewDataEntry& entry, ViewData* vd, float cellWorldSize,
+        const osg::Vec4i& gridbounds, bool compile, bool build)
     {
         if (!vd->hasChanged() && entry.mRenderingNode)
             return;
@@ -386,6 +390,10 @@ namespace Terrain
                 entry.mLodFlags = lodFlags;
             }
         }
+
+        // Only its LOD flags kept up to date, built when something needs it
+        if (!build)
+            return;
 
         if (!entry.mRenderingNode)
         {
@@ -474,6 +482,62 @@ namespace Terrain
         }
     }
 
+    namespace
+    {
+        // A ray's segment in world space, if the visitor casts one (a line segment, as all of the game's rays are)
+        std::optional<std::pair<osg::Vec3d, osg::Vec3d>> getRaySegment(osgUtil::IntersectionVisitor& iv)
+        {
+            osgUtil::Intersector* intersector = iv.getIntersector();
+            if (intersector == nullptr || dynamic_cast<osgUtil::LineSegmentIntersector*>(intersector) == nullptr)
+                return std::nullopt;
+            // the segment where the visitor is, in the terrain's (world) coordinates, as the visitor itself makes it
+            osg::ref_ptr<osgUtil::Intersector> local = intersector->clone(iv);
+            const auto* segment = dynamic_cast<osgUtil::LineSegmentIntersector*>(local.get());
+            if (segment == nullptr)
+                return std::nullopt;
+            return std::make_pair(segment->getStart(), segment->getEnd());
+        }
+
+        // Whether a ray passes over a quad tree node's piece of land, or near enough for the objects standing on it
+        // (paged objects reach past their chunk's edges). Seen from above: the land's height is not known here.
+        bool segmentNearNode(const std::pair<osg::Vec3d, osg::Vec3d>& ray, const QuadTreeNode& node)
+        {
+            constexpr double margin = 4096.0;
+            const osg::BoundingBox& box = node.getBoundingBox();
+            if (!node.hasValidBounds() || !box.valid())
+                return true;
+            const double minX = box.xMin() - margin;
+            const double maxX = box.xMax() + margin;
+            const double minY = box.yMin() - margin;
+            const double maxY = box.yMax() + margin;
+            // clip the segment to the rectangle (Liang-Barsky)
+            const osg::Vec3d& a = ray.first;
+            const osg::Vec3d d = ray.second - ray.first;
+            double t0 = 0.0;
+            double t1 = 1.0;
+            const auto clip = [&](double p, double q) {
+                if (p == 0.0)
+                    return q >= 0.0;
+                const double r = q / p;
+                if (p < 0.0)
+                {
+                    if (r > t1)
+                        return false;
+                    t0 = std::max(t0, r);
+                }
+                else
+                {
+                    if (r < t0)
+                        return false;
+                    t1 = std::min(t1, r);
+                }
+                return true;
+            };
+            return clip(-d.x(), a.x() - minX) && clip(d.x(), maxX - a.x()) && clip(-d.y(), a.y() - minY)
+                && clip(d.y(), maxY - a.y());
+        }
+    }
+
     void QuadTreeWorld::accept(osg::NodeVisitor& nv)
     {
         bool isCullVisitor = nv.getVisitorType() == osg::NodeVisitor::CULL_VISITOR;
@@ -494,9 +558,21 @@ namespace Terrain
 
         const float cellWorldSize = static_cast<float>(ESM::getCellSize(mWorldspace));
 
+        // OpenMGE XE: a ray (what is under the crosshair, a script's ray) goes only through the chunks along it.
+        // It used to build every chunk of the whole view it did not find ready, there and then: the crosshair's
+        // ray stalled a frame for up to a second after a dialogue or a turn, pointing at nothing.
+        std::optional<std::pair<osg::Vec3d, osg::Vec3d>> ray;
+        if (!isCullVisitor)
+            ray = getRaySegment(static_cast<osgUtil::IntersectionVisitor&>(nv));
+
         for (unsigned int i = 0; i < vd->getNumEntries(); ++i)
         {
             ViewDataEntry& entry = vd->getEntry(i);
+            if (ray && !segmentNearNode(*ray, *entry.mNode))
+            {
+                loadRenderingNode(entry, vd, cellWorldSize, mActiveGrid, false, false);
+                continue;
+            }
             loadRenderingNode(entry, vd, cellWorldSize, mActiveGrid, false);
             entry.mRenderingNode->accept(nv);
         }

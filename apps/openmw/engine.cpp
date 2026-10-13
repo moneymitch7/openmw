@@ -239,7 +239,13 @@ namespace
                 }
                 for (Column& column : mColumns)
                     if ((column.mCamera ? cameraStats : stats).getAttribute(i, column.mAttribute, value))
+                    {
+                        // A time of more than a minute is the GPU's clock jumping (its timer queries come back as
+                        // days now and then on some drivers), not a measurement: left out of the averages.
+                        if (column.mScale != 1.0 && !(value * column.mScale < 60000.0))
+                            continue;
                         column.mSum.add(value * column.mScale);
+                    }
                 if (frameMs >= sSlowFrameMs)
                     logSlowFrame(frameMs, i, stats, cameraStats, menu);
             }

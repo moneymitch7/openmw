@@ -89,8 +89,8 @@ namespace Terrain
 
     private:
         void ensureQuadTreeBuilt();
-        void loadRenderingNode(
-            ViewDataEntry& entry, ViewData* vd, float cellWorldSize, const osg::Vec4i& gridbounds, bool compile);
+        void loadRenderingNode(ViewDataEntry& entry, ViewData* vd, float cellWorldSize, const osg::Vec4i& gridbounds,
+            bool compile, bool build = true);
 
         osg::ref_ptr<RootNode> mRootNode;
 
