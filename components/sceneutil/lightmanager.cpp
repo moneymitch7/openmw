@@ -370,6 +370,10 @@ namespace SceneUtil
                                 0.f);
                         }
                     }
+                    // A light with its own bounce (a held light) gets the reach of its bounce in carrierAxis.w: its
+                    // radius before the Light Radius Multiplier, see calcPointLightBounce in lib/light/util.glsl
+                    if (bound.mLightSource->getBounce() >= 0.f)
+                        gpuLight.mCarrierAxis.w() = bound.mLightSource->getRadius();
                     bound.mGpuIndex = static_cast<int>(cache.mGPULights[frameId]->getData().size());
                     cache.mGPULights[frameId]->getData().push_back(gpuLight);
                 }

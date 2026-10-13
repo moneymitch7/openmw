@@ -95,8 +95,14 @@ float pointLightBounceAmount(PointLight light) {
     return light.position.w >= 0.0 ? light.position.w : pointLightTuning.z;
 }
 
+// A held light's bounce reaches only as far as its light did before the Light Radius Multiplier (carrierAxis.w): a
+// lantern lights up the walls around whoever carries it, not the far end of a great hall.
 vec3 calcPointLightBounce(PointLight light, float dist, vec3 lightDir, vec3 viewNormal) {
-    float bounce = sqrt(min(calcBaseAttenuation(light, dist), 1.0)) * calcRadiusFade(light, dist);
+    float bounce = sqrt(min(calcBaseAttenuation(light, dist), 1.0));
+    if (light.position.w >= 0.0 && light.carrierAxis.w > 0.0)
+        bounce *= 1.0 - fade((dist / light.carrierAxis.w - 0.75) / 0.25);
+    else
+        bounce *= calcRadiusFade(light, dist);
     float wrap = 0.5 + 0.25 * (1.0 + dot(viewNormal, lightDir));
     return light.diffuse.xyz * (pointLightBounceAmount(light) * (1.0 + pointLightTuning.x) * bounce * wrap);
 }
