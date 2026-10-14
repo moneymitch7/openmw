@@ -12,6 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@ namespace MWWorld
 namespace SceneUtil
 {
     class OcclusionCuller;
+    class WorkQueue;
 }
 
 namespace MWRender
@@ -47,7 +49,22 @@ namespace MWRender
     {
     public:
         ObjectPaging(Resource::SceneManager* sceneManager, ESM::RefId worldspace);
-        ~ObjectPaging() = default;
+        ~ObjectPaging();
+
+        /// Rebuilds of active grid chunks after an object in them changed run on this queue (else during the cull).
+        void setWorkQueue(const std::shared_ptr<SceneUtil::WorkQueue>& workQueue);
+
+        /// Puts the chunks rebuilt in the background in the cache. Call once a frame from the main thread.
+        /// @return true if view needs rebuild
+        bool applyRebuiltChunks();
+
+        /// For the background rebuilds: what they build for, gone once the ObjectPaging is.
+        struct RebuildOwner
+        {
+            std::shared_mutex mMutex;
+            ObjectPaging* mObjectPaging = nullptr;
+        };
+        void rebuildChunk(const ChunkId& id, const osg::Vec3f& viewPoint, unsigned int epoch);
 
         osg::ref_ptr<osg::Node> getChunk(float size, const osg::Vec2f& center, unsigned char lod, unsigned int lodFlags,
             bool activeGrid, const osg::Vec3f& viewPoint, bool compile) override;
@@ -140,10 +157,17 @@ namespace MWRender
         unsigned int mAutoLodInsertions = 0;
         std::atomic<unsigned int> mAutoLodMeshes{ 0 };
 
-        // Active grid chunks dropped from the cache because an object in them changed: their rebuild is logged.
+        // OpenMGE XE: active grid chunks an object in has changed are built again in the background.
+        std::shared_ptr<RebuildOwner> mRebuildOwner;
         std::mutex mRebuildMutex;
-        std::set<ChunkId> mPendingRebuilds;
-        void noteRebuilds(const std::vector<ChunkId>& chunks);
+        std::weak_ptr<SceneUtil::WorkQueue> mWorkQueue;
+        osg::Vec3f mLastViewPoint;
+        unsigned int mRebuildEpoch = 0; // the cache was cleared this many times
+        std::set<ChunkId> mRebuilding;
+        std::set<ChunkId> mRebuildAgain;
+        std::map<ChunkId, osg::ref_ptr<osg::Node>> mRebuilt;
+        /// @return true if view needs rebuild
+        bool updateChunks(const std::vector<ChunkId>& chunks);
 
         using CellRefsKey = std::tuple<int, int, bool>; // Cell X, Cell Y, far
         static constexpr std::size_t sMaxCachedCellRefs = 64;

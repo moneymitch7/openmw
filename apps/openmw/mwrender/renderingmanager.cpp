@@ -1020,6 +1020,10 @@ namespace MWRender
     {
         reportStats();
 
+        // OpenMGE XE: nearby object paging chunks rebuilt in the background after an object in them changed
+        if (mObjectPaging != nullptr && mObjectPaging->applyRebuiltChunks())
+            mTerrain->rebuildViews();
+
         mResourceSystem->getSceneManager()->getShaderManager().update(*mViewer);
 
         mWater->setRainIntensity(mSky->getRainRipplesEnabled() ? mSky->getPrecipitationAlpha() : 0.f);
@@ -1661,6 +1665,7 @@ namespace MWRender
             {
                 newChunkMgr.mObjectPaging
                     = std::make_unique<ObjectPaging>(mResourceSystem->getSceneManager(), worldspace);
+                newChunkMgr.mObjectPaging->setWorkQueue(mWorkQueue);
                 quadTreeWorld->addChunkManager(newChunkMgr.mObjectPaging.get());
                 mResourceSystem->addResourceManager(newChunkMgr.mObjectPaging.get());
             }

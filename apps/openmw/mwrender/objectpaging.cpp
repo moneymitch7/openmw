@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <limits>
 #include <optional>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -64,6 +65,7 @@
 #include <components/sceneutil/templateref.hpp>
 #include <components/sceneutil/userdata.hpp>
 #include <components/sceneutil/util.hpp>
+#include <components/sceneutil/workqueue.hpp>
 #include <components/settings/values.hpp>
 #include <components/vfs/manager.hpp>
 
@@ -276,25 +278,13 @@ namespace MWRender
         const unsigned char lod = static_cast<unsigned char>(lodFlags >> (4 * 4));
         const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::Objects);
         SceneUtil::LoadProfile::add(SceneUtil::LoadProfile::Step::ObjectChunks, 1);
-        bool rebuild = false;
         if (activeGrid)
         {
             const std::lock_guard lock(mRebuildMutex);
-            rebuild = mPendingRebuilds.erase(id) > 0;
+            mLastViewPoint = viewPoint;
         }
-        const auto start = std::chrono::steady_clock::now();
         osg::ref_ptr<osg::Node> node = createChunk(size, center, activeGrid, viewPoint, compile, lod);
         mCache->addEntryToObjectCache(id, node.get());
-        if (rebuild)
-        {
-            // OpenMGE XE: what picking up, moving or disabling a merged object costs (the frame waits for it).
-            const double ms
-                = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-            const auto* refnums = SceneUtil::findUserData<std::vector<ESM::RefNum>>(*node);
-            Log(Debug::Info) << "Rebuilt a nearby object paging chunk (" << size << " cells, "
-                             << (refnums != nullptr ? refnums->size() : 0) << " objects) after an object changed in "
-                             << std::fixed << std::setprecision(1) << ms << " ms";
-        }
         return node;
     }
 
@@ -628,6 +618,8 @@ namespace MWRender
         , mRefTrackerLocked(false)
     {
         sMergeItems = mActiveGrid && Settings::terrain().mObjectPagingActiveGridItems;
+        mRebuildOwner = std::make_shared<RebuildOwner>();
+        mRebuildOwner->mObjectPaging = this;
     }
 
     struct PagedCellRef
@@ -1409,15 +1401,11 @@ namespace MWRender
                 return false;
         }
 
+        Log(Debug::Verbose) << "Object paging: " << id << " " << (enabled ? "enabled" : "disabled or deleted");
         // Items are only merged in the active grid: leave the distant chunks be.
         CollectIntersecting ccf(isItemType(type), pos, cell, mWorldspace);
         mCache->call(ccf);
-        if (ccf.getCollected().empty())
-            return false;
-        for (const ChunkId& chunk : ccf.getCollected())
-            mCache->removeFromObjectCache(chunk);
-        noteRebuilds(ccf.getCollected());
-        return true;
+        return updateChunks(ccf.getCollected());
     }
 
     bool ObjectPaging::blacklistObject(
@@ -1434,29 +1422,133 @@ namespace MWRender
                 return false;
         }
 
+        Log(Debug::Verbose) << "Object paging: " << id << " moved, scaled or deleted";
         CollectIntersecting ccf(true, pos, cell, mWorldspace);
         mCache->call(ccf);
-        if (ccf.getCollected().empty())
-            return false;
-        for (const ChunkId& chunk : ccf.getCollected())
-            mCache->removeFromObjectCache(chunk);
-        noteRebuilds(ccf.getCollected());
-        return true;
+        return updateChunks(ccf.getCollected());
     }
 
-    void ObjectPaging::noteRebuilds(const std::vector<ChunkId>& chunks)
+    namespace
+    {
+        // OpenMGE XE: builds an active grid chunk again in the background after an object in it changed.
+        class RebuildChunkItem : public SceneUtil::WorkItem
+        {
+        public:
+            RebuildChunkItem(
+                std::shared_ptr<ObjectPaging::RebuildOwner> owner, ChunkId id, osg::Vec3f viewPoint, unsigned int epoch)
+                : mOwner(std::move(owner))
+                , mId(id)
+                , mViewPoint(viewPoint)
+                , mEpoch(epoch)
+            {
+            }
+
+            void doWork() override
+            {
+                const std::shared_lock lock(mOwner->mMutex);
+                if (mOwner->mObjectPaging != nullptr)
+                    mOwner->mObjectPaging->rebuildChunk(mId, mViewPoint, mEpoch);
+            }
+
+        private:
+            std::shared_ptr<ObjectPaging::RebuildOwner> mOwner;
+            ChunkId mId;
+            osg::Vec3f mViewPoint;
+            unsigned int mEpoch;
+        };
+    }
+
+    ObjectPaging::~ObjectPaging()
+    {
+        // waits for a rebuild under way
+        const std::unique_lock lock(mRebuildOwner->mMutex);
+        mRebuildOwner->mObjectPaging = nullptr;
+    }
+
+    void ObjectPaging::setWorkQueue(const std::shared_ptr<SceneUtil::WorkQueue>& workQueue)
     {
         const std::lock_guard lock(mRebuildMutex);
+        mWorkQueue = workQueue;
+    }
+
+    bool ObjectPaging::updateChunks(const std::vector<ChunkId>& chunks)
+    {
+        bool removed = false;
+        const std::lock_guard lock(mRebuildMutex);
+        const std::shared_ptr<SceneUtil::WorkQueue> workQueue = mWorkQueue.lock();
         for (const ChunkId& chunk : chunks)
-            if (std::get<2>(chunk))
-                mPendingRebuilds.insert(chunk);
+        {
+            // Active grid chunks are drawn until their new version is ready: making it during the frame would hold the
+            // frame up, many times over when a script moves many objects at once. An item picked up stays a frame or
+            // two longer, one moved shows at both places as long.
+            if (std::get<2>(chunk) && workQueue != nullptr)
+            {
+                if (mRebuilding.contains(chunk))
+                    mRebuildAgain.insert(chunk); // its version under way may miss this change
+                else
+                {
+                    mRebuilding.insert(chunk);
+                    workQueue->addWorkItem(
+                        std::make_shared<RebuildChunkItem>(mRebuildOwner, chunk, mLastViewPoint, mRebuildEpoch));
+                }
+                continue;
+            }
+            mCache->removeFromObjectCache(chunk);
+            removed = true;
+        }
+        return removed;
+    }
+
+    void ObjectPaging::rebuildChunk(const ChunkId& id, const osg::Vec3f& viewPoint, unsigned int epoch)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        osg::ref_ptr<osg::Node> node;
+        {
+            const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::Objects);
+            node = createChunk(std::get<1>(id), std::get<0>(id), true, viewPoint, true, 0);
+        }
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        const auto* refnums = SceneUtil::findUserData<std::vector<ESM::RefNum>>(*node);
+        Log(Debug::Info) << "Rebuilt a nearby object paging chunk (" << std::get<1>(id) << " cells, "
+                         << (refnums != nullptr ? refnums->size() : 0) << " objects) in the background in "
+                         << std::fixed << std::setprecision(1) << ms << " ms";
+
+        const std::lock_guard lock(mRebuildMutex);
+        if (epoch == mRebuildEpoch)
+            mRebuilt[id] = std::move(node);
+        if (mRebuildAgain.erase(id) > 0)
+        {
+            if (const std::shared_ptr<SceneUtil::WorkQueue> workQueue = mWorkQueue.lock())
+            {
+                workQueue->addWorkItem(
+                    std::make_shared<RebuildChunkItem>(mRebuildOwner, id, mLastViewPoint, mRebuildEpoch));
+                return;
+            }
+        }
+        mRebuilding.erase(id);
+    }
+
+    bool ObjectPaging::applyRebuiltChunks()
+    {
+        std::map<ChunkId, osg::ref_ptr<osg::Node>> rebuilt;
+        {
+            const std::lock_guard lock(mRebuildMutex);
+            if (mRebuilt.empty())
+                return false;
+            rebuilt.swap(mRebuilt);
+        }
+        for (auto& [id, node] : rebuilt)
+            mCache->addEntryToObjectCache(id, std::move(node));
+        return true;
     }
 
     void ObjectPaging::clear()
     {
         {
+            // chunks made before the cache is cleared are of no use after
             const std::lock_guard rebuildLock(mRebuildMutex);
-            mPendingRebuilds.clear();
+            ++mRebuildEpoch;
+            mRebuilt.clear();
         }
         std::lock_guard<std::mutex> lock(mRefTrackerMutex);
         mRefTrackerNew.mDisabled.clear();
@@ -1475,6 +1567,11 @@ namespace MWRender
                 return false;
             else
                 mRefTracker = mRefTrackerNew;
+        }
+        {
+            const std::lock_guard rebuildLock(mRebuildMutex);
+            ++mRebuildEpoch;
+            mRebuilt.clear();
         }
         mCache->clear();
         return true;
