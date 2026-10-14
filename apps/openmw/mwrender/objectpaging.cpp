@@ -1401,10 +1401,12 @@ namespace MWRender
                 return false;
         }
 
-        Log(Debug::Verbose) << "Object paging: " << id << " " << (enabled ? "enabled" : "disabled or deleted");
         // Items are only merged in the active grid: leave the distant chunks be.
         CollectIntersecting ccf(isItemType(type), pos, cell, mWorldspace);
         mCache->call(ccf);
+        if (ccf.getCollected().empty())
+            return false;
+        Log(Debug::Verbose) << "Object paging: " << id << " " << (enabled ? "enabled" : "disabled or deleted");
         return updateChunks(ccf.getCollected());
     }
 
@@ -1422,9 +1424,11 @@ namespace MWRender
                 return false;
         }
 
-        Log(Debug::Verbose) << "Object paging: " << id << " moved, scaled or deleted";
         CollectIntersecting ccf(true, pos, cell, mWorldspace);
         mCache->call(ccf);
+        if (ccf.getCollected().empty())
+            return false;
+        Log(Debug::Verbose) << "Object paging: " << id << " moved, scaled or deleted";
         return updateChunks(ccf.getCollected());
     }
 

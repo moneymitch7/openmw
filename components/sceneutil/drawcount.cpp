@@ -4,6 +4,7 @@
 #include <mutex>
 
 #include <osg/Camera>
+#include <osg/FrameStamp>
 #include <osgUtil/CullVisitor>
 
 namespace SceneUtil::DrawCount
@@ -27,11 +28,38 @@ namespace SceneUtil::DrawCount
 
         constexpr unsigned int sSampleEvery = 10;
 
+        using Counts = std::array<unsigned int, sNumCategories>;
+
         std::atomic<bool> sEnabled{ false };
-        std::atomic<unsigned int> sCulls{ 0 };
         std::mutex sLatestMutex;
-        std::array<unsigned int, sNumCategories> sLatest{};
+        Counts sLatest{};
         bool sHaveLatest = false;
+        // The frame being added up: every camera of a frame has its own cull visitor (the scene, the interface, ...),
+        // each adds what it drew once it is used again.
+        unsigned int sSumFrame = 0;
+        Counts sSum{};
+        bool sHaveSum = false;
+
+        void addCounts(unsigned int frame, const Counts& counts)
+        {
+            const std::lock_guard lock(sLatestMutex);
+            if (sHaveSum && frame == sSumFrame)
+            {
+                for (std::size_t i = 0; i < sNumCategories; ++i)
+                    sSum[i] += counts[i];
+                return;
+            }
+            if (sHaveSum && frame < sSumFrame)
+                return; // a visitor not used since an older counted frame
+            if (sHaveSum)
+            {
+                sLatest = sSum;
+                sHaveLatest = true;
+            }
+            sSum = counts;
+            sSumFrame = frame;
+            sHaveSum = true;
+        }
 
         // What a node itself says the drawables below it are, if anything.
         bool nodeCategory(const osg::Node& node, Category& category)
@@ -115,25 +143,26 @@ namespace SceneUtil::DrawCount
             void reset() override
             {
                 osgUtil::CullVisitor::reset();
-                // The frame this visitor counted last is complete now: it is the latest one.
-                if (mSampling)
-                {
-                    const std::lock_guard lock(sLatestMutex);
-                    sLatest = mCounts;
-                    sHaveLatest = true;
-                }
-                mSampling = sEnabled.load(std::memory_order_relaxed)
-                    && sCulls.fetch_add(1, std::memory_order_relaxed) % sSampleEvery == 0;
-                if (mSampling)
-                    mCounts.fill(0);
+                // What this visitor counted in its last use is complete now.
+                if (mCounting)
+                    addCounts(mCountFrame, mCounts);
+                mCounting = false;
             }
 
             void apply(osg::Drawable& drawable) override
             {
-                if (!mSampling)
+                if (!mCounting)
                 {
-                    osgUtil::CullVisitor::apply(drawable);
-                    return;
+                    const osg::FrameStamp* frameStamp = getFrameStamp();
+                    if (!sEnabled.load(std::memory_order_relaxed) || frameStamp == nullptr
+                        || frameStamp->getFrameNumber() % sSampleEvery != 0)
+                    {
+                        osgUtil::CullVisitor::apply(drawable);
+                        return;
+                    }
+                    mCounting = true;
+                    mCountFrame = frameStamp->getFrameNumber();
+                    mCounts.fill(0);
                 }
                 // Every drawable kept for drawing takes a render leaf.
                 const unsigned int before = _currentReuseRenderLeafIndex;
@@ -144,8 +173,9 @@ namespace SceneUtil::DrawCount
             }
 
         private:
-            bool mSampling = false;
-            std::array<unsigned int, sNumCategories> mCounts{};
+            bool mCounting = false; // counting the frame mCountFrame
+            unsigned int mCountFrame = 0;
+            Counts mCounts{};
         };
     }
 
