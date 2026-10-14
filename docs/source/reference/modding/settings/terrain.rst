@@ -144,6 +144,18 @@ Terrain Settings
       Consider increasing the 'max lights' setting value in the 'Shaders' section to avoid this issue.
 
 .. omw-setting::
+   :title: object paging active grid items
+   :type: boolean
+   :range: true, false
+   :default: true
+
+   Also merges the loose items lying around in the active cells (bottles, plates, books, ingredients, weapons, armor and
+   other clutter) into the active grid's chunks, as containers and doors are. In towns these are most of the objects
+   drawn, so merging them saves many draw calls. Enchanted items, which glow, and lights stay separate.
+   Picking up, moving or dropping an item rebuilds the chunk it was in.
+   Has no effect unless 'object paging active grid' is enabled.
+
+.. omw-setting::
    :title: object paging merge factor
    :type: float32
    :range: >0

@@ -1,7 +1,9 @@
 #include "objectpaging.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <limits>
 #include <optional>
 #include <unordered_map>
@@ -21,10 +23,21 @@
 #include <components/esm/path.hpp>
 #include <components/esm3/esmreader.hpp>
 #include <components/esm3/loadacti.hpp>
+#include <components/esm3/loadalch.hpp>
+#include <components/esm3/loadappa.hpp>
+#include <components/esm3/loadarmo.hpp>
+#include <components/esm3/loadbook.hpp>
 #include <components/esm3/loadcell.hpp>
+#include <components/esm3/loadclot.hpp>
 #include <components/esm3/loadcont.hpp>
 #include <components/esm3/loaddoor.hpp>
+#include <components/esm3/loadingr.hpp>
+#include <components/esm3/loadlock.hpp>
+#include <components/esm3/loadmisc.hpp>
+#include <components/esm3/loadprob.hpp>
+#include <components/esm3/loadrepa.hpp>
 #include <components/esm3/loadstat.hpp>
+#include <components/esm3/loadweap.hpp>
 #include <components/esm3/readerscache.hpp>
 #include <components/esm4/loadacti.hpp>
 #include <components/esm4/loadcont.hpp>
@@ -38,8 +51,8 @@
 #include <components/misc/rng.hpp>
 #include <components/nifosg/autotransform.hpp>
 #include <components/resource/scenemanager.hpp>
-#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/autolod.hpp>
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/material.hpp>
@@ -101,8 +114,35 @@ namespace MWRender
             bool mIsReflection = false;
         };
 
+        // OpenMGE XE: [Terrain] object paging active grid items, read once by ObjectPaging's constructor.
+        bool sMergeItems = false;
+
+        // Loose items (clutter) merged into the active grid's chunks along with containers and doors.
+        bool isItemType(int type)
+        {
+            switch (type)
+            {
+                case ESM::REC_MISC:
+                case ESM::REC_INGR:
+                case ESM::REC_BOOK:
+                case ESM::REC_ALCH:
+                case ESM::REC_WEAP:
+                case ESM::REC_ARMO:
+                case ESM::REC_CLOT:
+                case ESM::REC_APPA:
+                case ESM::REC_LOCK:
+                case ESM::REC_PROB:
+                case ESM::REC_REPA:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         bool typeFilter(int type, bool far)
         {
+            if (isItemType(type))
+                return sMergeItems && !far;
             switch (type)
             {
                 case ESM::REC_STAT:
@@ -121,6 +161,45 @@ namespace MWRender
                 default:
                     return false;
             }
+        }
+
+        template <typename Record>
+        bool isEnchanted(const MWWorld::ESMStore& store, ESM::RefId id)
+        {
+            const Record* record = store.get<Record>().searchStatic(id);
+            return record != nullptr && !record->mEnchant.empty();
+        }
+
+        /// typeFilter, and items only in the active grid (out of it, they are too small to be drawn anyway), and not
+        /// enchanted ones: they glow, which a merged chunk can't do.
+        bool refFilter(int type, ESM::RefId id, bool far, bool activeGrid, const MWWorld::ESMStore& store)
+        {
+            if (!typeFilter(type, far))
+                return false;
+            if (!activeGrid && isItemType(type))
+                return false;
+            switch (type)
+            {
+                case ESM::REC_WEAP:
+                    return !isEnchanted<ESM::Weapon>(store, id);
+                case ESM::REC_ARMO:
+                    return !isEnchanted<ESM::Armor>(store, id);
+                case ESM::REC_CLOT:
+                    return !isEnchanted<ESM::Clothing>(store, id);
+                case ESM::REC_BOOK:
+                    return !isEnchanted<ESM::Book>(store, id);
+                default:
+                    return true;
+            }
+        }
+
+        template <typename Record>
+        VFS::Path::Normalized getEsm3Model(const MWWorld::ESMStore& store, ESM::RefId id)
+        {
+            const Record* record = store.get<Record>().searchStatic(id);
+            if (record == nullptr)
+                return {};
+            return record->mModel.getNormalized();
         }
 
         template <typename Record>
@@ -155,6 +234,28 @@ namespace MWRender
                     return getEsm4Model(store.get<ESM4::Container>().searchStatic(id));
                 case ESM::REC_FURN4:
                     return getEsm4Model(store.get<ESM4::Furniture>().searchStatic(id));
+                case ESM::REC_MISC:
+                    return getEsm3Model<ESM::Miscellaneous>(store, id);
+                case ESM::REC_INGR:
+                    return getEsm3Model<ESM::Ingredient>(store, id);
+                case ESM::REC_BOOK:
+                    return getEsm3Model<ESM::Book>(store, id);
+                case ESM::REC_ALCH:
+                    return getEsm3Model<ESM::Potion>(store, id);
+                case ESM::REC_WEAP:
+                    return getEsm3Model<ESM::Weapon>(store, id);
+                case ESM::REC_ARMO:
+                    return getEsm3Model<ESM::Armor>(store, id);
+                case ESM::REC_CLOT:
+                    return getEsm3Model<ESM::Clothing>(store, id);
+                case ESM::REC_APPA:
+                    return getEsm3Model<ESM::Apparatus>(store, id);
+                case ESM::REC_LOCK:
+                    return getEsm3Model<ESM::Lockpick>(store, id);
+                case ESM::REC_PROB:
+                    return getEsm3Model<ESM::Probe>(store, id);
+                case ESM::REC_REPA:
+                    return getEsm3Model<ESM::Repair>(store, id);
                 default:
                     return {};
             }
@@ -175,8 +276,25 @@ namespace MWRender
         const unsigned char lod = static_cast<unsigned char>(lodFlags >> (4 * 4));
         const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::Objects);
         SceneUtil::LoadProfile::add(SceneUtil::LoadProfile::Step::ObjectChunks, 1);
+        bool rebuild = false;
+        if (activeGrid)
+        {
+            const std::lock_guard lock(mRebuildMutex);
+            rebuild = mPendingRebuilds.erase(id) > 0;
+        }
+        const auto start = std::chrono::steady_clock::now();
         osg::ref_ptr<osg::Node> node = createChunk(size, center, activeGrid, viewPoint, compile, lod);
         mCache->addEntryToObjectCache(id, node.get());
+        if (rebuild)
+        {
+            // OpenMGE XE: what picking up, moving or disabling a merged object costs (the frame waits for it).
+            const double ms
+                = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            const auto* refnums = SceneUtil::findUserData<std::vector<ESM::RefNum>>(*node);
+            Log(Debug::Info) << "Rebuilt a nearby object paging chunk (" << size << " cells, "
+                             << (refnums != nullptr ? refnums->size() : 0) << " objects) after an object changed in "
+                             << std::fixed << std::setprecision(1) << ms << " ms";
+        }
         return node;
     }
 
@@ -509,7 +627,17 @@ namespace MWRender
         , mReflectionStaticsDistance(Settings::water().mReflectionStaticsDistance)
         , mRefTrackerLocked(false)
     {
+        sMergeItems = mActiveGrid && Settings::terrain().mObjectPagingActiveGridItems;
     }
+
+    struct PagedCellRef
+    {
+        ESM::RefId mRefId;
+        ESM::RefNum mRefNum;
+        osg::Vec3f mPosition;
+        osg::Vec3f mRotation;
+        float mScale;
+    };
 
     namespace
     {
@@ -518,15 +646,6 @@ namespace MWRender
         constexpr int sAutoLodMaxLevel = 7;
         // Meshes with fewer triangles are left as they are.
         constexpr unsigned int sAutoLodMinTriangles = 64;
-
-        struct PagedCellRef
-        {
-            ESM::RefId mRefId;
-            ESM::RefNum mRefNum;
-            osg::Vec3f mPosition;
-            osg::Vec3f mRotation;
-            float mScale;
-        };
 
         PagedCellRef makePagedCellRef(const ESM::CellRef& value)
         {
@@ -550,72 +669,60 @@ namespace MWRender
             };
         }
 
-        std::map<ESM::RefNum, PagedCellRef> collectESM3References(
-            float size, const osg::Vec2i& startCell, const MWWorld::ESMStore& store)
+        void collectESM3CellReferences(const ESM::Cell& cell, bool far, bool activeGrid, const MWWorld::ESMStore& store,
+            ESM::ReadersCache& readers, CellRefOps& ops)
         {
-            std::map<ESM::RefNum, PagedCellRef> refs;
-            ESM::ReadersCache readers;
-            for (int cellX = startCell.x(); cellX < startCell.x() + size; ++cellX)
+            for (size_t i = 0; i < cell.mContextList.size(); ++i)
             {
-                for (int cellY = startCell.y(); cellY < startCell.y() + size; ++cellY)
+                try
                 {
-                    const ESM::Cell* cell = store.get<ESM::Cell>().searchStatic(cellX, cellY);
-                    if (!cell)
-                        continue;
-                    for (size_t i = 0; i < cell->mContextList.size(); ++i)
+                    const std::size_t index = static_cast<std::size_t>(cell.mContextList[i].index);
+                    const ESM::ReadersCache::BusyItem reader = readers.get(index);
+                    cell.restore(*reader, i);
+                    ESM::CellRef ref;
+                    ESM::MovedCellRef cMRef;
+                    bool deleted = false;
+                    bool moved = false;
+                    while (ESM::Cell::getNextRef(
+                        *reader, ref, deleted, cMRef, moved, ESM::Cell::GetNextRefMode::LoadOnlyNotMoved))
                     {
-                        try
-                        {
-                            const std::size_t index = static_cast<std::size_t>(cell->mContextList[i].index);
-                            const ESM::ReadersCache::BusyItem reader = readers.get(index);
-                            cell->restore(*reader, i);
-                            ESM::CellRef ref;
-                            ESM::MovedCellRef cMRef;
-                            bool deleted = false;
-                            bool moved = false;
-                            while (ESM::Cell::getNextRef(
-                                *reader, ref, deleted, cMRef, moved, ESM::Cell::GetNextRefMode::LoadOnlyNotMoved))
-                            {
-                                if (moved)
-                                    continue;
-
-                                if (std::find(cell->mMovedRefs.begin(), cell->mMovedRefs.end(), ref.mRefNum)
-                                    != cell->mMovedRefs.end())
-                                    continue;
-
-                                int type = store.findStatic(ref.mRefID);
-                                if (!typeFilter(type, size >= 2))
-                                    continue;
-                                if (deleted)
-                                {
-                                    refs.erase(ref.mRefNum);
-                                    continue;
-                                }
-                                refs.insert_or_assign(ref.mRefNum, makePagedCellRef(ref));
-                            }
-                        }
-                        catch (const std::exception& e)
-                        {
-                            Log(Debug::Warning) << "Failed to collect references from cell \"" << cell->getDescription()
-                                                << "\": " << e.what();
+                        if (moved)
                             continue;
-                        }
-                    }
-                    for (const auto& [ref, deleted] : cell->mLeasedRefs)
-                    {
+
+                        if (std::find(cell.mMovedRefs.begin(), cell.mMovedRefs.end(), ref.mRefNum)
+                            != cell.mMovedRefs.end())
+                            continue;
+
+                        int type = store.findStatic(ref.mRefID);
+                        if (!refFilter(type, ref.mRefID, far, activeGrid, store))
+                            continue;
                         if (deleted)
                         {
-                            refs.erase(ref.mRefNum);
+                            ops.emplace_back(ref.mRefNum, std::nullopt);
                             continue;
                         }
-                        int type = store.findStatic(ref.mRefID);
-                        if (!typeFilter(type, size >= 2))
-                            continue;
-                        refs.insert_or_assign(ref.mRefNum, makePagedCellRef(ref));
+                        ops.emplace_back(ref.mRefNum, makePagedCellRef(ref));
                     }
                 }
+                catch (const std::exception& e)
+                {
+                    Log(Debug::Warning) << "Failed to collect references from cell \"" << cell.getDescription()
+                                        << "\": " << e.what();
+                    continue;
+                }
             }
-            return refs;
+            for (const auto& [ref, deleted] : cell.mLeasedRefs)
+            {
+                if (deleted)
+                {
+                    ops.emplace_back(ref.mRefNum, std::nullopt);
+                    continue;
+                }
+                int type = store.findStatic(ref.mRefID);
+                if (!refFilter(type, ref.mRefID, far, activeGrid, store))
+                    continue;
+                ops.emplace_back(ref.mRefNum, makePagedCellRef(ref));
+            }
         }
 
         std::map<ESM::RefNum, PagedCellRef> collectESM4References(
@@ -656,6 +763,57 @@ namespace MWRender
             }
             return refs;
         }
+    }
+
+    std::map<ESM::RefNum, PagedCellRef> ObjectPaging::collectESM3References(
+        float size, const osg::Vec2i& startCell, bool activeGrid, const MWWorld::ESMStore& store)
+    {
+        const bool far = size >= 2;
+        std::map<ESM::RefNum, PagedCellRef> refs;
+        ESM::ReadersCache readers;
+        for (int cellX = startCell.x(); cellX < startCell.x() + size; ++cellX)
+        {
+            for (int cellY = startCell.y(); cellY < startCell.y() + size; ++cellY)
+            {
+                const ESM::Cell* cell = store.get<ESM::Cell>().searchStatic(cellX, cellY);
+                if (!cell)
+                    continue;
+
+                // OpenMGE XE: the active grid's chunks are a cell or less, so several of them read the same cell, and
+                // one is read again whenever an object in it changes (an item picked up): keep the last cells read.
+                std::shared_ptr<const CellRefOps> ops;
+                const CellRefsKey key{ cellX, cellY, far };
+                if (activeGrid)
+                {
+                    const std::lock_guard lock(mCellRefsMutex);
+                    const auto found = mCellRefs.find(key);
+                    if (found != mCellRefs.end())
+                        ops = found->second;
+                }
+                if (ops == nullptr)
+                {
+                    auto collected = std::make_shared<CellRefOps>();
+                    collectESM3CellReferences(*cell, far, activeGrid, store, readers, *collected);
+                    ops = collected;
+                    if (activeGrid)
+                    {
+                        const std::lock_guard lock(mCellRefsMutex);
+                        if (mCellRefs.size() >= sMaxCachedCellRefs)
+                            mCellRefs.clear();
+                        mCellRefs.emplace(key, ops);
+                    }
+                }
+
+                for (const auto& [refNum, ref] : *ops)
+                {
+                    if (ref.has_value())
+                        refs.insert_or_assign(refNum, *ref);
+                    else
+                        refs.erase(refNum);
+                }
+            }
+        }
+        return refs;
     }
 
     osg::ref_ptr<const osg::Node> ObjectPaging::getAutoLod(
@@ -746,7 +904,7 @@ namespace MWRender
         {
             const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectRefs);
             if (mWorldspace == ESM::Cell::sDefaultWorldspaceId)
-                refs = collectESM3References(size, startCell, store);
+                refs = collectESM3References(size, startCell, activeGrid, store);
             else
                 refs = collectESM4References(size, startCell, mWorldspace);
         }
@@ -942,6 +1100,10 @@ namespace MWRender
             = osg::Vec3f(center.x(), center.y(), 0) * static_cast<float>(getCellSize(mWorldspace));
         osg::ref_ptr<osg::Group> group = new osg::Group;
         osg::ref_ptr<osg::Group> mergeGroup = new osg::Group;
+        // OpenMGE XE: items keep the object mask (they stay out of the water reflection at reflection detail 2 and of
+        // the shadows when object shadows are off), so they are merged among themselves, apart from the statics.
+        osg::ref_ptr<osg::Group> itemGroup = new osg::Group;
+        osg::ref_ptr<osg::Group> itemMergeGroup = new osg::Group;
         std::vector<osg::ref_ptr<const osg::Node>> templateRefs;
         osgUtil::StateToCompile stateToCompile(0, nullptr);
         CopyOp copyop(activeGrid, copyMask);
@@ -1066,7 +1228,9 @@ namespace MWRender
                     }
                 }
 
-                osg::Group* const attachTo = merge ? mergeGroup : group;
+                const bool item = activeGrid && isItemType(store.findStatic(ref.mRefId));
+                osg::Group* const attachTo = item ? (merge ? itemMergeGroup.get() : itemGroup.get())
+                                                  : (merge ? mergeGroup.get() : group.get());
                 attachTo->addChild(trans);
                 ++numinstances;
             }
@@ -1091,8 +1255,9 @@ namespace MWRender
 
         const osg::Vec3f relativeViewPoint = viewPoint - worldCenter;
 
-        if (mergeGroup->getNumChildren())
-        {
+        const auto mergeChildren = [&](osg::Group& toMerge, osg::Group& parent) {
+            if (toMerge.getNumChildren() == 0)
+                return;
             SceneUtil::Optimizer optimizer;
             if (size > 1 / 8.f)
             {
@@ -1105,21 +1270,29 @@ namespace MWRender
 
             {
                 const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectMerging);
-                optimizer.optimize(mergeGroup, options);
+                optimizer.optimize(&toMerge, options);
             }
 
-            group->addChild(mergeGroup);
+            parent.addChild(&toMerge);
 
             if (mDebugBatches)
             {
                 DebugVisitor dv;
-                mergeGroup->accept(dv);
+                toMerge.accept(dv);
             }
             if (compile)
             {
                 stateToCompile._mode = osgUtil::GLObjectsVisitor::COMPILE_DISPLAY_LISTS;
-                mergeGroup->accept(stateToCompile);
+                toMerge.accept(stateToCompile);
             }
+        };
+        mergeChildren(*mergeGroup, *group);
+        mergeChildren(*itemMergeGroup, *itemGroup);
+        if (itemGroup->getNumChildren() != 0)
+        {
+            itemGroup->setNodeMask(Mask_Object);
+            itemGroup->setName(std::string(SceneUtil::DrawCount::sActiveGridChunkName));
+            group->addChild(itemGroup);
         }
 
         osgUtil::IncrementalCompileOperation* const ico = mSceneManager->getIncrementalCompileOperation();
@@ -1221,9 +1394,9 @@ namespace MWRender
     }
 
     bool ObjectPaging::enableObject(
-        int type, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell, bool enabled)
+        int type, ESM::RefId id, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell, bool enabled)
     {
-        if (!typeFilter(type, false))
+        if (!refFilter(type, id, false, true, MWBase::Environment::get().getWorld()->getStore()))
             return false;
 
         {
@@ -1236,18 +1409,21 @@ namespace MWRender
                 return false;
         }
 
-        CollectIntersecting ccf(false, pos, cell, mWorldspace);
+        // Items are only merged in the active grid: leave the distant chunks be.
+        CollectIntersecting ccf(isItemType(type), pos, cell, mWorldspace);
         mCache->call(ccf);
         if (ccf.getCollected().empty())
             return false;
         for (const ChunkId& chunk : ccf.getCollected())
             mCache->removeFromObjectCache(chunk);
+        noteRebuilds(ccf.getCollected());
         return true;
     }
 
-    bool ObjectPaging::blacklistObject(int type, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell)
+    bool ObjectPaging::blacklistObject(
+        int type, ESM::RefId id, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell)
     {
-        if (!typeFilter(type, false))
+        if (!refFilter(type, id, false, true, MWBase::Environment::get().getWorld()->getStore()))
             return false;
 
         {
@@ -1264,11 +1440,24 @@ namespace MWRender
             return false;
         for (const ChunkId& chunk : ccf.getCollected())
             mCache->removeFromObjectCache(chunk);
+        noteRebuilds(ccf.getCollected());
         return true;
+    }
+
+    void ObjectPaging::noteRebuilds(const std::vector<ChunkId>& chunks)
+    {
+        const std::lock_guard lock(mRebuildMutex);
+        for (const ChunkId& chunk : chunks)
+            if (std::get<2>(chunk))
+                mPendingRebuilds.insert(chunk);
     }
 
     void ObjectPaging::clear()
     {
+        {
+            const std::lock_guard rebuildLock(mRebuildMutex);
+            mPendingRebuilds.clear();
+        }
         std::lock_guard<std::mutex> lock(mRefTrackerMutex);
         mRefTrackerNew.mDisabled.clear();
         mRefTrackerNew.mBlacklist.clear();
@@ -1324,6 +1513,12 @@ namespace MWRender
         mCache->call(grf);
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
+        // A chunk built before an object was blacklisted may still list it (when the object was disabled at the time,
+        // so its chunk did not need rebuilding): an item picked up and dropped elsewhere keeps its RefNum.
+        std::lock_guard<std::mutex> lock(mRefTrackerMutex);
+        const std::set<ESM::RefNum>& blacklist = getRefTracker().mBlacklist;
+        if (!blacklist.empty())
+            std::erase_if(out, [&](ESM::RefNum ref) { return blacklist.contains(ref); });
     }
 
     void ObjectPaging::reportStats(unsigned int frameNumber, osg::Stats* stats) const

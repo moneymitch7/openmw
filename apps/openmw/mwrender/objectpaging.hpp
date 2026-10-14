@@ -1,20 +1,30 @@
 #ifndef OPENMW_MWRENDER_OBJECTPAGING_H
 #define OPENMW_MWRENDER_OBJECTPAGING_H
 
+#include <components/esm/refid.hpp>
 #include <components/esm3/refnum.hpp>
 #include <components/resource/resourcemanager.hpp>
 #include <components/terrain/quadtreeworld.hpp>
 
 #include <atomic>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
+#include <set>
 #include <string>
+#include <vector>
 
 #include <osg/observer_ptr>
 
 namespace Resource
 {
     class SceneManager;
+}
+
+namespace MWWorld
+{
+    class ESMStore;
 }
 
 namespace SceneUtil
@@ -27,6 +37,11 @@ namespace MWRender
     class OccluderRegistry;
 
     typedef std::tuple<osg::Vec2f, float, bool> ChunkId; // Center, Size, ActiveGrid
+
+    struct PagedCellRef;
+
+    // One cell's references in the order the content files give them, a deletion as a RefNum without a reference.
+    using CellRefOps = std::vector<std::pair<ESM::RefNum, std::optional<PagedCellRef>>>;
 
     class ObjectPaging : public Resource::NodeResourceManager<ChunkId>, public Terrain::QuadTreeWorld::ChunkManager
     {
@@ -43,10 +58,12 @@ namespace MWRender
         unsigned int getNodeMask() override;
 
         /// @return true if view needs rebuild
-        bool enableObject(int type, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell, bool enabled);
+        bool enableObject(
+            int type, ESM::RefId id, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell, bool enabled);
 
         /// @return true if view needs rebuild
-        bool blacklistObject(int type, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell);
+        bool blacklistObject(
+            int type, ESM::RefId id, ESM::RefNum refnum, const osg::Vec3f& pos, const osg::Vec2i& cell);
 
         void clear();
 
@@ -122,6 +139,18 @@ namespace MWRender
         std::map<AutoLodKey, AutoLodEntry> mAutoLodCache;
         unsigned int mAutoLodInsertions = 0;
         std::atomic<unsigned int> mAutoLodMeshes{ 0 };
+
+        // Active grid chunks dropped from the cache because an object in them changed: their rebuild is logged.
+        std::mutex mRebuildMutex;
+        std::set<ChunkId> mPendingRebuilds;
+        void noteRebuilds(const std::vector<ChunkId>& chunks);
+
+        using CellRefsKey = std::tuple<int, int, bool>; // Cell X, Cell Y, far
+        static constexpr std::size_t sMaxCachedCellRefs = 64;
+        std::mutex mCellRefsMutex;
+        std::map<CellRefsKey, std::shared_ptr<const CellRefOps>> mCellRefs;
+        std::map<ESM::RefNum, PagedCellRef> collectESM3References(
+            float size, const osg::Vec2i& startCell, bool activeGrid, const MWWorld::ESMStore& store);
         std::atomic<unsigned long long> mAutoLodTrianglesBefore{ 0 };
         std::atomic<unsigned long long> mAutoLodTrianglesAfter{ 0 };
 

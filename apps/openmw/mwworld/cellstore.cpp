@@ -288,6 +288,12 @@ namespace
                         iter->mData.enable();
                         MWBase::Environment::get().getWorld()->disable(ptr);
                     }
+                    // Deleted (an item picked up, say): let object paging know, as when it happened.
+                    if (iter->mRef.getCount(false) == 0 && !iter->mData.isDeletedByContentFile())
+                    {
+                        iter->mRef.setCount(1);
+                        MWBase::Environment::get().getWorld()->deleteObject(ptr);
+                    }
                     MWBase::Environment::get().getWorldModel()->registerPtr(ptr);
                     return;
                 }

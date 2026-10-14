@@ -2103,7 +2103,8 @@ namespace MWRender
     {
         if (!ptr.isInCell() || !ptr.getCell()->isExterior() || !mObjectPaging)
             return false;
-        if (mObjectPaging->enableObject(type, ptr.getCellRef().getRefNum(), ptr.getCellRef().getPosition().asVec3(),
+        if (mObjectPaging->enableObject(type, ptr.getCellRef().getRefId(), ptr.getCellRef().getRefNum(),
+                ptr.getCellRef().getPosition().asVec3(),
                 osg::Vec2i(ptr.getCell()->getCell()->getGridX(), ptr.getCell()->getCell()->getGridY()), enabled))
         {
             mTerrain->rebuildViews();
@@ -2118,7 +2119,8 @@ namespace MWRender
         ESM::RefNum refnum = ptr.getCellRef().getRefNum();
         if (!refnum.hasContentFile())
             return;
-        if (mObjectPaging->blacklistObject(type, refnum, ptr.getCellRef().getPosition().asVec3(),
+        if (mObjectPaging->blacklistObject(type, ptr.getCellRef().getRefId(), refnum,
+                ptr.getCellRef().getPosition().asVec3(),
                 osg::Vec2i(ptr.getCell()->getCell()->getGridX(), ptr.getCell()->getCell()->getGridY())))
             mTerrain->rebuildViews();
     }

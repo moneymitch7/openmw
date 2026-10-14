@@ -1006,6 +1006,14 @@ namespace MWWorld
                 mLocalScripts.remove(ptr);
                 removeContainerScripts(ptr);
             }
+
+            // A merged object (an item picked up, say) leaves its object paging chunk for good: it may come back
+            // elsewhere under the same RefNum (an item dropped again), drawn on its own then.
+            if (ptr.isInCell() && ptr.getCellRef().getRefNum().hasContentFile())
+            {
+                mRendering->pagingBlacklistObject(mStore.find(ptr.getCellRef().getRefId()), ptr);
+                mWorldScene->removeFromPagedRefs(ptr);
+            }
         }
     }
 
