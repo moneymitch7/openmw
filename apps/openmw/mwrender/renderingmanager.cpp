@@ -35,6 +35,7 @@
 
 #include <components/settings/values.hpp>
 
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
 #include <components/sceneutil/lightmanager.hpp>
@@ -1701,6 +1702,13 @@ namespace MWRender
                 stats->setAttribute(frameNumber, "Occlusion Culled", mOcclusionCuller->getNumOccluded());
                 stats->setAttribute(frameNumber, "Occluder Meshes", mOcclusionCuller->getNumBuildingOccluders());
             }
+            // OpenMGE XE: what the draws of the most recently counted frame were (performance log on)
+            std::array<unsigned int, SceneUtil::DrawCount::sNumCategories> draws{};
+            if (SceneUtil::DrawCount::getLatest(draws))
+                for (std::size_t i = 0; i < draws.size(); ++i)
+                    stats->setAttribute(frameNumber,
+                        std::string(SceneUtil::DrawCount::getStatName(static_cast<SceneUtil::DrawCount::Category>(i))),
+                        draws[i]);
         }
     }
 

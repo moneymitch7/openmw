@@ -44,6 +44,7 @@
 
 #include <components/stereo/stereomanager.hpp>
 
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/glextensions.hpp>
 #include <components/sceneutil/workqueue.hpp>
@@ -403,7 +404,7 @@ namespace
 
         // The textures loaded (OSG's own GPU pool counters stay at 0 with OpenMW's texture handling).
         long long imageMb() const { return static_cast<long long>(mImageManager.getLoadedBytes() / (1024 * 1024)); }
-        std::array<Column, 33> mColumns{ {
+        std::array<Column, 43> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
             { "luasync", "luasyncupdate_time_taken" },
@@ -427,6 +428,17 @@ namespace
             { "gpu", "GPU draw time taken", true },
             { "occlusion tested", "Occlusion Tested", false, 1.0 },
             { "occlusion culled", "Occlusion Culled", false, 1.0 },
+            // What the draws are, from one frame in ten (components/sceneutil/drawcount.hpp)
+            { "draws land", "Draws Land", false, 1.0 },
+            { "draws distant objects", "Draws Distant Objects", false, 1.0 },
+            { "draws nearby merged", "Draws Nearby Merged", false, 1.0 },
+            { "draws objects", "Draws Objects", false, 1.0 },
+            { "draws actors", "Draws Actors", false, 1.0 },
+            { "draws grass", "Draws Grass", false, 1.0 },
+            { "draws other", "Draws Other", false, 1.0 },
+            { "draws shadow maps", "Draws Shadow Maps", false, 1.0 },
+            { "draws reflection", "Draws Reflection", false, 1.0 },
+            { "draws other passes", "Draws Other Passes", false, 1.0 },
             // What the resource caches hold, to tell a growing cache from memory held elsewhere.
             { "cached images", "Image Count", false, 1.0 },
             { "cached nodes", "Node Count", false, 1.0 },
@@ -1356,6 +1368,8 @@ void OMW::Engine::go()
     mEncoder = std::make_unique<ToUTF8::Utf8Encoder>(mEncoding);
 
     // Setup viewer
+    // OpenMGE XE: with the performance log on, the cull visitors also count what the frame's draws are
+    SceneUtil::DrawCount::installCountingCullVisitor(Settings::general().mPerformanceLog);
     mViewer = new osgViewer::Viewer;
     mViewer->getCamera()->getOrCreateStateSet()->removeAttribute(osg::StateAttribute::MATERIAL);
     SceneUtil::disableFFPStateForRenderer(static_cast<osgViewer::Renderer*>(mViewer->getCamera()->getRenderer()));
