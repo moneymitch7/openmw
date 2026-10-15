@@ -314,17 +314,6 @@ Shaders Settings
    object keeps a light while it reaches a quarter of it.
 
 .. omw-setting::
-   :title: light occlusion held lights
-   :type: boolean
-   :range: true, false
-   :default: false
-
-   Whether :ref:`light occlusion` also applies to carried lights (lanterns and torches held by the player or NPCs).
-   These move with their carrier, so every few steps what they reach is tested again and walls, floors and stairs
-   fade between lit and dark, and a light just taken out shines on everything until it has been tested. Off, carried
-   lights light through walls as before, and only lights that stay put are blocked.
-
-.. omw-setting::
    :title: light occlusion time per frame
    :type: float32
    :range: 0.1-8.0
