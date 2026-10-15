@@ -145,6 +145,8 @@ namespace SceneUtil::DrawCount
                 if (!found)
                     found = nodeCategory(*node, category);
             }
+            // No camera on the way: drawn by the viewer's own camera (SceneCam), the main view.
+            label = nearestLabel;
             return found ? category : Category::Other;
         }
 
