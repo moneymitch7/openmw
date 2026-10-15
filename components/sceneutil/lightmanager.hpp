@@ -350,7 +350,10 @@ namespace SceneUtil
         /// re-testing results already known; lights and objects not tested yet (just come into view) or that have
         /// moved may use four times as much. Results are kept until the light or the object moves; objects with a
         /// bound radius above @a maxObjectRadius (merged chunks, room shells) are never tested.
-        void setLightOcclusion(LightOcclusionTest* test, bool enabled, float msPerFrame, float maxObjectRadius);
+        /// @param heldLights whether lights with a carrier's tuning (held lights, see LightSource::getBounce) are
+        /// blocked too
+        void setLightOcclusion(
+            LightOcclusionTest* test, bool enabled, bool heldLights, float msPerFrame, float maxObjectRadius);
 
         /// Sets @a visibility (one per light of @a lightList) to how much of @a viewBound (in the view space of
         /// @a viewMatrix) each light reaches past the world, from 0 (hidden) to 1, fading over half a second when it
@@ -508,6 +511,7 @@ namespace SceneUtil
         double mOcclusionRetestBudget = 0.0;
         double mOcclusionNewBudget = 0.0;
         float mOcclusionMaxObjectRadius = 0.f;
+        bool mOcclusionHeldLights = false;
         size_t mOcclusionFrame = 0;
         double mOcclusionTimeUsed = 0.0;
         unsigned int mOcclusionRaysUsed = 0;

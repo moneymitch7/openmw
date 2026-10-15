@@ -468,10 +468,12 @@ namespace SceneUtil
         return mClusteredLighting;
     }
 
-    void LightManager::setLightOcclusion(LightOcclusionTest* test, bool enabled, float msPerFrame, float maxObjectRadius)
+    void LightManager::setLightOcclusion(
+        LightOcclusionTest* test, bool enabled, bool heldLights, float msPerFrame, float maxObjectRadius)
     {
         mOcclusionTest = test;
         mOcclusionEnabled = enabled && test != nullptr;
+        mOcclusionHeldLights = heldLights;
         mOcclusionRetestBudget = 1000.0 * msPerFrame;
         mOcclusionNewBudget = 4000.0 * msPerFrame;
         mOcclusionMaxObjectRadius = maxObjectRadius;
@@ -735,6 +737,9 @@ namespace SceneUtil
         for (std::size_t i = 0; i < lightList.size(); ++i)
         {
             const LightSourceViewBound* light = lightList[i];
+            // Carried lights (their own light bounce set, see addLight) only with 'light occlusion held lights'.
+            if (!mOcclusionHeldLights && light->mLightSource->getBounce() >= 0.f)
+                continue;
             const osg::Vec3f lightPos = osg::Vec3d(light->mViewBound.center()) * mOcclusionInverseView;
             // A light within the object (a lamp's own mesh) always reaches it. Not for objects tested at their
             // surfaces, which see to that themselves: a stair tunnel's bound takes in the room beside it, whose lamp

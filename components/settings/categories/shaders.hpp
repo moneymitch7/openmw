@@ -56,6 +56,7 @@ namespace Settings
         SettingValue<float> mOutdoorLightBounce{ mIndex, "Shaders", "outdoor light bounce",
             makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mLightOcclusion{ mIndex, "Shaders", "light occlusion" };
+        SettingValue<bool> mLightOcclusionHeldLights{ mIndex, "Shaders", "light occlusion held lights" };
         SettingValue<float> mLightOcclusionTimePerFrame{ mIndex, "Shaders", "light occlusion time per frame",
             makeClampSanitizerFloat(0.1f, 8) };
         SettingValue<float> mSunlightBrightness{ mIndex, "Shaders", "sunlight brightness",
