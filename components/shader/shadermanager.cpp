@@ -834,6 +834,9 @@ namespace Shader
             case Slot::MgeWeather:
                 slotDescr = "MGE weather verdict";
                 break;
+            case Slot::HeldLightShadow:
+                slotDescr = "held light shadow";
+                break;
             default:
                 slotDescr = "UNKNOWN";
         }

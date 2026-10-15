@@ -38,6 +38,7 @@
 #include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
+#include <components/sceneutil/heldlightshadow.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/occlusionculling.hpp>
@@ -549,6 +550,17 @@ namespace MWRender
             rootStateSet->addUniform(new osg::Uniform("mgeWxTex", mgeWxUnit));
         }
 
+        // OpenMGE XE lantern shadows: the player's carried light casts shadows indoors (clustered lighting only, the
+        // shaders that read them).
+        if (Settings::shaders().mHeldLightShadows && sceneRoot->getClusteredLighting())
+        {
+            Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
+            const int unit = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::HeldLightShadow);
+            mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(
+                shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor, 512);
+            mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
+        }
+
         osg::Camera::CullingMode cullingMode = osg::Camera::DEFAULT_CULLING | osg::Camera::FAR_PLANE_CULLING;
 
         if (!Settings::camera().mSmallFeatureCulling)
@@ -1035,6 +1047,10 @@ namespace MWRender
             mLightsOutdoors = mSky->isEnabled();
             applyPointLightTuning();
         }
+
+        if (mHeldLightShadow != nullptr && mPlayerAnimation != nullptr)
+            mHeldLightShadow->setFocus(
+                mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
 
         mWater->update(dt, paused);
         if (!paused)

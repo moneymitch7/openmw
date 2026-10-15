@@ -66,6 +66,7 @@ namespace SceneUtil
     class WorkQueue;
     class LightManager;
     class LightOcclusionTest;
+    class HeldLightShadow;
     class UnrefQueue;
     class PerViewUniformStateUpdater;
     class SharedUniformStateUpdater;
@@ -390,6 +391,7 @@ namespace MWRender
         osg::ref_ptr<SceneOcclusionCallback> mSceneOcclusionCallback;
         osg::ref_ptr<OccluderRegistry> mOccluderRegistry;
         osg::ref_ptr<MgeWeatherPass> mMgeWeatherPass;
+        std::unique_ptr<SceneUtil::HeldLightShadow> mHeldLightShadow;
         std::unique_ptr<Terrain::TerrainOccluder> mTerrainOccluder;
         osg::ref_ptr<PostProcessor> mPostProcessor;
         osg::ref_ptr<NpcAnimation> mPlayerAnimation;

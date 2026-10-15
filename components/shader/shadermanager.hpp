@@ -86,6 +86,7 @@ namespace Shader
             SkyTexture,
             ShadowMaps,
             MgeWeather, // OpenMGE XE once-per-frame weather verdict
+            HeldLightShadow, // OpenMGE XE lantern shadows' cube map
             SLOT_COUNT
         };
 

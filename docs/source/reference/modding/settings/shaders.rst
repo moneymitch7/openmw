@@ -453,6 +453,17 @@ Shaders Settings
    and gear are lit as usual. Only with :ref:`clustered lighting`.
 
 .. omw-setting::
+   :title: held light shadows
+   :type: boolean
+   :range: true, false
+   :default: true
+
+   Indoors, the light the player carries (a torch, or the stand-in light of a worn lantern) casts real shadows. Each
+   frame the room around the light is drawn from it into a depth cube map, and the light no longer reaches what it
+   can't see: furniture, pillars and people throw shadows, and walls keep it out of the next room. Light occlusion
+   leaves that light alone. Only with :ref:`clustered lighting`. Needs a restart.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

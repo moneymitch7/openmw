@@ -166,6 +166,7 @@ namespace SceneUtil
         size_t mLastAppliedFrame;
 
         bool mEmpty = false;
+        bool mCastsShadows = false;
 
     public:
         META_Node(SceneUtil, LightSource)
@@ -201,6 +202,10 @@ namespace SceneUtil
         float getActorFade() const { return mActorFade; }
 
         void setEmpty(bool empty) { mEmpty = empty; }
+
+        /// Its shadows are drawn (HeldLightShadow), so light occlusion leaves it alone.
+        void setCastsShadows(bool casts) { mCastsShadows = casts; }
+        bool getCastsShadows() const { return mCastsShadows; }
 
         bool getEmpty() const { return mEmpty; }
 
@@ -412,6 +417,9 @@ namespace SceneUtil
         std::shared_ptr<PPLightBuffer> getPPLightsBuffer() { return mPPLightBuffer; }
 
         float getPointLightRadiusMultiplier() const { return mPointLightRadiusMultiplier; }
+
+        /// The lights in the scene this frame, with their world matrices (filled in the update traversal).
+        const std::vector<LightSourceTransform>& getLightsThisFrame() const { return mLights; }
 
         float getPointLightFadeEnd() const { return mPointLightFadeEnd; }
 
