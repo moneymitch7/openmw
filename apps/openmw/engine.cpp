@@ -210,7 +210,7 @@ namespace
             for (const Column& column : mColumns)
                 mFile << ',' << column.mHeading;
             mFile << ",vram free MB,vram other MB,gl textures,gl released textures,image MB,gl buffer MB,gl buffers"
-                  << ",auto lod ms";
+                  << ",auto lod ms,weather,next weather,weather change,game hour";
             mFile << '\n';
             mFile.flush();
         }
@@ -286,6 +286,13 @@ namespace
             const unsigned long long lodUs = SceneUtil::getAutoLodMicroseconds();
             mFile << ',' << std::setprecision(0) << static_cast<double>(lodUs - mLastAutoLodUs) / 1000.0;
             mLastAutoLodUs = lodUs;
+            // The weather (its number: 0 clear ... 4 rain, 5 thunderstorm, ... 9 blizzard), the one it is changing to
+            // (-1 for none) and how far along the change is, which weather-driven post-processing shaders follow.
+            if (MWBase::World* world = MWBase::Environment::get().getWorld(); world != nullptr && !player.isEmpty())
+                mFile << ',' << world->getCurrentWeatherScriptId() << ',' << world->getNextWeatherScriptId() << ','
+                      << std::setprecision(2) << world->getWeatherTransition() << ',' << world->getTimeStamp().getHour();
+            else
+                mFile << ",,,,";
             mFile << '\n';
             mFile.flush();
 

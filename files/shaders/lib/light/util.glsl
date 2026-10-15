@@ -99,8 +99,10 @@ float pointLightBounceAmount(PointLight light) {
 // lantern lights up the walls around whoever carries it, not the far end of a great hall.
 vec3 calcPointLightBounce(PointLight light, float dist, vec3 lightDir, vec3 viewNormal) {
     float bounce = sqrt(min(calcBaseAttenuation(light, dist), 1.0));
+    // a carried light's bounce ends at its reach, fading out over most of the way there: fading only over the
+    // last quarter drew a ring on the floor where the carrier's body blocks the direct light around it
     if (light.position.w >= 0.0 && light.carrierAxis.w > 0.0)
-        bounce *= 1.0 - fade((dist / light.carrierAxis.w - 0.75) / 0.25);
+        bounce *= 1.0 - smoothstep(0.2, 1.0, dist / light.carrierAxis.w);
     else
         bounce *= calcRadiusFade(light, dist);
     float wrap = 0.5 + 0.25 * (1.0 + dot(viewNormal, lightDir));
