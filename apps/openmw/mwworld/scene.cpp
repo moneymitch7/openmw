@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <limits>
 #include <span>
 #include <vector>
@@ -23,6 +24,7 @@
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/sceneutil/autolod.hpp>
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/settings/values.hpp>
@@ -131,6 +133,61 @@ namespace
         return ms;
     }
 
+    // OpenMGE XE: the kinds of object object paging can merge into its nearby chunks (see typeFilter there)
+    bool isMergeableType(unsigned int type)
+    {
+        switch (type)
+        {
+            case ESM::REC_STAT:
+            case ESM::REC_ACTI:
+            case ESM::REC_DOOR:
+            case ESM::REC_CONT:
+                return true;
+            case ESM::REC_MISC:
+            case ESM::REC_INGR:
+            case ESM::REC_BOOK:
+            case ESM::REC_ALCH:
+            case ESM::REC_WEAP:
+            case ESM::REC_ARMO:
+            case ESM::REC_CLOT:
+            case ESM::REC_APPA:
+            case ESM::REC_LOCK:
+            case ESM::REC_PROB:
+            case ESM::REC_REPA:
+                return Settings::terrain().mObjectPagingActiveGridItems;
+            default:
+                return false;
+        }
+    }
+
+    // OpenMGE XE: names the node of an object drawn on its own with why it is not merged, for the performance log's
+    // breakdown of the objects drawn on their own (only while the performance log counts draws).
+    void labelUnmergedObject(const MWWorld::Ptr& ptr, std::string_view reason = {})
+    {
+        if (!SceneUtil::DrawCount::isEnabled())
+            return;
+        SceneUtil::PositionAttitudeTransform* node = ptr.getRefData().getBaseNode();
+        if (node == nullptr || node == pagedNode.get())
+            return;
+        if (reason.empty())
+        {
+            if (!ptr.isInCell() || !ptr.getCell()->isExterior())
+                reason = "indoors";
+            else if (!ptr.getCellRef().getRefNum().hasContentFile())
+                reason = "placed in game";
+            else if (!isMergeableType(ptr.getType()))
+                reason = "never merged";
+            else if (!ptr.getClass().getEnchantment(ptr).empty())
+                reason = "enchanted";
+            else if (node->getNumChildrenRequiringUpdateTraversal() > 0)
+                reason = "animated";
+            else
+                reason = "other (moved, day-night, herbalism, ...)";
+        }
+        node->setName(SceneUtil::DrawCount::makeObjectLabel(reason, ptr.getTypeDescription(),
+            ptr.getCellRef().getRefId().toString(), std::to_string(reinterpret_cast<std::uintptr_t>(ptr.mRef))));
+    }
+
     void addObject(const MWWorld::Ptr& ptr, const MWWorld::World& world, const std::vector<ESM::RefNum>& pagedRefs,
         MWPhysics::PhysicsSystem& physics, MWRender::RenderingManager& rendering)
     {
@@ -146,7 +203,10 @@ namespace
         auto stepStart = std::chrono::steady_clock::now();
         ESM::RefNum refnum = ptr.getCellRef().getRefNum();
         if (!refnum.hasContentFile() || !std::binary_search(pagedRefs.begin(), pagedRefs.end(), refnum))
+        {
             ptr.getClass().insertObjectRendering(ptr, model, rendering);
+            labelUnmergedObject(ptr);
+        }
         else
             ptr.getRefData().setBaseNode(pagedNode);
         setNodeRotation(ptr, rendering, rotation);
@@ -350,6 +410,7 @@ namespace MWWorld
             if (!ptr.getRefData().getBaseNode())
                 return;
             ptr.getClass().insertObjectRendering(ptr, getModel(ptr), mRendering);
+            labelUnmergedObject(ptr, "moved or changed in game");
             setNodeRotation(ptr, mRendering, makeNodeRotation(ptr, RotationOrder::direct));
             reloadTerrain();
         }

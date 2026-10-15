@@ -1708,6 +1708,7 @@ namespace MWRender
                 stats->setAttribute(frameNumber, "Occluder Meshes", mOcclusionCuller->getNumBuildingOccluders());
             }
             // OpenMGE XE: what the draws of the most recently counted frame were (performance log on)
+            SceneUtil::DrawCount::logObjects();
             std::array<unsigned int, SceneUtil::DrawCount::sNumCategories> draws{};
             if (SceneUtil::DrawCount::getLatest(draws))
                 for (std::size_t i = 0; i < draws.size(); ++i)

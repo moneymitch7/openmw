@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <string>
 #include <string_view>
 
 namespace SceneUtil::DrawCount
@@ -38,6 +39,20 @@ namespace SceneUtil::DrawCount
 
     /// The draws of the most recently counted frame, and whether one has been counted.
     bool getLatest(std::array<unsigned int, sNumCategories>& counts);
+
+    /// Whether draws are counted (the performance log is on).
+    bool isEnabled();
+
+    /// The name an object's own node gets so that its draws in the main view are told apart in the log:
+    /// sObjectLabelPrefix, then why it is not merged, the kind of object, its id and what tells this placed copy from
+    /// others, separated by '|'.
+    constexpr std::string_view sObjectLabelPrefix = "draws|";
+    std::string makeObjectLabel(
+        std::string_view reason, std::string_view kind, std::string_view id, std::string_view instance);
+
+    /// Writes to the log, at most every 15 seconds, what the objects drawn on their own in the main view were in the
+    /// most recently counted frame. Call once a frame.
+    void logObjects();
 }
 
 #endif
