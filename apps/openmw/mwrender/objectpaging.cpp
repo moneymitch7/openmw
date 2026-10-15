@@ -103,8 +103,13 @@ namespace MWRender
                 }
                 if (mIsReflection)
                 {
+                    // A little further to leave than to come in: a chunk right at the distance doesn't blink in
+                    // and out of the reflection as the camera sways.
                     const osg::BoundingSphere& bs = node->getBound();
-                    if (bs.valid() && cv->getDistanceToViewPoint(bs.center(), false) - bs.radius() > mDistance)
+                    const float limit = mInReflection ? mDistance * 1.1f : mDistance;
+                    mInReflection
+                        = !bs.valid() || cv->getDistanceToViewPoint(bs.center(), false) - bs.radius() <= limit;
+                    if (!mInReflection)
                         return;
                 }
                 traverse(node, cv);
@@ -114,6 +119,7 @@ namespace MWRender
             float mDistance;
             const osg::Camera* mLastCamera = nullptr;
             bool mIsReflection = false;
+            bool mInReflection = false;
         };
 
         // OpenMGE XE: [Terrain] object paging active grid items, read once by ObjectPaging's constructor.

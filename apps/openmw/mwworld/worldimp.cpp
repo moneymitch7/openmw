@@ -2381,10 +2381,16 @@ namespace MWWorld
         auto* animation = mRendering->getAnimation(ptr);
         if (!animation)
         {
+            const bool paged = mWorldScene->isPagedRef(ptr);
             mWorldScene->removeFromPagedRefs(ptr);
             animation = mRendering->getAnimation(ptr);
             if (animation)
+            {
+                if (paged)
+                    Log(Debug::Verbose) << "Object paging: " << ptr.getCellRef().getRefId()
+                                        << " needs an animation of its own (a script, a spell or a sound asked)";
                 mRendering->pagingBlacklistObject(mStore.find(ptr.getCellRef().getRefId()), ptr);
+            }
         }
         return animation;
     }

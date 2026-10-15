@@ -9,6 +9,7 @@
 #include "../mwbase/world.hpp"
 
 #include "../mwmechanics/character.hpp"
+#include "../mwworld/scene.hpp"
 
 #include "context.hpp"
 #include "luamanagerimp.hpp"
@@ -125,7 +126,12 @@ namespace MWLua
             }));
 
         api["hasAnimation"] = [](const LObject& object) -> bool {
-            return MWBase::Environment::get().getWorld()->getAnimation(object.ptr()) != nullptr;
+            const MWWorld::Ptr& ptr = object.ptr();
+            // OpenMGE XE: an object merged by object paging gets its animation when something needs it. Asking
+            // whether it has one must not take it out of its merged chunk (a script asking about every door).
+            if (MWBase::Environment::get().getWorldScene()->isPagedRef(ptr))
+                return true;
+            return MWBase::Environment::get().getWorld()->getAnimation(MWWorld::ConstPtr(ptr)) != nullptr;
         };
 
         // equivalent to MWScript's SkipAnim
