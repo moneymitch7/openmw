@@ -1741,7 +1741,10 @@ namespace MWWorld
             if (!object.isEmpty())
             {
                 osg::BoundingBox bb = mPhysics->getBoundingBox(object);
-                if (!bb.valid() && object.getRefData().getBaseNode())
+                // A merged object (object paging) has no node of its own: measure its model where it stands
+                if (!bb.valid() && mWorldScene->isPagedRef(object))
+                    bb = mRendering->getCullSafeBoundingBox(object);
+                else if (!bb.valid() && object.getRefData().getBaseNode())
                 {
                     osg::ComputeBoundsVisitor computeBoundsVisitor;
                     computeBoundsVisitor.setTraversalMask(~(MWRender::Mask_ParticleSystem | MWRender::Mask_Effect));
