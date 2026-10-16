@@ -1050,6 +1050,17 @@ namespace MWWorld
         ambient.g() *= exteriorAmbient;
         ambient.b() *= exteriorAmbient;
         osg::Vec4f sun = result.mSunColor;
+        // OpenMGE XE weather shadows: the direct sunlight (and moonlight) follows the sun's glare too, how much of the
+        // sun the weather lets through: as set when clear or cloudy, a quarter of it in fog, overcast, rain, storms,
+        // ash and snow, blending as the weather changes. With no sun to see, a bright sun lit everything as if in
+        // sunshine and washed the fog out white. Lightning's flash, which lights the scene through the sun, stays.
+        if (Settings::shadows().mWeatherShadows)
+        {
+            const float flash = std::max(result.mLightningFlash, 0.f);
+            const float through = std::max(std::clamp(result.mGlareView, 0.f, 1.f), 0.25f);
+            for (int i = 0; i < 3; ++i)
+                sun[i] = std::max(sun[i] - flash, 0.f) * through + flash;
+        }
         float sunlight = Settings::shaders().mSunlightBrightness;
         // [Shaders] moonlight brightness: at night the "sun" is the moonlight. Blended in over the hour before
         // nightfall and out over the hour after sunrise, as the weather's own sun colour turns.
