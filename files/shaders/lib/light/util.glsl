@@ -99,8 +99,7 @@ float pointLightBounceAmount(PointLight light) {
 // lantern lights up the walls around whoever carries it, not the far end of a great hall.
 vec3 calcPointLightBounce(PointLight light, float dist, vec3 lightDir, vec3 viewNormal) {
     float bounce = sqrt(min(calcBaseAttenuation(light, dist), 1.0));
-    // a carried light's bounce ends at its reach, fading out over most of the way there: fading only over the
-    // last quarter drew a ring on the floor where the carrier's body blocks the direct light around it
+    // a carried light's bounce ends at its reach, fading out over most of the way there, not as a visible ring
     if (light.position.w >= 0.0 && light.carrierAxis.w > 0.0)
         bounce *= 1.0 - smoothstep(0.2, 1.0, dist / light.carrierAxis.w);
     else
@@ -135,82 +134,59 @@ float clusterFade(vec3 viewPos, float radius) {
 #endif
 }
 
-// How much of a held light's direct light gets past whoever carries it, 1 for all: the carrier's body as an upright
-// cylinder, so the light no longer shines through them onto what lies behind. The edge softens with the distance
-// behind the body, as from a small flame. Their own body and gear are lit as usual, and the light's bounce is not
-// blocked, so it still wraps around them. The ground they stand on is not part of them: it gets the shadow too.
-float carrierShade(PointLight light, vec3 viewPos, vec3 viewNormal) {
-    float radius = light.carrierFoot.w;
-    if (radius <= 0.0)
-        return 1.0;
-    vec3 axis = light.carrierAxis.xyz;
-    float height = length(axis);
-    vec3 up = axis / height;
-    vec3 fromLight = light.position.xyz - light.carrierFoot.xyz;
-    vec3 toPoint = viewPos - light.carrierFoot.xyz;
-    vec3 pointAcross = toPoint - up * dot(toPoint, up);
-    float pointHeight = dot(toPoint, up);
-    bool ground = pointHeight < 16.0 && dot(viewNormal, up) > 0.6;
-    if (!ground && dot(pointAcross, pointAcross) < radius * radius * 2.6 && pointHeight > -8.0 && pointHeight < height + 8.0)
-        return 1.0;
-    vec3 ray = toPoint - fromLight;
-    vec3 rayAcross = ray - up * dot(ray, up);
-    vec3 lightAcross = fromLight - up * dot(fromLight, up);
-    float across2 = dot(rayAcross, rayAcross);
-    float t = across2 > 1e-4 ? clamp(-dot(lightAcross, rayAcross) / across2, 0.0, 1.0) : 0.0;
-    float dist = length(lightAcross + rayAcross * t);
-    float h = dot(fromLight + ray * t, up);
-    float soft = 2.0 + 12.0 * (1.0 - t);
-    float past = smoothstep(radius - soft, radius + soft, dist);
-    float overHead = smoothstep(height - 6.0, height + 10.0, h);
-    return max(past, overHead);
-}
-
 #if @lightingMethodClustered
-// OpenMGE XE lantern shadows (SceneUtil::HeldLightShadow): the light the player carries casts real shadows from a depth
-// cube map drawn around it each frame. w of heldLightShadowPos: 1 while there are shadows.
-uniform samplerCubeShadow heldLightShadowMap;
-uniform vec4 heldLightShadowPos; // world space
-uniform vec3 heldLightShadowRange; // near, far, resolution
+// OpenMGE XE lantern shadows (SceneUtil::HeldLightShadow): the lights the player carries cast real shadows from depth
+// cube maps drawn around them each frame. heldLightShadowPos[i]: light i in world space, w the far end of its cube map
+// (0: no light).
+uniform samplerCubeShadow heldLightShadowMap0;
+uniform samplerCubeShadow heldLightShadowMap1;
+uniform vec4 heldLightShadowPos[2];
+uniform vec2 heldLightShadowRange; // near, resolution
 uniform mat4 osg_ViewMatrix;
 uniform mat4 osg_ViewMatrixInverse;
 
-float heldLightShadowDepth(vec3 v) {
-    float n = heldLightShadowRange.x;
-    float f = heldLightShadowRange.y;
-    float z = max(max(abs(v.x), abs(v.y)), abs(v.z));
-    return ((f + n) / (f - n) - 2.0 * f * n / ((f - n) * z)) * 0.5 + 0.5;
+float heldLightShadowLookup(int index, vec4 coords) {
+    return index == 0 ? texture(heldLightShadowMap0, coords) : texture(heldLightShadowMap1, coords);
 }
 
 // How much of the light reaches the point, 1 for all (and for every other light).
 float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
-    if (heldLightShadowPos.w <= 0.0)
+    int index = -1;
+    for (int i = 0; i < 2; ++i) {
+        if (heldLightShadowPos[i].w <= 0.0)
+            continue;
+        vec3 lightView = (osg_ViewMatrix * vec4(heldLightShadowPos[i].xyz, 1.0)).xyz;
+        if (dot(light.position.xyz - lightView, light.position.xyz - lightView) <= 16.0)
+            index = i;
+    }
+    if (index < 0)
         return 1.0;
-    vec3 lightView = (osg_ViewMatrix * vec4(heldLightShadowPos.xyz, 1.0)).xyz;
-    if (dot(light.position.xyz - lightView, light.position.xyz - lightView) > 16.0)
-        return 1.0;
+    vec4 lightPos = heldLightShadowPos[index];
+    float n = heldLightShadowRange.x;
+    float f = lightPos.w;
     vec3 worldPos = (osg_ViewMatrixInverse * vec4(viewPos, 1.0)).xyz;
     vec3 worldNormal = normalize(mat3(osg_ViewMatrixInverse) * viewNormal);
-    vec3 v = worldPos - heldLightShadowPos.xyz;
+    vec3 v = worldPos - lightPos.xyz;
     float dist = length(v);
-    if (dist >= heldLightShadowRange.y || dist < 1.0)
+    if (dist >= f || dist < 1.0)
         return 1.0;
     // one texel of the face at this distance, about
-    float texel = 2.0 * max(max(abs(v.x), abs(v.y)), abs(v.z)) / heldLightShadowRange.z;
-    // turned away from the light: its own back, already dark from the light's angle; push the lookup off the surface
-    // towards the light by a texel and a half against acne
+    float texel = 2.0 * max(max(abs(v.x), abs(v.y)), abs(v.z)) / heldLightShadowRange.y;
+    // push the lookup off the surface towards the light by a texel and a half against acne (the back of a surface the
+    // other way, it is dark from the light's angle anyway)
     float facing = dot(worldNormal, -v / dist);
     v += worldNormal * (texel * 1.5 * (facing < 0.0 ? -1.0 : 1.0));
     vec3 dir = normalize(v);
     vec3 side = normalize(cross(dir, abs(dir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
     vec3 up = cross(dir, side);
     float spread = texel * 1.25;
-    float ref = heldLightShadowDepth(v);
-    float lit = texture(heldLightShadowMap, vec4(v, ref));
-    lit += texture(heldLightShadowMap, vec4(v + side * spread, ref));
-    lit += texture(heldLightShadowMap, vec4(v - side * spread, ref));
-    lit += texture(heldLightShadowMap, vec4(v + up * spread, ref));
-    lit += texture(heldLightShadowMap, vec4(v - up * spread, ref));
+    float z = max(max(abs(v.x), abs(v.y)), abs(v.z));
+    float ref = ((f + n) / (f - n) - 2.0 * f * n / ((f - n) * z)) * 0.5 + 0.5;
+    float lit = heldLightShadowLookup(index, vec4(v, ref));
+    lit += heldLightShadowLookup(index, vec4(v + side * spread, ref));
+    lit += heldLightShadowLookup(index, vec4(v - side * spread, ref));
+    lit += heldLightShadowLookup(index, vec4(v + up * spread, ref));
+    lit += heldLightShadowLookup(index, vec4(v - up * spread, ref));
     return lit * 0.2;
 }
 #else
@@ -232,7 +208,7 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     vec3 lightDir = lightPos / lightDistance;
 
     float attenuation = calcAttenuation(light, lightDistance) * clusterFade(viewPos, light.radius);
-    float direct = attenuation * carrierShade(light, viewPos, viewNormal) * heldLightShadow(light, viewPos, viewNormal);
+    float direct = attenuation * heldLightShadow(light, viewPos, viewNormal);
 
     float lambertTerm = lambert(viewNormal, lightDir, viewDir);
     if (lightDistance < uSelfLitRange)

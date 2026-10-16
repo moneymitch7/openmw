@@ -746,7 +746,6 @@ namespace MWGui
         Settings::shaders().mHeldLightBounce.reset();
         Settings::shaders().mHeldLightFlicker.reset();
         Settings::shaders().mTerrainPaintedShading.reset();
-        Settings::shaders().mHeldLightCarrierShadow.reset();
         Settings::shaders().mMaxLights.reset();
         Settings::shaders().mClusteredLighting.reset();
 

@@ -77,7 +77,6 @@ namespace Settings
         // how much of the shading painted onto the land (its vertex colours) darkens the ground, 0 to 1
         SettingValue<float> mTerrainPaintedShading{ mIndex, "Shaders", "terrain painted shading",
             makeClampSanitizerFloat(0, 1) };
-        SettingValue<bool> mHeldLightCarrierShadow{ mIndex, "Shaders", "held light carrier shadow" };
         SettingValue<bool> mHeldLightShadows{ mIndex, "Shaders", "held light shadows" };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };

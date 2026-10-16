@@ -186,9 +186,8 @@ namespace SceneUtil
         void setBounce(float bounce) { mBounce = bounce; }
         float getBounce() const { return mBounce; }
 
-        /// Who carries the light (its base node, at the feet), whose body then blocks the light's direct light as an
-        /// upright cylinder of @a radius and @a height (scaled with the node), leaving its light bounce. nullptr for
-        /// none. Clustered lighting only.
+        /// Who carries the light (its base node, at the feet), nullptr for none: tells the player's own lights from
+        /// others' (HeldLightShadow). @a radius and @a height: the carrier's body, roughly, as an upright cylinder.
         void setCarrier(PositionAttitudeTransform* carrier, float radius, float height)
         {
             mCarrier = carrier;

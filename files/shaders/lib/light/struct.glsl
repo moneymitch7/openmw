@@ -17,9 +17,9 @@ struct PointLight {
     float linear;
     float quadratic;
     float radius;
-    // a held light's carrier as an upright cylinder (see carrierShade in lib/light/util.glsl): xyz its axis at the
-    // feet, w its radius (0: none); then the axis from feet to head
+    // unused (was a held light's carrier body)
     vec4 carrierFoot;
+    // w: a held light's bounce reach (see calcPointLightBounce in lib/light/util.glsl)
     vec4 carrierAxis;
 };
 

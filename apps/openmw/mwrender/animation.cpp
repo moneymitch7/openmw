@@ -1738,11 +1738,11 @@ namespace MWRender
     {
         if (!mExtraLightSource)
             return;
-        // The body of whoever carries the light, roughly: an upright cylinder from the feet to the top of the head.
+        // Who carries the light, and their body, roughly: an upright cylinder from the feet to the top of the head.
         constexpr float bodyRadius = 14.f;
         constexpr float bodyHeight = 125.f;
         auto* carrier = dynamic_cast<SceneUtil::PositionAttitudeTransform*>(mInsert.get());
-        if (carrier != nullptr && mPtr.getClass().isActor() && Settings::shaders().mHeldLightCarrierShadow)
+        if (carrier != nullptr && mPtr.getClass().isActor())
             mExtraLightSource->setCarrier(carrier, bodyRadius, bodyHeight);
         else
             mExtraLightSource->setCarrier(nullptr, 0.f, 0.f);

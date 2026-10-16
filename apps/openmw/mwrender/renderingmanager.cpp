@@ -555,7 +555,8 @@ namespace MWRender
         if (Settings::shaders().mHeldLightShadows && sceneRoot->getClusteredLighting())
         {
             Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
-            const int unit = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::HeldLightShadow);
+            const int unit = shaderManager.reserveGlobalTextureUnits(
+                Shader::ShaderManager::Slot::HeldLightShadow, SceneUtil::HeldLightShadow::sMaxLights);
             mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(
                 shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor, 512);
             mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
@@ -1793,7 +1794,7 @@ namespace MWRender
             else if (it->first == "Shaders"
                 && (it->second == "held light brightness" || it->second == "held light reach"
                     || it->second == "held light softness" || it->second == "held light bounce"
-                    || it->second == "held light flicker" || it->second == "held light carrier shadow"))
+                    || it->second == "held light flicker"))
             {
                 if (mPlayerAnimation)
                     mPlayerAnimation->retuneExtraLight();

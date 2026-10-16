@@ -23,8 +23,8 @@ namespace SceneUtil
 {
     namespace
     {
-        // The light carried by the player is the carried light (one with its own light bounce, see addLight) nearest
-        // to the player and within this distance of them.
+        // The lights carried by the player are carried lights (ones with their own light bounce, see addLight) within
+        // this distance of them.
         constexpr float sMaxCarrierDistance = 160.f;
         // Faces start this close to the light.
         constexpr float sNearPlane = 4.f;
@@ -86,36 +86,40 @@ namespace SceneUtil
         , mResolution(resolution)
         , mTextureUnit(textureUnit)
     {
-        mTexture = new osg::TextureCubeMap;
-        mTexture->setTextureSize(resolution, resolution);
-        mTexture->setInternalFormat(GL_DEPTH_COMPONENT24);
-        mTexture->setSourceFormat(GL_DEPTH_COMPONENT);
-        mTexture->setSourceType(GL_UNSIGNED_INT);
-        mTexture->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
-        mTexture->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
-        mTexture->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
-        mTexture->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
-        mTexture->setWrap(osg::Texture::WRAP_R, osg::Texture::CLAMP_TO_EDGE);
-        mTexture->setShadowComparison(true);
-        mTexture->setShadowCompareFunc(osg::Texture::LEQUAL);
-
-        for (std::size_t face = 0; face < mCameras.size(); ++face)
+        for (Slot& slot : mSlots)
         {
-            osg::ref_ptr<osg::Camera> camera = new osg::Camera;
-            camera->setName("HeldLightShadowCamera");
-            camera->setReferenceFrame(osg::Camera::ABSOLUTE_RF);
-            camera->setRenderOrder(osg::Camera::PRE_RENDER);
-            camera->setRenderTargetImplementation(osg::Camera::FRAME_BUFFER_OBJECT);
-            camera->setImplicitBufferAttachmentMask(0, 0);
-            camera->setDrawBuffer(GL_NONE);
-            camera->setReadBuffer(GL_NONE);
-            camera->setClearMask(GL_DEPTH_BUFFER_BIT);
-            camera->setClearDepth(1.0);
-            camera->setViewport(0, 0, resolution, resolution);
-            camera->setComputeNearFarMode(osg::Camera::DO_NOT_COMPUTE_NEAR_FAR);
-            camera->setCullingMode(camera->getCullingMode() & ~osg::CullSettings::SMALL_FEATURE_CULLING);
-            camera->attach(osg::Camera::DEPTH_BUFFER, mTexture.get(), 0, static_cast<unsigned int>(face));
-            mCameras[face] = camera;
+            slot.mTexture = new osg::TextureCubeMap;
+            osg::TextureCubeMap& texture = *slot.mTexture;
+            texture.setTextureSize(resolution, resolution);
+            texture.setInternalFormat(GL_DEPTH_COMPONENT24);
+            texture.setSourceFormat(GL_DEPTH_COMPONENT);
+            texture.setSourceType(GL_UNSIGNED_INT);
+            texture.setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+            texture.setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+            texture.setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
+            texture.setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
+            texture.setWrap(osg::Texture::WRAP_R, osg::Texture::CLAMP_TO_EDGE);
+            texture.setShadowComparison(true);
+            texture.setShadowCompareFunc(osg::Texture::LEQUAL);
+
+            for (std::size_t face = 0; face < slot.mCameras.size(); ++face)
+            {
+                osg::ref_ptr<osg::Camera> camera = new osg::Camera;
+                camera->setName("HeldLightShadowCamera");
+                camera->setReferenceFrame(osg::Camera::ABSOLUTE_RF);
+                camera->setRenderOrder(osg::Camera::PRE_RENDER);
+                camera->setRenderTargetImplementation(osg::Camera::FRAME_BUFFER_OBJECT);
+                camera->setImplicitBufferAttachmentMask(0, 0);
+                camera->setDrawBuffer(GL_NONE);
+                camera->setReadBuffer(GL_NONE);
+                camera->setClearMask(GL_DEPTH_BUFFER_BIT);
+                camera->setClearDepth(1.0);
+                camera->setViewport(0, 0, resolution, resolution);
+                camera->setComputeNearFarMode(osg::Camera::DO_NOT_COMPUTE_NEAR_FAR);
+                camera->setCullingMode(camera->getCullingMode() & ~osg::CullSettings::SMALL_FEATURE_CULLING);
+                camera->attach(osg::Camera::DEPTH_BUFFER, slot.mTexture.get(), 0, static_cast<unsigned int>(face));
+                slot.mCameras[face] = camera;
+            }
         }
 
         // What the faces are drawn with: the sun's shadow casting shaders (alpha tested where the material is), depth
@@ -157,16 +161,20 @@ namespace SceneUtil
         mCastingStateSet->setAttributeAndModes(
             new osg::PolygonOffset(1.5f, 4.f), osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
 
+        // heldLightShadowPos[i]: where light i is (world space), and in w the far end of its faces (0: no light)
         for (std::size_t i = 0; i < mReceiverStateSets.size(); ++i)
         {
             mReceiverStateSets[i] = new osg::StateSet;
-            mPositionUniforms[i] = new osg::Uniform("heldLightShadowPos", osg::Vec4f());
-            mRangeUniforms[i] = new osg::Uniform("heldLightShadowRange", osg::Vec3f(sNearPlane, 1.f, resolution));
+            mPositionUniforms[i]
+                = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "heldLightShadowPos", static_cast<int>(sMaxLights));
             mReceiverStateSets[i]->addUniform(mPositionUniforms[i]);
-            mReceiverStateSets[i]->addUniform(mRangeUniforms[i]);
         }
         mInactiveStateSet = new osg::StateSet;
-        mInactiveStateSet->addUniform(new osg::Uniform("heldLightShadowPos", osg::Vec4f()));
+        osg::ref_ptr<osg::Uniform> inactive
+            = new osg::Uniform(osg::Uniform::FLOAT_VEC4, "heldLightShadowPos", static_cast<int>(sMaxLights));
+        for (std::size_t i = 0; i < sMaxLights; ++i)
+            inactive->setElement(static_cast<unsigned int>(i), osg::Vec4f());
+        mInactiveStateSet->addUniform(inactive);
     }
 
     HeldLightShadow::~HeldLightShadow()
@@ -174,20 +182,28 @@ namespace SceneUtil
         osg::ref_ptr<LightManager> lightManager;
         if (mInstalledOn.lock(lightManager) && mCullCallback != nullptr)
             lightManager->removeCullCallback(mCullCallback);
-        osg::ref_ptr<LightSource> caster;
-        if (mCaster.lock(caster))
-            caster->setCastsShadows(false);
+        for (Slot& slot : mSlots)
+        {
+            osg::ref_ptr<LightSource> caster;
+            if (slot.mCaster.lock(caster))
+                caster->setCastsShadows(false);
+        }
     }
 
     void HeldLightShadow::install(LightManager* lightManager, osg::StateSet* receivers)
     {
         mLightManager = lightManager;
-        for (osg::ref_ptr<osg::Camera>& camera : mCameras)
-            camera->setCullCallback(new FaceCullCallback(mBinStateSet, lightManager));
-        receivers->setTextureAttribute(mTextureUnit, mTexture, osg::StateAttribute::ON);
-        receivers->addUniform(new osg::Uniform("heldLightShadowMap", mTextureUnit));
-        receivers->addUniform(new osg::Uniform("heldLightShadowPos", osg::Vec4f()));
-        receivers->addUniform(new osg::Uniform("heldLightShadowRange", osg::Vec3f(sNearPlane, 1.f, mResolution)));
+        for (std::size_t i = 0; i < sMaxLights; ++i)
+        {
+            for (osg::ref_ptr<osg::Camera>& camera : mSlots[i].mCameras)
+                camera->setCullCallback(new FaceCullCallback(mBinStateSet, lightManager));
+            const int unit = mTextureUnit + static_cast<int>(i);
+            receivers->setTextureAttribute(unit, mSlots[i].mTexture, osg::StateAttribute::ON);
+            receivers->addUniform(new osg::Uniform(("heldLightShadowMap" + std::to_string(i)).c_str(), unit));
+        }
+        receivers->addUniform(mInactiveStateSet->getUniform("heldLightShadowPos"));
+        receivers->addUniform(
+            new osg::Uniform("heldLightShadowRange", osg::Vec2f(sNearPlane, static_cast<float>(mResolution))));
         mCullCallback = new ShadowCullCallback(this);
         lightManager->addCullCallback(mCullCallback);
         mInstalledOn = lightManager;
@@ -221,13 +237,14 @@ namespace SceneUtil
     void HeldLightShadow::cullFaces(LightManager* lightManager, osgUtil::CullVisitor* cv)
     {
         mActive = false;
-        LightSource* caster = nullptr;
-        osg::Vec3f position;
+
+        // The player's own lights: carried by the player, or carried by no one (a worn lantern's stand-in light, which
+        // mods move along with the player), not an NPC's torch. The nearest ones.
+        std::array<const LightManager::LightSourceTransform*, sMaxLights> casters{};
+        std::array<float, sMaxLights> distances;
+        distances.fill(sMaxCarrierDistance * sMaxCarrierDistance);
         if (mEnabled)
         {
-            // the player's own: carried by the player, or carried by no one (a worn lantern's stand-in light, which
-            // mods move along with the player), not an NPC's torch
-            float best = sMaxCarrierDistance * sMaxCarrierDistance;
             for (const LightManager::LightSourceTransform& light : lightManager->getLightsThisFrame())
             {
                 if (light.mLightSource->getBounce() < 0.f || light.mLightSource->getEmpty())
@@ -235,47 +252,58 @@ namespace SceneUtil
                 const PositionAttitudeTransform* carrier = light.mLightSource->getCarrier();
                 if (carrier != nullptr && (carrier->getPosition() - mFocus).length2() > 1.f)
                     continue;
-                const osg::Vec3f lightPos = light.mWorldMatrix.getTrans();
-                const float distance2 = (lightPos - mFocus).length2();
-                if (distance2 < best)
-                {
-                    best = distance2;
-                    caster = light.mLightSource;
-                    position = lightPos;
-                }
+                float distance2 = (light.mWorldMatrix.getTrans() - mFocus).length2();
+                const LightManager::LightSourceTransform* candidate = &light;
+                for (std::size_t i = 0; i < sMaxLights; ++i)
+                    if (distance2 < distances[i])
+                    {
+                        std::swap(distance2, distances[i]);
+                        std::swap(candidate, casters[i]);
+                    }
             }
         }
 
-        osg::ref_ptr<LightSource> previous;
-        if (mCaster.lock(previous) && previous != caster)
-            previous->setCastsShadows(false);
-        mCaster = caster;
-        if (caster == nullptr)
-            return;
-        caster->setCastsShadows(true);
-
-        const float farPlane
-            = std::max(sNearPlane * 2.f, caster->getRadius() * lightManager->getPointLightRadiusMultiplier());
-        const osg::Matrixd projection = osg::Matrixd::perspective(90.0, 1.0, sNearPlane, farPlane);
-
-        const unsigned int traversalMask = cv->getTraversalMask();
-        cv->setTraversalMask(mCastMask);
-        cv->pushStateSet(mCastingStateSet);
-        mInFaces = true;
-        for (std::size_t face = 0; face < mCameras.size(); ++face)
-        {
-            osg::Camera& faceCamera = *mCameras[face];
-            faceCamera.setViewMatrixAsLookAt(position, position + sFaceDirections[face], sFaceUps[face]);
-            faceCamera.setProjectionMatrix(projection);
-            faceCamera.accept(*cv);
-        }
-        mInFaces = false;
-        cv->popStateSet();
-        cv->setTraversalMask(traversalMask);
-
         const std::size_t buffer = cv->getTraversalNumber() % 2;
-        mPositionUniforms[buffer]->set(osg::Vec4f(position, 1.f));
-        mRangeUniforms[buffer]->set(osg::Vec3f(sNearPlane, farPlane, static_cast<float>(mResolution)));
-        mActive = true;
+        const unsigned int traversalMask = cv->getTraversalMask();
+        for (std::size_t i = 0; i < sMaxLights; ++i)
+        {
+            Slot& slot = mSlots[i];
+            LightSource* caster = casters[i] != nullptr ? casters[i]->mLightSource : nullptr;
+            osg::ref_ptr<LightSource> previous;
+            if (slot.mCaster.lock(previous) && previous != caster
+                && std::none_of(casters.begin(), casters.end(), [&](const LightManager::LightSourceTransform* light) {
+                       return light != nullptr && light->mLightSource == previous.get();
+                   }))
+                previous->setCastsShadows(false);
+            slot.mCaster = caster;
+            if (caster == nullptr)
+            {
+                mPositionUniforms[buffer]->setElement(static_cast<unsigned int>(i), osg::Vec4f());
+                continue;
+            }
+            caster->setCastsShadows(true);
+
+            const osg::Vec3f position = casters[i]->mWorldMatrix.getTrans();
+            const float farPlane
+                = std::max(sNearPlane * 2.f, caster->getRadius() * lightManager->getPointLightRadiusMultiplier());
+            const osg::Matrixd projection = osg::Matrixd::perspective(90.0, 1.0, sNearPlane, farPlane);
+
+            cv->setTraversalMask(mCastMask);
+            cv->pushStateSet(mCastingStateSet);
+            mInFaces = true;
+            for (std::size_t face = 0; face < slot.mCameras.size(); ++face)
+            {
+                osg::Camera& faceCamera = *slot.mCameras[face];
+                faceCamera.setViewMatrixAsLookAt(position, position + sFaceDirections[face], sFaceUps[face]);
+                faceCamera.setProjectionMatrix(projection);
+                faceCamera.accept(*cv);
+            }
+            mInFaces = false;
+            cv->popStateSet();
+            cv->setTraversalMask(traversalMask);
+
+            mPositionUniforms[buffer]->setElement(static_cast<unsigned int>(i), osg::Vec4f(position, farPlane));
+            mActive = true;
+        }
     }
 }
