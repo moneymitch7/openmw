@@ -185,6 +185,27 @@ namespace MWGui
             MyGUI::Widget* current = widgets.current();
 
             std::string_view type = getSettingType(current);
+            // A widget for a setting this build doesn't have (a menu layout left over from an older build, or from a
+            // mod): hidden, instead of the game failing to start.
+            if (type == checkButtonType || type == sliderType)
+            {
+                const std::string_view category = getSettingCategory(current);
+                const std::string_view name = getSettingName(current);
+                const std::string_view valueType = type == sliderType ? getSettingValueType(current) : "";
+                const bool known = type == checkButtonType ? Settings::find<bool>(category, name) != nullptr
+                    : (valueType == "Float" || valueType == "Cell") ? Settings::find<float>(category, name) != nullptr
+                                                                     : Settings::find<int>(category, name) != nullptr;
+                if (!known)
+                {
+                    Log(Debug::Warning) << "Settings menu: no setting [" << category << "] " << name
+                                        << " in this build, hiding its control (an outdated menu layout?)";
+                    MyGUI::Widget* row = type == checkButtonType ? current->getParent() : current;
+                    if (row != nullptr)
+                        row->setVisible(false);
+                    current->setUserString("SettingType", "");
+                    continue;
+                }
+            }
             if (type == checkButtonType)
             {
                 std::string_view initialValue
