@@ -8,6 +8,7 @@
 #include <typeinfo>
 #include <vector>
 
+#include <osg/AlphaFunc>
 #include <osg/Geometry>
 #include <osg/PrimitiveSet>
 #include <osg/TriangleIndexFunctor>
@@ -89,10 +90,45 @@ namespace SceneUtil
             return dst;
         }
 
+        // Whether a state set cuts holes in what it draws (alpha testing) or blends it.
+        bool isSeeThrough(const osg::StateSet* stateSet)
+        {
+            if (stateSet == nullptr)
+                return false;
+            if (const auto* alphaFunc
+                = static_cast<const osg::AlphaFunc*>(stateSet->getAttribute(osg::StateAttribute::ALPHAFUNC)))
+            {
+                if (alphaFunc->getFunction() != osg::AlphaFunc::ALWAYS)
+                    return true;
+            }
+            if (stateSet->getMode(GL_BLEND) & osg::StateAttribute::ON)
+                return true;
+            return stateSet->getAttribute(osg::StateAttribute::BLENDFUNC) != nullptr;
+        }
+
+        // Leaves, fronds, grass and fences: flat cards whose shape is in their texture's alpha. Simplifying moves
+        // their corners and drops whole cards, so a tree's crown thins out and fills in again at the switch to full
+        // detail. Looked for on the geometry and the nodes above it in the model.
+        bool drawsSeeThrough(const osg::Geometry& geom)
+        {
+            if (isSeeThrough(geom.getStateSet()))
+                return true;
+            const osg::Node* node = geom.getNumParents() != 0 ? geom.getParent(0) : nullptr;
+            for (int depth = 0; node != nullptr && depth < 32; ++depth)
+            {
+                if (isSeeThrough(node->getStateSet()))
+                    return true;
+                node = node->getNumParents() != 0 ? node->getParent(0) : nullptr;
+            }
+            return false;
+        }
+
         osg::ref_ptr<osg::Geometry> simplifyGeometry(
             const osg::Geometry& geom, float maxError, unsigned int minTriangles, AutoLodStats* stats)
         {
             if (geom.getUpdateCallback() || geom.getCullCallback() || geom.getDrawCallback() || geom.getEventCallback())
+                return nullptr;
+            if (drawsSeeThrough(geom))
                 return nullptr;
 
             const osg::Vec3Array* vertices = dynamic_cast<const osg::Vec3Array*>(geom.getVertexArray());

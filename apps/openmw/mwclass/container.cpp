@@ -6,6 +6,7 @@
 #include <components/esm3/containerstate.hpp>
 #include <components/esm3/loadcont.hpp>
 #include <components/esm3/loadsoun.hpp>
+#include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/settings/values.hpp>
 
 #include "../mwbase/environment.hpp"
@@ -29,6 +30,7 @@
 #include "../mwrender/animation.hpp"
 #include "../mwrender/objects.hpp"
 #include "../mwrender/renderinginterface.hpp"
+#include "../mwrender/vismask.hpp"
 
 #include "../mwmechanics/inventory.hpp"
 #include "../mwmechanics/npcstats.hpp"
@@ -112,6 +114,10 @@ namespace MWClass
         if (!model.empty())
         {
             renderingInterface.getObjects().insertModel(ptr, model);
+            // OpenMGE XE: drawn as part of the scenery, like activators and doors. Out of the active cells containers
+            // (crates, barrels, the flora plants) are merged into the paged scenery and show in water reflections at
+            // [Water] reflection detail 2; up close they would leave the reflection.
+            ptr.getRefData().getBaseNode()->setNodeMask(MWRender::Mask_Static);
         }
     }
 
