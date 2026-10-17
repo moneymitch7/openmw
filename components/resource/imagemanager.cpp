@@ -1,6 +1,7 @@
 #include "imagemanager.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstring>
 #include <osgDB/Registry>
@@ -273,9 +274,29 @@ namespace Resource
                 image->setOrigin(osg::Image::TOP_LEFT);
             }
 
-            if (mMaxTextureSize > 0 && mayShrink(path.value()))
+            if (mMaxTextureSize > 0 && mayShrink(path.value())
+                && (image->s() > mMaxTextureSize || image->t() > mMaxTextureSize))
+            {
+                // Logged one line per texture, with running totals, so the log shows what the cap is doing.
+                static std::atomic<unsigned int> shrunk{ 0 };
+                static std::atomic<unsigned long long> savedBytes{ 0 };
+                const int s = image->s();
+                const int t = image->t();
                 if (osg::ref_ptr<osg::Image> smaller = shrinkImage(*image, mMaxTextureSize))
+                {
+                    const unsigned long long before = image->getTotalSizeInBytesIncludingMipmaps();
+                    const unsigned long long after = smaller->getTotalSizeInBytesIncludingMipmaps();
+                    const unsigned int count = ++shrunk;
+                    const unsigned long long saved = savedBytes += (before > after ? before - after : 0);
+                    Log(Debug::Info) << "Max texture size: " << path.value() << " " << s << "x" << t << " loaded at "
+                                     << smaller->s() << "x" << smaller->t() << " (" << count << " textures, "
+                                     << saved / (1024 * 1024) << " MB saved so far)";
                     image = std::move(smaller);
+                }
+                else
+                    Log(Debug::Info) << "Max texture size: " << path.value() << " " << s << "x" << t
+                                     << " kept at full size (compressed without mipmaps)";
+            }
 
             mCache->addEntryToObjectCache(path.value(), image);
             return image;
