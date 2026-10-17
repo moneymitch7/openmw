@@ -81,6 +81,7 @@ namespace SceneUtil
         bool mInFaces = false;
         std::size_t mLastFrame = ~std::size_t(0);
         bool mActive = false;
+        std::size_t mLoggedCount = ~std::size_t(0);
     };
 }
 

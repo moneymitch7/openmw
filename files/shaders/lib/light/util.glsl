@@ -149,8 +149,10 @@ float heldLightShadowLookup(int index, vec4 coords) {
     return index == 0 ? texture(heldLightShadowMap0, coords) : texture(heldLightShadowMap1, coords);
 }
 
-// How much of the light reaches the point, 1 for all (and for every other light).
-float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
+// How much of the light reaches the point, 1 for all (and for every other light). wide: the light's bounce, looked up
+// over a much wider spread (bounce comes off the surfaces around, so it softens shadows instead of keeping their
+// edges), but still kept from behind walls the light can't reach.
+float heldLightShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool wide) {
     int index = -1;
     for (int i = 0; i < 2; ++i) {
         if (heldLightShadowPos[i].w <= 0.0)
@@ -179,7 +181,7 @@ float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
     vec3 dir = normalize(v);
     vec3 side = normalize(cross(dir, abs(dir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
     vec3 up = cross(dir, side);
-    float spread = texel * 1.25;
+    float spread = wide ? max(texel * 1.25, dist * 0.08) : texel * 1.25;
     float z = max(max(abs(v.x), abs(v.y)), abs(v.z));
     float ref = ((f + n) / (f - n) - 2.0 * f * n / ((f - n) * z)) * 0.5 + 0.5;
     float lit = heldLightShadowLookup(index, vec4(v, ref));
@@ -189,8 +191,20 @@ float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
     lit += heldLightShadowLookup(index, vec4(v - up * spread, ref));
     return lit * 0.2;
 }
+
+float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
+    return heldLightShadowLit(light, viewPos, viewNormal, false);
+}
+
+float heldLightShadowBounce(PointLight light, vec3 viewPos, vec3 viewNormal) {
+    return heldLightShadowLit(light, viewPos, viewNormal, true);
+}
 #else
 float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
+    return 1.0;
+}
+
+float heldLightShadowBounce(PointLight light, vec3 viewPos, vec3 viewNormal) {
     return 1.0;
 }
 #endif
@@ -216,7 +230,8 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     diffuseLight += light.diffuse.xyz * lambertTerm * direct;
     ambientLight += light.ambient.xyz * attenuation;
     if (pointLightBounceAmount(light) > 0.0)
-        ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius);
+        ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius)
+            * heldLightShadowBounce(light, viewPos, viewNormal);
     specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * direct;
 }
 

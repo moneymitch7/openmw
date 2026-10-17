@@ -11,6 +11,7 @@
 #include <osg/Texture2D>
 #include <osgUtil/CullVisitor>
 
+#include <components/debug/debuglog.hpp>
 #include <components/misc/constants.hpp>
 #include <components/shader/shadermanager.hpp>
 
@@ -261,6 +262,18 @@ namespace SceneUtil
                         std::swap(candidate, casters[i]);
                     }
             }
+        }
+
+        // What casts shadows, in the log when it changes (a light lit or put out, entering or leaving an interior)
+        std::size_t count = 0;
+        for (const LightManager::LightSourceTransform* light : casters)
+            if (light != nullptr)
+                ++count;
+        if (count != mLoggedCount)
+        {
+            mLoggedCount = count;
+            Log(Debug::Info) << "Lantern shadows: " << count << " of the player's lights cast shadows"
+                             << (mEnabled ? "" : " (off outdoors)");
         }
 
         const std::size_t buffer = cv->getTraversalNumber() % 2;
