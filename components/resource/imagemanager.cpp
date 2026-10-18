@@ -72,11 +72,19 @@ namespace
         return true;
     }
 
-    // An image no larger than maxSize on either side, made by leaving out its largest mipmaps (or by scaling it when it
-    // has none and isn't compressed). Returns nullptr if it can't or needn't be made smaller.
+    // Over the max texture size: its shorter side larger than the size, or its longer side more than four times it.
+    // Atlases (a strip of tiles, 2048x16384 for eight 2048 tiles) are judged by their tiles, the shorter side: capping
+    // the longer side would shrink each tile eight times.
+    bool overMaxSize(int width, int height, int maxSize)
+    {
+        return std::min(width, height) > maxSize || std::max(width, height) > 4 * maxSize;
+    }
+
+    // An image within the max texture size (overMaxSize), made by leaving out its largest mipmaps (or by scaling it
+    // when it has none and isn't compressed). Returns nullptr if it can't or needn't be made smaller.
     osg::ref_ptr<osg::Image> shrinkImage(const osg::Image& image, int maxSize)
     {
-        if (image.s() <= maxSize && image.t() <= maxSize)
+        if (!overMaxSize(image.s(), image.t(), maxSize))
             return nullptr;
         if (image.r() != 1)
             return nullptr;
@@ -85,7 +93,7 @@ namespace
         if (levels > 1)
         {
             unsigned int skip = 0;
-            while (skip + 1 < levels && ((image.s() >> skip) > maxSize || (image.t() >> skip) > maxSize))
+            while (skip + 1 < levels && overMaxSize(image.s() >> skip, image.t() >> skip, maxSize))
                 ++skip;
             if (skip == 0)
                 return nullptr;
@@ -112,7 +120,8 @@ namespace
 
         if (image.isCompressed())
             return nullptr;
-        const float scale = static_cast<float>(maxSize) / static_cast<float>(std::max(image.s(), image.t()));
+        const float scale = std::min(static_cast<float>(maxSize) / static_cast<float>(std::min(image.s(), image.t())),
+            4.f * static_cast<float>(maxSize) / static_cast<float>(std::max(image.s(), image.t())));
         osg::ref_ptr<osg::Image> result = new osg::Image(image, osg::CopyOp::DEEP_COPY_ALL);
         result->scaleImage(
             std::max(1, static_cast<int>(image.s() * scale)), std::max(1, static_cast<int>(image.t() * scale)), 1);
@@ -274,8 +283,7 @@ namespace Resource
                 image->setOrigin(osg::Image::TOP_LEFT);
             }
 
-            if (mMaxTextureSize > 0 && mayShrink(path.value())
-                && (image->s() > mMaxTextureSize || image->t() > mMaxTextureSize))
+            if (mMaxTextureSize > 0 && mayShrink(path.value()) && overMaxSize(image->s(), image->t(), mMaxTextureSize))
             {
                 // Logged one line per texture, with running totals, so the log shows what the cap is doing.
                 static std::atomic<unsigned int> shrunk{ 0 };
