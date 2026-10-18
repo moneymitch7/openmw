@@ -8,6 +8,9 @@
 #include <components/settings/settings.hpp>
 #include <components/vfs/pathutil.hpp>
 
+#include <osg/Quat>
+#include <osg/Vec3f>
+#include <osg/observer_ptr>
 #include <osg/ref_ptr>
 
 #include <osgUtil/IncrementalCompileOperation>
@@ -363,6 +366,8 @@ namespace MWRender
         float mAppliedLightRadiusMultiplier = 1.f;
         float getLightRadiusMultiplier() const;
         void applyPointLightTuning();
+        void followCarriedLight(const MWWorld::Ptr& ptr, const osg::Vec3f& pos);
+        void updateCarriedLights();
         Resource::ResourceSystem* mResourceSystem;
 
         std::shared_ptr<SceneUtil::WorkQueue> mWorkQueue;
@@ -392,6 +397,18 @@ namespace MWRender
         osg::ref_ptr<OccluderRegistry> mOccluderRegistry;
         osg::ref_ptr<MgeWeatherPass> mMgeWeatherPass;
         std::unique_ptr<SceneUtil::HeldLightShadow> mHeldLightShadow;
+        // OpenMGE XE: worn lanterns' stand-in lights (see followCarriedLight), and where each sits in the player's own
+        // frame.
+        struct CarriedLightFollower
+        {
+            osg::observer_ptr<SceneUtil::PositionAttitudeTransform> mNode;
+            osg::Vec3f mOffset;
+        };
+        std::vector<CarriedLightFollower> mCarriedLightFollowers;
+        // where the player was when the last frame ended: what scripts saw when they placed those lights
+        osg::Vec3f mLastPlayerPosition;
+        osg::Quat mLastPlayerAttitude;
+        bool mLastPlayerPoseValid = false;
         std::unique_ptr<Terrain::TerrainOccluder> mTerrainOccluder;
         osg::ref_ptr<PostProcessor> mPostProcessor;
         osg::ref_ptr<NpcAnimation> mPlayerAnimation;

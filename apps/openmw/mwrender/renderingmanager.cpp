@@ -59,6 +59,7 @@
 #include <components/terrain/terrainoccluder.hpp>
 
 #include <components/esm3/loadcell.hpp>
+#include <components/esm3/loadligh.hpp>
 #include <components/esm4/loadcell.hpp>
 
 #include <components/debug/debugdraw.hpp>
@@ -211,6 +212,19 @@ namespace
         fogStart *= 1.f + (0.65f - 1.f) * pullIn;
         return osg::Vec2f(fogStart * cell / expFogDistScale, fogEnd * cell);
     }
+
+    // A carriable light with no model, placed in the world: a worn lantern's stand-in light (Belt Lanterns / Hip
+    // Lanterns and the like), which the mod moves along with the player (see animation.cpp, isCarriedLightProxy).
+    bool isCarriedLightProxy(const MWWorld::Ptr& ptr)
+    {
+        if (ptr.getType() != ESM::Light::sRecordId)
+            return false;
+        const ESM::Light& light = *ptr.get<ESM::Light>()->mBase;
+        return light.mModel.empty() && (light.mData.mFlags & ESM::Light::Carry) != 0;
+    }
+
+    // How far from the player such a light is still taken as theirs (HeldLightShadow's reach, too).
+    constexpr float sCarriedLightReach = 160.f;
 }
 
 namespace MWRender
@@ -1049,6 +1063,8 @@ namespace MWRender
             applyPointLightTuning();
         }
 
+        updateCarriedLights();
+
         if (mHeldLightShadow != nullptr && mPlayerAnimation != nullptr)
             mHeldLightShadow->setFocus(
                 mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
@@ -1143,6 +1159,58 @@ namespace MWRender
     void RenderingManager::moveObject(const MWWorld::Ptr& ptr, const osg::Vec3f& pos)
     {
         ptr.getRefData().getBaseNode()->setPosition(pos);
+        if (isCarriedLightProxy(ptr))
+            followCarriedLight(ptr, pos);
+    }
+
+    // OpenMGE XE: a mod moves a worn lantern's stand-in light to the player's hip from a script, which sees where the
+    // player was the frame before and whose move lands a frame later: the light trails the player by a frame, and a
+    // light a hand's width from the body throws the player's own shadow about whenever they turn. Where the mod put it
+    // in the player's frame, as the player stood when the script ran (the end of the last frame), is kept, and the light
+    // is drawn there from where the player stands now, every frame (updateCarriedLights). Only how it is drawn; where
+    // the game has it is the mod's.
+    void RenderingManager::followCarriedLight(const MWWorld::Ptr& ptr, const osg::Vec3f& pos)
+    {
+        SceneUtil::PositionAttitudeTransform* node = ptr.getRefData().getBaseNode();
+        auto found = std::find_if(mCarriedLightFollowers.begin(), mCarriedLightFollowers.end(),
+            [&](const CarriedLightFollower& follower) { return follower.mNode == node; });
+        const osg::Vec3f offset = pos - mLastPlayerPosition;
+        if (!mLastPlayerPoseValid || offset.length2() > sCarriedLightReach * sCarriedLightReach)
+        {
+            if (found != mCarriedLightFollowers.end())
+                mCarriedLightFollowers.erase(found);
+            return;
+        }
+        const osg::Vec3f local = mLastPlayerAttitude.inverse() * offset;
+        if (found != mCarriedLightFollowers.end())
+            found->mOffset = local;
+        else
+            mCarriedLightFollowers.push_back({ node, local });
+    }
+
+    void RenderingManager::updateCarriedLights()
+    {
+        if (mPlayerNode == nullptr)
+        {
+            mLastPlayerPoseValid = false;
+            return;
+        }
+        const osg::Vec3f position = mPlayerNode->getPosition();
+        const osg::Quat& attitude = mPlayerNode->getAttitude();
+        std::erase_if(mCarriedLightFollowers, [&](const CarriedLightFollower& follower) {
+            osg::ref_ptr<SceneUtil::PositionAttitudeTransform> node;
+            if (!follower.mNode.lock(node))
+                return true;
+            const osg::Vec3f target = position + attitude * follower.mOffset;
+            // moved away by something else (the player teleported, the mod set it down): left where it is
+            if ((target - node->getPosition()).length2() > sCarriedLightReach * sCarriedLightReach)
+                return true;
+            node->setPosition(target);
+            return false;
+        });
+        mLastPlayerPosition = position;
+        mLastPlayerAttitude = attitude;
+        mLastPlayerPoseValid = true;
     }
 
     void RenderingManager::scaleObject(const MWWorld::Ptr& ptr, const osg::Vec3f& scale)
