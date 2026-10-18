@@ -197,7 +197,22 @@ mat4 omw_InvProjectionMatrix()
         c.y = (c.y == c.y) ? c.y : 0.0;
         c.z = (c.z == c.z) ? c.z : 0.0;
         c.w = (c.w == c.w) ? c.w : 0.0;
-        return clamp(c, vec4(-100.0), vec4(100.0));
+        // colours are never negative: a negative left in an FP16 buffer turns into NaN (black) at the next pow()
+        return clamp(c, vec4(0.0), vec4(100.0));
+    }
+
+    // OpenMGE XE: what a pass writes to the chain, kept to what an 8-bit buffer could hold apart from brightness:
+    // no NaN, no negative, nothing that overflows FP16. Saturation boosts, sharpening and colour-bounce terms can
+    // push a channel of a bright, saturated colour (a spell, a sunlit flower) below zero; an 8-bit chain clamped that
+    // away at every pass, an FP16 one kept it, and the next shader's pow() made it NaN - black spots that bloom and
+    // blur passes spread into blotches.
+    vec4 omw_SanitizeOutput(vec4 c)
+    {
+        c.x = (c.x == c.x) ? c.x : 0.0;
+        c.y = (c.y == c.y) ? c.y : 0.0;
+        c.z = (c.z == c.z) ? c.z : 0.0;
+        c.w = (c.w == c.w) ? c.w : 0.0;
+        return clamp(c, vec4(0.0), vec4(60000.0));
     }
 
     vec4 omw_GetLastShader(vec2 uv)
@@ -417,7 +432,27 @@ float omw_EstimateFogCoverageFromUV(vec2 uv)
                     osg::Shader::VERTEX, Stereo::getMultiview() ? s_DefaultVertexMultiview : s_DefaultVertex);
 
             mVertex->setShaderSource(getPassHeader(technique, preamble).append(mVertex->getShaderSource()));
-            mFragment->setShaderSource(getPassHeader(technique, preamble, true).append(mFragment->getShaderSource()));
+
+            // OpenMGE XE: a pass that writes to the chain (not to one of its technique's own render targets, which may
+            // hold signed data) has its output sanitized (omw_SanitizeOutput): its main() is renamed and called from a
+            // main() that cleans omw_FragColor afterwards. Only for passes that write omw_FragColor alone.
+            const std::string body = mFragment->getShaderSource();
+            const bool sanitizeOutput = mTarget.empty() && body.find("omw_FragColor") != std::string::npos
+                && body.find("gl_FragData") == std::string::npos && body.find("gl_FragColor") == std::string::npos;
+            std::string fragment = getPassHeader(technique, preamble, true);
+            if (sanitizeOutput)
+                fragment.append("\n#define main omw_PassMain\n");
+            fragment.append(body);
+            if (sanitizeOutput)
+                fragment.append(R"GLSL(
+#undef main
+void main()
+{
+    omw_PassMain();
+    omw_FragColor = omw_SanitizeOutput(omw_FragColor);
+}
+)GLSL");
+            mFragment->setShaderSource(fragment);
 
             mVertex->setName(mName);
             mFragment->setName(mName);
