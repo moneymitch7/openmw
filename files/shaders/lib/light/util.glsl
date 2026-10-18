@@ -149,6 +149,13 @@ float heldLightShadowLookup(int index, vec4 coords) {
     return index == 0 ? texture(heldLightShadowMap0, coords) : texture(heldLightShadowMap1, coords);
 }
 
+// Whether the light sees the point v (from the light), compared at the depth the faces store for it.
+float heldLightShadowTap(int index, vec3 v, float n, float f) {
+    float z = max(max(abs(v.x), abs(v.y)), abs(v.z));
+    float ref = ((f + n) / (f - n) - 2.0 * f * n / ((f - n) * z)) * 0.5 + 0.5;
+    return heldLightShadowLookup(index, vec4(v, ref));
+}
+
 // How much of the light reaches the point, 1 for all (and for every other light). wide: the light's bounce, looked up
 // over a much wider spread (bounce comes off the surfaces around, so it softens shadows instead of keeping their
 // edges), but still kept from behind walls the light can't reach.
@@ -178,17 +185,17 @@ float heldLightShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool w
     // other way, it is dark from the light's angle anyway)
     float facing = dot(worldNormal, -v / dist);
     v += worldNormal * (texel * 1.5 * (facing < 0.0 ? -1.0 : 1.0));
-    vec3 dir = normalize(v);
-    vec3 side = normalize(cross(dir, abs(dir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
-    vec3 up = cross(dir, side);
+    // The softening taps are spread along the surface (not across the light's view of it), each compared at its own
+    // distance: spread across the view, a tap tilted towards the light finds the same floor nearer than the point
+    // looked up and shades it - the floor lit fully only right under the light, a box around the player.
+    vec3 side = normalize(cross(worldNormal, abs(worldNormal.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 up = cross(worldNormal, side);
     float spread = wide ? max(texel * 1.25, dist * 0.08) : texel * 1.25;
-    float z = max(max(abs(v.x), abs(v.y)), abs(v.z));
-    float ref = ((f + n) / (f - n) - 2.0 * f * n / ((f - n) * z)) * 0.5 + 0.5;
-    float lit = heldLightShadowLookup(index, vec4(v, ref));
-    lit += heldLightShadowLookup(index, vec4(v + side * spread, ref));
-    lit += heldLightShadowLookup(index, vec4(v - side * spread, ref));
-    lit += heldLightShadowLookup(index, vec4(v + up * spread, ref));
-    lit += heldLightShadowLookup(index, vec4(v - up * spread, ref));
+    float lit = heldLightShadowTap(index, v, n, f);
+    lit += heldLightShadowTap(index, v + side * spread, n, f);
+    lit += heldLightShadowTap(index, v - side * spread, n, f);
+    lit += heldLightShadowTap(index, v + up * spread, n, f);
+    lit += heldLightShadowTap(index, v - up * spread, n, f);
     return lit * 0.2;
 }
 

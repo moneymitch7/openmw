@@ -6,6 +6,7 @@
 #include <osg/ClipControl>
 #include <osg/CullFace>
 #include <osg/Depth>
+#include <osg/GLDefines>
 #include <osg/Image>
 #include <osg/PolygonOffset>
 #include <osg/Texture2D>
@@ -203,6 +204,8 @@ namespace SceneUtil
             receivers->addUniform(new osg::Uniform(("heldLightShadowMap" + std::to_string(i)).c_str(), unit));
         }
         receivers->addUniform(mInactiveStateSet->getUniform("heldLightShadowPos"));
+        // filtered across the edges of the faces, not clamped at them (no seams where one face meets the next)
+        receivers->setMode(GL_TEXTURE_CUBE_MAP_SEAMLESS, osg::StateAttribute::ON);
         receivers->addUniform(
             new osg::Uniform("heldLightShadowRange", osg::Vec2f(sNearPlane, static_cast<float>(mResolution))));
         mCullCallback = new ShadowCullCallback(this);
