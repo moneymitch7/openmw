@@ -248,7 +248,9 @@ namespace SceneUtil
         {
             for (const LightManager::LightSourceTransform& light : lightManager->getLightsThisFrame())
             {
-                if (light.mLightSource->getBounce() < 0.f || light.mLightSource->getEmpty())
+                // Not the "empty" test (no model of its own): a worn lantern's stand-in light has none, by design.
+                // Negative lights take light away and cast no shadow.
+                if (light.mLightSource->getBounce() < 0.f || light.mLightSource->getLight(0)->getDiffuse().x() < 0.f)
                     continue;
                 const PositionAttitudeTransform* carrier = light.mLightSource->getCarrier();
                 if (carrier != nullptr && (carrier->getPosition() - mFocus).length2() > 1.f)
