@@ -42,7 +42,7 @@ namespace
 namespace SceneUtil
 {
 
-    void configureLight(SceneUtil::Light* light, float radius, bool isExterior)
+    void configureLight(SceneUtil::Light& light, float radius, bool isExterior)
     {
         float quadraticAttenuation = 0.f;
         float linearAttenuation = 0.f;
@@ -87,9 +87,9 @@ namespace SceneUtil
         if (constantAttenuation == 0.f && linearAttenuation == 0.f && quadraticAttenuation == 0.f)
             constantAttenuation = 1.f;
 
-        light->setConstantAttenuation(constantAttenuation);
-        light->setLinearAttenuation(linearAttenuation);
-        light->setQuadraticAttenuation(quadraticAttenuation);
+        light.setConstantAttenuation(constantAttenuation);
+        light.setLinearAttenuation(linearAttenuation);
+        light.setQuadraticAttenuation(quadraticAttenuation);
     }
 
     osg::ref_ptr<LightSource> addLight(osg::Group* node, const SceneUtil::LightCommon& esmLight, unsigned int lightMask,
@@ -126,7 +126,7 @@ namespace SceneUtil
         {
             // The minimum scene light radius is 16 in Morrowind
             const float radius = std::max(esmLight.mRadius, 16.f);
-            configureLight(&light, radius, isExterior);
+            configureLight(light, radius, isExterior);
 
             float colourScale = tuning.mBrightness;
             if (tuning.mSoftness > 0.f)
@@ -183,22 +183,22 @@ namespace SceneUtil
         bool isExterior, const osg::Vec4f& ambient, const LightTuning& tuning)
     {
         osg::ref_ptr<SceneUtil::LightSource> lightSource(new SceneUtil::LightSource);
-        osg::ref_ptr<SceneUtil::Light> light(new SceneUtil::Light);
+        SceneUtil::Light light;
         lightSource->setNodeMask(lightMask);
 
-        const TunedLight tuned = tuneLight(*light, esmLight, isExterior, tuning);
+        const TunedLight tuned = tuneLight(light, esmLight, isExterior, tuning);
         lightSource->setRadius(tuned.mRadius);
         lightSource->setBounce(tuning.mBounce);
 
-        light->setDiffuse(tuned.mDiffuse);
-        light->setAmbient(ambient);
-        light->setSpecular(tuned.mSpecular);
+        light.setDiffuse(tuned.mDiffuse);
+        light.setAmbient(ambient);
+        light.setSpecular(tuned.mSpecular);
 
         lightSource->setLight(light);
 
         osg::ref_ptr<SceneUtil::LightController> ctrl(new SceneUtil::LightController);
-        ctrl->setDiffuse(light->getDiffuse());
-        ctrl->setSpecular(light->getSpecular());
+        ctrl->setDiffuse(light.getDiffuse());
+        ctrl->setSpecular(light.getSpecular());
         if (esmLight.mFlicker)
             ctrl->setType(SceneUtil::LightController::LT_Flicker);
         if (esmLight.mFlickerSlow)

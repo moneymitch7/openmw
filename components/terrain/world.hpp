@@ -12,6 +12,7 @@
 #include <components/esm/refid.hpp>
 
 #include "cellborder.hpp"
+#include "view.hpp"
 
 namespace osg
 {
@@ -103,9 +104,9 @@ namespace Terrain
         virtual void setBordersVisible(bool visible);
         virtual bool getBordersVisible() { return mBorderVisible; }
 
-        /// Create a View to use with preload feature. The caller is responsible for deleting the view.
+        /// Create a View to use with preload feature.
         /// @note Thread safe.
-        virtual View* createView() { return nullptr; }
+        virtual std::unique_ptr<View> createView() { return nullptr; }
 
         /// @note Thread safe, as long as you do not attempt to load into the same view from multiple threads.
 

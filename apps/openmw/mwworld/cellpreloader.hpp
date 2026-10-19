@@ -5,6 +5,7 @@
 
 #include <components/sceneutil/workqueue.hpp>
 
+#include <osg/Object>
 #include <osg/ref_ptr>
 
 #include <map>
@@ -141,7 +142,7 @@ namespace MWWorld
         // Cells that are currently being preloaded, or have already finished preloading
         PreloadMap mPreloadCells;
 
-        std::vector<osg::ref_ptr<Terrain::View>> mTerrainViews;
+        std::vector<std::shared_ptr<Terrain::View>> mTerrainViews;
         std::vector<PositionCellGrid> mTerrainPreloadPositions;
         std::shared_ptr<TerrainPreloadItem> mTerrainPreloadItem;
         std::shared_ptr<SceneUtil::WorkItem> mUpdateCacheItem;

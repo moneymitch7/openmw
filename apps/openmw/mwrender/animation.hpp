@@ -105,7 +105,7 @@ namespace MWRender
         std::string mBoneName;
     };
 
-    class Animation : public osg::Referenced
+    class Animation
     {
     public:
         using BlendMask = MWRender::BlendMask;

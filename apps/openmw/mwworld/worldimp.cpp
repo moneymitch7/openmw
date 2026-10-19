@@ -162,6 +162,17 @@ namespace MWWorld
                 { Globals::sPCHasTurnIn, ESM::Variant(0) },
             };
         }
+
+        // Estimate an actor's velocity from its last physics step
+        osg::Vec3f getActorVelocity(const MWPhysics::PhysicsSystem& physics, const ConstPtr& actor)
+        {
+            const MWPhysics::Actor* physicsActor = physics.getActor(actor);
+            if (physicsActor == nullptr)
+                return osg::Vec3f();
+
+            const osg::Vec3f displacement = physicsActor->getPosition() - physicsActor->getPreviousPosition();
+            return displacement / physics.getPhysicsDt();
+        }
     }
 
     struct GameContentLoader : public ContentLoader
@@ -1854,10 +1865,13 @@ namespace MWWorld
 
     int World::getCurrentWeatherScriptId() const
     {
-        return mWeatherManager->getWeather().mScriptId;
+        const MWWorld::Weather* weather = getCurrentWeather();
+        if (weather != nullptr)
+            return weather->mScriptId;
+        return -1;
     }
 
-    const MWWorld::Weather& World::getCurrentWeather() const
+    const MWWorld::Weather* World::getCurrentWeather() const
     {
         return mWeatherManager->getWeather();
     }
@@ -3041,6 +3055,21 @@ namespace MWWorld
         MWMechanics::CastSpell cast(actor, target, false, scriptedSpell);
         cast.mHitPosition = hitPosition;
 
+        // AI casters aim their magic bolts at their combat target, leading if it's moving
+        if (!casterIsPlayer)
+        {
+            MWWorld::Ptr boltTarget;
+            if (scriptedSpell)
+                boltTarget = target;
+            else
+                stats.getAiSequence().getCombatTarget(boltTarget);
+
+            // We need to check that we have a target, that it is an actor with physics to prevent aiming at (0, 0, 0)
+            if (!boltTarget.isEmpty() && boltTarget.getClass().isActor() && mPhysics->getActor(boltTarget) != nullptr)
+                cast.mMovingTarget = MWMechanics::MovingTarget{ mPhysics->getCollisionObjectPosition(boltTarget),
+                    getActorVelocity(*mPhysics, boltTarget) };
+        }
+
         if (!selectedSpell.empty())
         {
             const ESM::Spell* spell = mStore.get<ESM::Spell>().find(selectedSpell);
@@ -3096,10 +3125,11 @@ namespace MWWorld
             actor, projectile, worldPos, orient, bow, speed, attackStrength, attackWindUp);
     }
 
-    void World::launchMagicBolt(
-        const ESM::RefId& spellId, const MWWorld::Ptr& caster, const osg::Vec3f& fallbackDirection, ESM::RefNum item)
+    void World::launchMagicBolt(const ESM::RefId& spellId, const MWWorld::Ptr& caster,
+        const osg::Vec3f& fallbackDirection, ESM::RefNum item,
+        const std::optional<MWMechanics::MovingTarget>& movingTarget)
     {
-        mProjectileManager->launchMagicBolt(spellId, caster, fallbackDirection, item);
+        mProjectileManager->launchMagicBolt(spellId, caster, fallbackDirection, item, movingTarget);
     }
 
     void World::updateProjectilesCasters()

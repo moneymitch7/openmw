@@ -372,7 +372,7 @@ namespace MWRender
 
         std::shared_ptr<SceneUtil::WorkQueue> mWorkQueue;
 
-        osg::ref_ptr<SceneUtil::Light> mSunLight;
+        std::shared_ptr<SceneUtil::Light> mSunLight;
 
         DetourNavigator::Navigator& mNavigator;
         std::unique_ptr<NavMesh> mNavMesh;
@@ -411,7 +411,7 @@ namespace MWRender
         bool mLastPlayerPoseValid = false;
         std::unique_ptr<Terrain::TerrainOccluder> mTerrainOccluder;
         osg::ref_ptr<PostProcessor> mPostProcessor;
-        osg::ref_ptr<NpcAnimation> mPlayerAnimation;
+        std::unique_ptr<NpcAnimation> mPlayerAnimation;
         osg::ref_ptr<SceneUtil::PositionAttitudeTransform> mPlayerNode;
         std::unique_ptr<Camera> mCamera;
         osg::ref_ptr<Debug::DebugDrawer> mDebugDraw;
