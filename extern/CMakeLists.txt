@@ -189,7 +189,6 @@ add_subdirectory(smhasher)
 
 # Intel Masked Software Occlusion Culling (OpenMGE XE occlusion culling)
 add_subdirectory(maskedoc)
-add_subdirectory(meshoptimizer)
 
 if (BUILD_BENCHMARKS AND NOT OPENMW_USE_SYSTEM_BENCHMARK)
 

@@ -23,7 +23,6 @@
 #include <components/misc/resourcehelpers.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
-#include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
@@ -754,7 +753,6 @@ namespace MWWorld
         const int unloadMs = msSince(changeStart);
         mNavigator.updateBounds(playerCellIndex.mWorldspace, cellGridBounds, pos, navigatorUpdateGuard.get());
         const auto terrainStart = Clock::now();
-        const unsigned long long lodStartUs = SceneUtil::getAutoLodMicroseconds();
         const SceneUtil::LoadProfile::Snapshot landStart = SceneUtil::LoadProfile::snapshot();
 
         mHalfGridSize = halfGridSize;
@@ -771,7 +769,6 @@ namespace MWWorld
         if (!mPreloader->isTerrainLoaded(PositionCellGrid{ pos, newGrid }, mRendering.getReferenceTime()))
             preloadTerrain(pos, playerCellIndex.mWorldspace, true);
         const int terrainMs = msSince(terrainStart);
-        const int terrainLodMs = static_cast<int>((SceneUtil::getAutoLodMicroseconds() - lodStartUs) / 1000);
         if (terrainMs >= 100)
         {
             const SceneUtil::LoadProfile::Snapshot landEnd = SceneUtil::LoadProfile::snapshot();
@@ -786,9 +783,8 @@ namespace MWWorld
                              << ms(Step::Terrain) << " ms, groundcover " << ms(Step::Groundcover) << " ms, objects "
                              << ms(Step::Objects) << " ms (" << landEnd[chunks] - landStart[chunks]
                              << " chunks: reading references " << ms(Step::ObjectRefs) << " ms, models "
-                             << ms(Step::ObjectModels) << " ms, automatic LOD " << terrainLodMs << " ms, placing "
-                             << ms(Step::ObjectCopies) << " ms, occluders " << ms(Step::ObjectOccluders)
-                             << " ms, merging " << ms(Step::ObjectMerging) << " ms)";
+                             << ms(Step::ObjectModels) << " ms, placing " << ms(Step::ObjectCopies) << " ms, occluders "
+                             << ms(Step::ObjectOccluders) << " ms, merging " << ms(Step::ObjectMerging) << " ms)";
         }
         const auto pagingStart = Clock::now();
         mPagedRefs.clear();
@@ -849,8 +845,7 @@ namespace MWWorld
         const int totalMs = msSince(changeStart);
         if (totalMs >= 100)
             Log(Debug::Warning) << "Slow cell change: " << totalMs << " ms (unloading " << unloadMs << " ms, terrain "
-                                << terrainMs << " ms (automatic LOD on all threads " << terrainLodMs
-                                << " ms), paged objects " << pagingMs << " ms, loading models ("
+                                << terrainMs << " ms, paged objects " << pagingMs << " ms, loading models ("
                                 << loadedModels.mObjects.size() << ") " << modelsMs << " ms, navigator " << navigatorMs
                                 << " ms" << report << ")";
 

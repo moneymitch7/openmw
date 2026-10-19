@@ -53,7 +53,6 @@
 #include <components/nifosg/autotransform.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/sceneutil/geometrymemory.hpp>
-#include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/loadprofile.hpp>
@@ -83,12 +82,6 @@ namespace MWRender
 
     namespace
     {
-        // seconds on a steady clock, for how long ago a simplified copy was last asked for
-        double steadySeconds()
-        {
-            return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-        }
-
         /// OpenMGE XE: keeps a distant chunk out of the water reflection beyond [Water] reflection statics distance
         /// (the reflection inherits the main view's view point, so this is the distance from the player's view).
         class ReflectionDistanceCallback
@@ -646,12 +639,6 @@ namespace MWRender
 
     namespace
     {
-        // OpenMGE XE automatic LOD detail levels: level n allows surfaces to move by 4 * 2^n model units.
-        constexpr float sAutoLodBaseError = 4.f;
-        constexpr int sAutoLodMaxLevel = 7;
-        // Meshes with fewer triangles are left as they are.
-        constexpr unsigned int sAutoLodMinTriangles = 64;
-
         PagedCellRef makePagedCellRef(const ESM::CellRef& value)
         {
             return PagedCellRef{
@@ -821,110 +808,6 @@ namespace MWRender
         return refs;
     }
 
-    osg::ref_ptr<const osg::Node> ObjectPaging::getAutoLod(
-        const VFS::Path::Normalized& model, const osg::Node& source, int level, bool mayCreate)
-    {
-        AutoLodKey key(std::string(model.value()), level);
-        {
-            std::lock_guard<std::mutex> lock(mAutoLodMutex);
-            const auto found = mAutoLodCache.find(key);
-            if (found != mAutoLodCache.end())
-            {
-                osg::ref_ptr<osg::Node> cachedSource;
-                if (found->second.mSource.lock(cachedSource) && cachedSource.get() == &source)
-                {
-                    found->second.mLastUsed = steadySeconds();
-                    return found->second.mLod;
-                }
-            }
-        }
-
-        // A chunk built during the cull (not preloaded in the background) holds up the frame: don't add the
-        // simplification on top, use the full meshes this time.
-        if (!mayCreate)
-            return nullptr;
-
-        // Outside the lock: chunks are built on several threads.
-        SceneUtil::AutoLodStats stats;
-        osg::ref_ptr<const osg::Node> simplified
-            = SceneUtil::createSimplifiedCopy(source, sAutoLodBaseError * std::exp2(static_cast<float>(level)),
-                sAutoLodMinTriangles, &stats, ~Mask_UpdateVisitor);
-
-        std::lock_guard<std::mutex> lock(mAutoLodMutex);
-        const auto found = mAutoLodCache.find(key);
-        if (found != mAutoLodCache.end())
-        {
-            osg::ref_ptr<osg::Node> cachedSource;
-            if (found->second.mSource.lock(cachedSource) && cachedSource.get() == &source)
-                return found->second.mLod; // another thread made it meanwhile
-            eraseAutoLodEntry(found); // made from a template the scene manager has since replaced
-        }
-
-        AutoLodEntry entry;
-        entry.mSource = const_cast<osg::Node*>(&source);
-        entry.mLod = simplified;
-        entry.mLastUsed = steadySeconds();
-        if (simplified != nullptr)
-        {
-            entry.mTrianglesBefore = stats.mTrianglesBefore;
-            entry.mTrianglesAfter = stats.mTrianglesAfter;
-            ++mAutoLodMeshes;
-            mAutoLodTrianglesBefore += stats.mTrianglesBefore;
-            mAutoLodTrianglesAfter += stats.mTrianglesAfter;
-        }
-        mAutoLodCache.emplace(std::move(key), std::move(entry));
-
-        // Now and then drop the copies no chunk uses any more whose model the scene manager has let go of.
-        if (++mAutoLodInsertions % 256 == 0)
-        {
-            for (auto it = mAutoLodCache.begin(); it != mAutoLodCache.end();)
-            {
-                const auto next = std::next(it);
-                if (!it->second.mSource.valid()
-                    && (it->second.mLod == nullptr || it->second.mLod->referenceCount() <= 1))
-                    eraseAutoLodEntry(it);
-                it = next;
-            }
-        }
-        return simplified;
-    }
-
-    void ObjectPaging::updateCache(double referenceTime)
-    {
-        Resource::NodeResourceManager<ChunkId>::updateCache(referenceTime);
-
-        // OpenMGE XE: a simplified copy shares its model's textures and the meshes it didn't simplify, so while it is
-        // kept they stay in video memory. It used to be let go of only when its model had left the scene manager's
-        // cache, checked once every 256 new copies: a session through a few towns kept every copy it had made (well
-        // over a thousand, gigabytes with what they share). Now, every couple of seconds, a copy no chunk holds any
-        // more and none has asked for in a while goes; a chunk that needs it again makes it again.
-        const double now = steadySeconds();
-        if (now - mLastAutoLodSweep < 2.0)
-            return;
-        mLastAutoLodSweep = now;
-        const double idle = std::max(10.0, 2.0 * getExpiryDelay());
-        std::lock_guard<std::mutex> lock(mAutoLodMutex);
-        for (auto it = mAutoLodCache.begin(); it != mAutoLodCache.end();)
-        {
-            const auto next = std::next(it);
-            const bool unused = it->second.mLod == nullptr || it->second.mLod->referenceCount() <= 1;
-            if (unused && (!it->second.mSource.valid() || now - it->second.mLastUsed > idle))
-                eraseAutoLodEntry(it);
-            it = next;
-        }
-    }
-
-    void ObjectPaging::eraseAutoLodEntry(std::map<AutoLodKey, AutoLodEntry>::iterator it)
-    {
-        if (it->second.mLod != nullptr)
-        {
-            --mAutoLodMeshes;
-            mAutoLodTrianglesBefore -= it->second.mTrianglesBefore;
-            mAutoLodTrianglesAfter -= it->second.mTrianglesAfter;
-        }
-        mAutoLodCache.erase(it);
-    }
-
     osg::ref_ptr<osg::Node> ObjectPaging::createChunk(float size, const osg::Vec2f& center, bool activeGrid,
         const osg::Vec3f& viewPoint, bool compile, unsigned char lod)
     {
@@ -967,7 +850,6 @@ namespace MWRender
         struct InstanceList
         {
             std::vector<const PagedCellRef*> mInstances;
-            osg::ref_ptr<const osg::Node> mTemplate; // differs from the key when that's an automatic LOD copy
             AnalyzeVisitor::Result mAnalyzeResult;
             bool mNeedCompile = false;
         };
@@ -987,20 +869,6 @@ namespace MWRender
             = activeGrid ? ((size < 1) ? 5 : 3) * cellSize * size + 1 : smallestDistanceToChunk + 1;
         const LODRange lodDistances = activeGrid ? LODRange{ 0.f, std::numeric_limits<float>::max() }
                                                  : LODRange{ smallestDistanceToChunk, higherDistanceToChunk };
-
-        // OpenMGE XE automatic LOD. QuadTreeWorld draws a chunk of this size from size * cell size * lod factor away
-        // (less the 150 units its views are reused over) and further; an object is simplified as far as it can be
-        // without its surface moving by more than 'object paging lod pixel error' pixels at that distance.
-        float autoLodErrorPerUnit = 0.f; // allowed error per unit of distance
-        float chunkNearestDistance = 0.f;
-        if (!activeGrid && Settings::terrain().mObjectPagingAutoLod)
-        {
-            const float pixelError = Settings::terrain().mObjectPagingLodPixelError;
-            const float fov = osg::DegreesToRadians(static_cast<float>(Settings::camera().mFieldOfView));
-            const int resolutionY = std::max(1, static_cast<int>(Settings::video().mResolutionY));
-            autoLodErrorPerUnit = pixelError * 2.f * std::tan(fov / 2.f) / resolutionY;
-            chunkNearestDistance = size * cellSize * Settings::terrain().mLodFactor - 150.f;
-        }
 
         AnalyzeVisitor analyzeVisitor(copyMask);
         const float minSize = mMinSizeMergeFactor ? mMinSize * mMinSizeMergeFactor : mMinSize;
@@ -1050,24 +918,19 @@ namespace MWRender
                 }
             }
 
-            bool authoredLod = false; // the data provides a _dist mesh, so no automatic LOD
             if (!activeGrid)
             {
                 std::lock_guard<std::mutex> lock(mLODNameCacheMutex);
                 LODNameCacheKey key{ model, lod };
                 LODNameCache::const_iterator found = mLODNameCache.lower_bound(key);
-                const VFS::Path::Normalized* lodModel;
                 if (found != mLODNameCache.end() && found->first == key)
-                    lodModel = &found->second;
+                    model = found->second;
                 else
-                    lodModel
-                        = &mLODNameCache
-                               .emplace_hint(found, std::move(key),
-                                   Misc::ResourceHelpers::getLODMeshName(world.getESMVersions()[refNum.mContentFile],
-                                       model, *mSceneManager->getVFS(), lod))
-                               ->second;
-                authoredLod = *lodModel != model;
-                model = *lodModel;
+                    model = mLODNameCache
+                                .emplace_hint(found, std::move(key),
+                                    Misc::ResourceHelpers::getLODMeshName(world.getESMVersions()[refNum.mContentFile],
+                                        model, *mSceneManager->getVFS(), lod))
+                                ->second;
             }
 
             osg::ref_ptr<const osg::Node> cnode = mSceneManager->getTemplate(model, false);
@@ -1099,25 +962,9 @@ namespace MWRender
                 continue;
             }
 
-            osg::ref_ptr<const osg::Node> sourceTemplate = cnode;
-            if (autoLodErrorPerUnit > 0.f && !authoredLod && ref.mScale > 0.f)
-            {
-                // The object may reach out of the chunk towards the viewer.
-                const float nearest = chunkNearestDistance - cnode->getBound().radius() * ref.mScale;
-                const float allowedError = nearest * autoLodErrorPerUnit / ref.mScale; // in the model's units
-                if (nearest > 0.f && allowedError >= sAutoLodBaseError)
-                {
-                    const int level = std::min(
-                        static_cast<int>(std::floor(std::log2(allowedError / sAutoLodBaseError))), sAutoLodMaxLevel);
-                    if (osg::ref_ptr<const osg::Node> simplified = getAutoLod(model, *cnode, level, compile))
-                        cnode = std::move(simplified);
-                }
-            }
-
             const auto emplaced = nodes.emplace(std::move(cnode), InstanceList());
             if (emplaced.second)
             {
-                emplaced.first->second.mTemplate = std::move(sourceTemplate);
                 analyzeVisitor.mDistances = lodDistances / ref.mScale;
                 const osg::Node* const nodePtr = emplaced.first->first.get();
                 // const-trickery required because there is no const version of NodeVisitor
@@ -1273,8 +1120,6 @@ namespace MWRender
                 // add a ref to the original template to help verify the safety of shallow cloning operations
                 // in addition, we hint to the cache that it's still being used and should be kept in cache
                 templateRefs.emplace_back(cnode);
-                if (pair.second.mTemplate != nullptr && pair.second.mTemplate != cnode)
-                    templateRefs.push_back(pair.second.mTemplate);
 
                 if (pair.second.mNeedCompile)
                 {
@@ -1667,34 +1512,18 @@ namespace MWRender
     void ObjectPaging::reportStats(unsigned int frameNumber, osg::Stats* stats) const
     {
         Resource::reportStats("Object Chunk", frameNumber, mCache->getStats(), *stats);
-        stats->setAttribute(frameNumber, "Object Chunk LOD Meshes", mAutoLodMeshes.load());
 
-        // What the chunks and the simplified copies hold: vertex and index data and how many textures (shared ones
-        // once), every ~5 seconds.
+        // What the chunks hold: vertex and index data and how many textures (shared ones once), every ~5 seconds.
         if (mMemoryMeasuredFrame == 0 || frameNumber - mMemoryMeasuredFrame >= 300)
         {
             mMemoryMeasuredFrame = frameNumber;
-            SceneUtil::GeometryMemory lods;
-            {
-                std::lock_guard<std::mutex> lock(mAutoLodMutex);
-                for (const auto& [key, entry] : mAutoLodCache)
-                    lods.add(entry.mLod.get());
-            }
-            mAutoLodMb = static_cast<double>(lods.getBytes()) / (1024.0 * 1024.0);
-            mAutoLodTextures = static_cast<double>(lods.getTextures());
             SceneUtil::GeometryMemory chunks;
             mCache->call([&](const auto& /*key*/, const osg::Object* object) { chunks.add(object); });
             mChunkMb = static_cast<double>(chunks.getBytes()) / (1024.0 * 1024.0);
             mChunkTextures = static_cast<double>(chunks.getTextures());
         }
-        stats->setAttribute(frameNumber, "Object Chunk LOD MB", mAutoLodMb);
-        stats->setAttribute(frameNumber, "Object Chunk LOD Textures", mAutoLodTextures);
         stats->setAttribute(frameNumber, "Object Chunk MB", mChunkMb);
         stats->setAttribute(frameNumber, "Object Chunk Textures", mChunkTextures);
-        const unsigned long long before = mAutoLodTrianglesBefore.load();
-        if (before > 0)
-            stats->setAttribute(frameNumber, "Object Chunk LOD Triangles Kept",
-                100.0 * static_cast<double>(mAutoLodTrianglesAfter.load()) / static_cast<double>(before));
     }
 
 }

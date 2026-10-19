@@ -45,7 +45,6 @@
 #include <components/stereo/stereomanager.hpp>
 
 #include <components/sceneutil/drawcount.hpp>
-#include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/glextensions.hpp>
 #include <components/sceneutil/workqueue.hpp>
 
@@ -210,7 +209,7 @@ namespace
             for (const Column& column : mColumns)
                 mFile << ',' << column.mHeading;
             mFile << ",vram free MB,vram other MB,gl textures,gl released textures,image MB,gl buffer MB,gl buffers"
-                  << ",auto lod ms,weather,next weather,weather change,game hour";
+                  << ",weather,next weather,weather change,game hour";
             mFile << '\n';
             mFile.flush();
         }
@@ -282,10 +281,6 @@ namespace
             mFile << ',' << sGpuMemory.mFreeMb.load() << ',' << sGpuMemory.mOtherMb.load() << ','
                   << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load() << ','
                   << imageMb() << ',' << sGpuMemory.mBufferPoolMb.load() << ',' << sGpuMemory.mBufferObjects.load();
-            // Time spent simplifying meshes for automatic LOD during this second, on all threads together.
-            const unsigned long long lodUs = SceneUtil::getAutoLodMicroseconds();
-            mFile << ',' << std::setprecision(0) << static_cast<double>(lodUs - mLastAutoLodUs) / 1000.0;
-            mLastAutoLodUs = lodUs;
             // The weather (its number: 0 clear ... 4 rain, 5 thunderstorm, ... 9 blizzard), the one it is changing to
             // (-1 for none) and how far along the change is, which weather-driven post-processing shaders follow.
             if (MWBase::World* world = MWBase::Environment::get().getWorld(); world != nullptr && !player.isEmpty())
@@ -406,12 +401,11 @@ namespace
         unsigned int mLastFrame = 0;
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
-        unsigned long long mLastAutoLodUs = 0;
         Resource::ImageManager& mImageManager;
 
         // The textures loaded (OSG's own GPU pool counters stay at 0 with OpenMW's texture handling).
         long long imageMb() const { return static_cast<long long>(mImageManager.getLoadedBytes() / (1024 * 1024)); }
-        std::array<Column, 49> mColumns{ {
+        std::array<Column, 45> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
             { "luasync", "luasyncupdate_time_taken" },
@@ -452,11 +446,7 @@ namespace
             { "terrain chunks", "Terrain Chunk Count", false, 1.0 },
             { "terrain textures", "Terrain Texture Count", false, 1.0 },
             { "object chunks", "Object Chunk Count", false, 1.0 },
-            { "auto lod meshes", "Object Chunk LOD Meshes", false, 1.0 },
-            { "auto lod triangles kept %", "Object Chunk LOD Triangles Kept", false, 1.0 },
-            // what they hold: vertex and index data in MB and how many distinct textures (shared ones once)
-            { "auto lod MB", "Object Chunk LOD MB", false, 1.0 },
-            { "auto lod textures", "Object Chunk LOD Textures", false, 1.0 },
+            // what the chunks hold: vertex and index data in MB and how many distinct textures (shared ones once)
             { "object chunk MB", "Object Chunk MB", false, 1.0 },
             { "object chunk textures", "Object Chunk Textures", false, 1.0 },
             { "terrain chunk MB", "Terrain Chunk MB", false, 1.0 },

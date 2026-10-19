@@ -141,7 +141,7 @@ add_component_dir (sceneutil
     lightmanager heldlightshadow lampshadows geometrymemory lightutil positionattitudetransform workqueue pathgridutil waterutil writescene serialize optimizer
     detourdebugdraw navmesh agentpath animblendrules shadow mwshadowtechnique recastmesh shadowsbin osgacontroller rtt
     screencapture depth color riggeometryosgaextension extradata unrefqueue lightcommon clearcolor
-    cullsafeboundsvisitor keyframe nodecallback templateref textkeymap userdata glextensions fog texmat material occlusionculling autolod
+    cullsafeboundsvisitor keyframe nodecallback templateref textkeymap userdata glextensions fog texmat material occlusionculling
     drawcount
     )
 
@@ -638,7 +638,6 @@ endif()
 
 target_link_libraries(components ${BULLET_LIBRARIES})
 target_link_libraries(components maskedoc)
-target_link_libraries(components meshoptimizer)
 
 if (USE_QT)
     add_library(components_qt STATIC ${COMPONENT_QT_FILES})

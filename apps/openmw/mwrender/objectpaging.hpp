@@ -6,7 +6,6 @@
 #include <components/resource/resourcemanager.hpp>
 #include <components/terrain/quadtreeworld.hpp>
 
-#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -15,8 +14,6 @@
 #include <shared_mutex>
 #include <string>
 #include <vector>
-
-#include <osg/observer_ptr>
 
 namespace Resource
 {
@@ -90,9 +87,6 @@ namespace MWRender
 
         void reportStats(unsigned int frameNumber, osg::Stats* stats) const override;
 
-        /// Also lets go of the simplified copies (auto LOD) no chunk has used for a while.
-        void updateCache(double referenceTime) override;
-
         void getPagedRefnums(const osg::Vec4i& activeGrid, std::vector<ESM::RefNum>& out);
 
         /// OpenMGE XE: chunks created from now on build occluder meshes for their buildings and are tested against
@@ -145,27 +139,8 @@ namespace MWRender
         using LODNameCache = std::map<LODNameCacheKey, VFS::Path::Normalized>; // Cache: key, mesh name to use
         LODNameCache mLODNameCache;
 
-        // OpenMGE XE automatic LOD: simplified copies of the models in distant chunks, per model and detail level.
-        // An entry is valid while its source template is the one the scene manager hands out.
-        struct AutoLodEntry
-        {
-            osg::observer_ptr<osg::Node> mSource;
-            osg::ref_ptr<const osg::Node> mLod; // nullptr: the model can't be simplified usefully at this level
-            unsigned int mTrianglesBefore = 0;
-            unsigned int mTrianglesAfter = 0;
-            // when a chunk last asked for it (std::chrono::steady_clock, seconds)
-            double mLastUsed = 0.0;
-        };
-        using AutoLodKey = std::pair<std::string, int>; // Key: mesh name, detail level
-        mutable std::mutex mAutoLodMutex;
-        std::map<AutoLodKey, AutoLodEntry> mAutoLodCache;
-        unsigned int mAutoLodInsertions = 0;
-        double mLastAutoLodSweep = 0.0;
-        std::atomic<unsigned int> mAutoLodMeshes{ 0 };
         // the performance log's memory columns, measured now and then (walking the caches takes a moment)
         mutable unsigned int mMemoryMeasuredFrame = 0;
-        mutable double mAutoLodMb = 0.0;
-        mutable double mAutoLodTextures = 0.0;
         mutable double mChunkMb = 0.0;
         mutable double mChunkTextures = 0.0;
 
@@ -187,13 +162,6 @@ namespace MWRender
         std::map<CellRefsKey, std::shared_ptr<const CellRefOps>> mCellRefs;
         std::map<ESM::RefNum, PagedCellRef> collectESM3References(
             float size, const osg::Vec2i& startCell, bool activeGrid, const MWWorld::ESMStore& store);
-        std::atomic<unsigned long long> mAutoLodTrianglesBefore{ 0 };
-        std::atomic<unsigned long long> mAutoLodTrianglesAfter{ 0 };
-
-        /// @param mayCreate false while drawing waits for the chunk: only an already made copy is used.
-        osg::ref_ptr<const osg::Node> getAutoLod(
-            const VFS::Path::Normalized& model, const osg::Node& source, int level, bool mayCreate);
-        void eraseAutoLodEntry(std::map<AutoLodKey, AutoLodEntry>::iterator it);
     };
 
     struct RefnumMarker
