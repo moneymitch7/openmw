@@ -7,6 +7,7 @@
 #include <components/esm/util.hpp>
 #include <components/resource/objectcache.hpp>
 #include <components/resource/scenemanager.hpp>
+#include <components/sceneutil/geometrymemory.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/material.hpp>
 
@@ -92,6 +93,19 @@ namespace Terrain
     void ChunkManager::reportStats(unsigned int frameNumber, osg::Stats* stats) const
     {
         Resource::reportStats("Terrain Chunk", frameNumber, mCache->getStats(), *stats);
+
+        // What the chunks hold (vertex and index data, how many textures: their composite maps and layers), every
+        // ~5 seconds.
+        if (mMemoryMeasuredFrame == 0 || frameNumber - mMemoryMeasuredFrame >= 300)
+        {
+            mMemoryMeasuredFrame = frameNumber;
+            SceneUtil::GeometryMemory chunks;
+            mCache->call([&](const auto& /*key*/, const osg::Object* object) { chunks.add(object); });
+            mChunkMb = static_cast<double>(chunks.getBytes()) / (1024.0 * 1024.0);
+            mChunkTextures = static_cast<double>(chunks.getTextures());
+        }
+        stats->setAttribute(frameNumber, "Terrain Chunk MB", mChunkMb);
+        stats->setAttribute(frameNumber, "Terrain Chunk Textures", mChunkTextures);
     }
 
     void ChunkManager::clearCache()

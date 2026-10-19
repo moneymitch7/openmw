@@ -121,6 +121,11 @@ namespace Terrain
         unsigned int mCompositeMapSize;
         float mCompositeMapLevel;
         float mMaxCompGeometrySize;
+
+        // the performance log's memory columns, measured now and then
+        mutable unsigned int mMemoryMeasuredFrame = 0;
+        mutable double mChunkMb = 0.0;
+        mutable double mChunkTextures = 0.0;
     };
 
 }

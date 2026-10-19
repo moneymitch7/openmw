@@ -411,7 +411,7 @@ namespace
 
         // The textures loaded (OSG's own GPU pool counters stay at 0 with OpenMW's texture handling).
         long long imageMb() const { return static_cast<long long>(mImageManager.getLoadedBytes() / (1024 * 1024)); }
-        std::array<Column, 43> mColumns{ {
+        std::array<Column, 49> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
             { "luasync", "luasyncupdate_time_taken" },
@@ -454,6 +454,13 @@ namespace
             { "object chunks", "Object Chunk Count", false, 1.0 },
             { "auto lod meshes", "Object Chunk LOD Meshes", false, 1.0 },
             { "auto lod triangles kept %", "Object Chunk LOD Triangles Kept", false, 1.0 },
+            // what they hold: vertex and index data in MB and how many distinct textures (shared ones once)
+            { "auto lod MB", "Object Chunk LOD MB", false, 1.0 },
+            { "auto lod textures", "Object Chunk LOD Textures", false, 1.0 },
+            { "object chunk MB", "Object Chunk MB", false, 1.0 },
+            { "object chunk textures", "Object Chunk Textures", false, 1.0 },
+            { "terrain chunk MB", "Terrain Chunk MB", false, 1.0 },
+            { "terrain chunk textures", "Terrain Chunk Textures", false, 1.0 },
             { "groundcover chunks", "Groundcover Chunk Count", false, 1.0 },
             { "preloaded cells", "CellPreloader Count", false, 1.0 },
             { "unref queue", "UnrefQueue", false, 1.0 },

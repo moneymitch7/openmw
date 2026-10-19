@@ -90,6 +90,9 @@ namespace MWRender
 
         void reportStats(unsigned int frameNumber, osg::Stats* stats) const override;
 
+        /// Also lets go of the simplified copies (auto LOD) no chunk has used for a while.
+        void updateCache(double referenceTime) override;
+
         void getPagedRefnums(const osg::Vec4i& activeGrid, std::vector<ESM::RefNum>& out);
 
         /// OpenMGE XE: chunks created from now on build occluder meshes for their buildings and are tested against
@@ -150,12 +153,21 @@ namespace MWRender
             osg::ref_ptr<const osg::Node> mLod; // nullptr: the model can't be simplified usefully at this level
             unsigned int mTrianglesBefore = 0;
             unsigned int mTrianglesAfter = 0;
+            // when a chunk last asked for it (std::chrono::steady_clock, seconds)
+            double mLastUsed = 0.0;
         };
         using AutoLodKey = std::pair<std::string, int>; // Key: mesh name, detail level
-        std::mutex mAutoLodMutex;
+        mutable std::mutex mAutoLodMutex;
         std::map<AutoLodKey, AutoLodEntry> mAutoLodCache;
         unsigned int mAutoLodInsertions = 0;
+        double mLastAutoLodSweep = 0.0;
         std::atomic<unsigned int> mAutoLodMeshes{ 0 };
+        // the performance log's memory columns, measured now and then (walking the caches takes a moment)
+        mutable unsigned int mMemoryMeasuredFrame = 0;
+        mutable double mAutoLodMb = 0.0;
+        mutable double mAutoLodTextures = 0.0;
+        mutable double mChunkMb = 0.0;
+        mutable double mChunkTextures = 0.0;
 
         // OpenMGE XE: active grid chunks an object in has changed are built again in the background.
         std::shared_ptr<RebuildOwner> mRebuildOwner;

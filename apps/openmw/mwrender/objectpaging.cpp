@@ -52,6 +52,7 @@
 #include <components/misc/rng.hpp>
 #include <components/nifosg/autotransform.hpp>
 #include <components/resource/scenemanager.hpp>
+#include <components/sceneutil/geometrymemory.hpp>
 #include <components/sceneutil/autolod.hpp>
 #include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/lightmanager.hpp>
@@ -82,6 +83,12 @@ namespace MWRender
 
     namespace
     {
+        // seconds on a steady clock, for how long ago a simplified copy was last asked for
+        double steadySeconds()
+        {
+            return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        }
+
         /// OpenMGE XE: keeps a distant chunk out of the water reflection beyond [Water] reflection statics distance
         /// (the reflection inherits the main view's view point, so this is the distance from the player's view).
         class ReflectionDistanceCallback
@@ -825,7 +832,10 @@ namespace MWRender
             {
                 osg::ref_ptr<osg::Node> cachedSource;
                 if (found->second.mSource.lock(cachedSource) && cachedSource.get() == &source)
+                {
+                    found->second.mLastUsed = steadySeconds();
                     return found->second.mLod;
+                }
             }
         }
 
@@ -853,6 +863,7 @@ namespace MWRender
         AutoLodEntry entry;
         entry.mSource = const_cast<osg::Node*>(&source);
         entry.mLod = simplified;
+        entry.mLastUsed = steadySeconds();
         if (simplified != nullptr)
         {
             entry.mTrianglesBefore = stats.mTrianglesBefore;
@@ -876,6 +887,31 @@ namespace MWRender
             }
         }
         return simplified;
+    }
+
+    void ObjectPaging::updateCache(double referenceTime)
+    {
+        Resource::NodeResourceManager<ChunkId>::updateCache(referenceTime);
+
+        // OpenMGE XE: a simplified copy shares its model's textures and the meshes it didn't simplify, so while it is
+        // kept they stay in video memory. It used to be let go of only when its model had left the scene manager's
+        // cache, checked once every 256 new copies: a session through a few towns kept every copy it had made (well
+        // over a thousand, gigabytes with what they share). Now, every couple of seconds, a copy no chunk holds any
+        // more and none has asked for in a while goes; a chunk that needs it again makes it again.
+        const double now = steadySeconds();
+        if (now - mLastAutoLodSweep < 2.0)
+            return;
+        mLastAutoLodSweep = now;
+        const double idle = std::max(10.0, 2.0 * getExpiryDelay());
+        std::lock_guard<std::mutex> lock(mAutoLodMutex);
+        for (auto it = mAutoLodCache.begin(); it != mAutoLodCache.end();)
+        {
+            const auto next = std::next(it);
+            const bool unused = it->second.mLod == nullptr || it->second.mLod->referenceCount() <= 1;
+            if (unused && (!it->second.mSource.valid() || now - it->second.mLastUsed > idle))
+                eraseAutoLodEntry(it);
+            it = next;
+        }
     }
 
     void ObjectPaging::eraseAutoLodEntry(std::map<AutoLodKey, AutoLodEntry>::iterator it)
@@ -1632,6 +1668,29 @@ namespace MWRender
     {
         Resource::reportStats("Object Chunk", frameNumber, mCache->getStats(), *stats);
         stats->setAttribute(frameNumber, "Object Chunk LOD Meshes", mAutoLodMeshes.load());
+
+        // What the chunks and the simplified copies hold: vertex and index data and how many textures (shared ones
+        // once), every ~5 seconds.
+        if (mMemoryMeasuredFrame == 0 || frameNumber - mMemoryMeasuredFrame >= 300)
+        {
+            mMemoryMeasuredFrame = frameNumber;
+            SceneUtil::GeometryMemory lods;
+            {
+                std::lock_guard<std::mutex> lock(mAutoLodMutex);
+                for (const auto& [key, entry] : mAutoLodCache)
+                    lods.add(entry.mLod.get());
+            }
+            mAutoLodMb = static_cast<double>(lods.getBytes()) / (1024.0 * 1024.0);
+            mAutoLodTextures = static_cast<double>(lods.getTextures());
+            SceneUtil::GeometryMemory chunks;
+            mCache->call([&](const auto& /*key*/, const osg::Object* object) { chunks.add(object); });
+            mChunkMb = static_cast<double>(chunks.getBytes()) / (1024.0 * 1024.0);
+            mChunkTextures = static_cast<double>(chunks.getTextures());
+        }
+        stats->setAttribute(frameNumber, "Object Chunk LOD MB", mAutoLodMb);
+        stats->setAttribute(frameNumber, "Object Chunk LOD Textures", mAutoLodTextures);
+        stats->setAttribute(frameNumber, "Object Chunk MB", mChunkMb);
+        stats->setAttribute(frameNumber, "Object Chunk Textures", mChunkTextures);
         const unsigned long long before = mAutoLodTrianglesBefore.load();
         if (before > 0)
             stats->setAttribute(frameNumber, "Object Chunk LOD Triangles Kept",
