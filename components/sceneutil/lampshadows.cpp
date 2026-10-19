@@ -19,7 +19,9 @@
 
 #include "glextensions.hpp"
 #include "lightmanager.hpp"
+#include "positionattitudetransform.hpp"
 #include "shadowsbin.hpp"
+#include "userdata.hpp"
 
 namespace SceneUtil
 {
@@ -84,34 +86,74 @@ namespace SceneUtil
             LampShadows* mShadows;
         };
 
-        // Where the characters are (the live faces' casters): the bounds of the nodes with only casters' masks under
-        // the lit scene, in world space (the cells' roots carry no transform). Doesn't look inside them.
-        class CasterBoundsVisitor : public osg::NodeVisitor
+        // The live faces draw the characters found this frame, not the whole scene.
+        class LiveFaceCullCallback : public osg::NodeCallback
         {
         public:
-            explicit CasterBoundsVisitor(unsigned int mask)
-                : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
-                , mMask(mask)
+            LiveFaceCullCallback(osg::StateSet* binStateSet, const std::vector<osg::ref_ptr<osg::Node>>* casters)
+                : mBinStateSet(binStateSet)
+                , mCasters(casters)
             {
-                setTraversalMask(mask);
+            }
+
+            void operator()(osg::Node* /*node*/, osg::NodeVisitor* nv) override
+            {
+                osgUtil::CullVisitor* cv = static_cast<osgUtil::CullVisitor*>(nv);
+                cv->pushStateSet(mBinStateSet);
+                for (const osg::ref_ptr<osg::Node>& caster : *mCasters)
+                    caster->accept(*cv);
+                cv->popStateSet();
+            }
+
+        private:
+            osg::ref_ptr<osg::StateSet> mBinStateSet;
+            const std::vector<osg::ref_ptr<osg::Node>>* mCasters;
+        };
+
+        // The characters (base nodes with only casters' masks) and the movables (still casters tagged
+        // LampShadowMovable) under the lit scene. The cells' roots carry no transform, so their bounds are in world
+        // space. Doesn't look inside them.
+        class CasterVisitor : public osg::NodeVisitor
+        {
+        public:
+            CasterVisitor(unsigned int liveMask, unsigned int stillMask)
+                : osg::NodeVisitor(TRAVERSE_ALL_CHILDREN)
+                , mLiveMask(liveMask)
+                , mStillMask(stillMask)
+            {
+                setTraversalMask(liveMask | stillMask);
             }
 
             void apply(osg::Node& node) override
             {
-                if ((node.getNodeMask() | mMask) == mMask)
+                const unsigned int mask = node.getNodeMask();
+                if ((mask | mLiveMask) == mLiveMask)
                 {
                     const osg::BoundingSphere& bound = node.getBound();
                     if (bound.valid())
-                        mBounds.push_back(bound);
+                    {
+                        mLive.emplace_back(&node);
+                        mLiveBounds.push_back(bound);
+                    }
+                    return;
+                }
+                if ((mask | mStillMask) == mStillMask)
+                {
+                    if (findUserData<LampShadowMovable>(node) != nullptr)
+                        if (auto* transform = dynamic_cast<PositionAttitudeTransform*>(&node))
+                            mMovables.push_back(transform);
                     return;
                 }
                 traverse(node);
             }
 
-            std::vector<osg::BoundingSphere> mBounds;
+            std::vector<osg::ref_ptr<osg::Node>> mLive;
+            std::vector<osg::BoundingSphere> mLiveBounds;
+            std::vector<PositionAttitudeTransform*> mMovables;
 
         private:
-            unsigned int mMask;
+            unsigned int mLiveMask;
+            unsigned int mStillMask;
         };
 
         osg::ref_ptr<osg::Texture2DArray> makeFaceTexture(int resolution, std::size_t lamps)
@@ -223,10 +265,12 @@ namespace SceneUtil
 
     void LampShadows::install(LightManager* lightManager, osg::StateSet* receivers)
     {
-        for (std::vector<Slot>* slots : { &mStill, &mLive })
-            for (Slot& slot : *slots)
-                for (osg::ref_ptr<osg::Camera>& camera : slot.mCameras)
-                    camera->setCullCallback(new FaceCullCallback(mBinStateSet, lightManager));
+        for (Slot& slot : mStill)
+            for (osg::ref_ptr<osg::Camera>& camera : slot.mCameras)
+                camera->setCullCallback(new FaceCullCallback(mBinStateSet, lightManager));
+        for (Slot& slot : mLive)
+            for (osg::ref_ptr<osg::Camera>& camera : slot.mCameras)
+                camera->setCullCallback(new LiveFaceCullCallback(mBinStateSet, &mLiveCasters));
 
         receivers->setTextureAttribute(mTextureUnit, mStillTexture, osg::StateAttribute::ON);
         receivers->setTextureAttribute(mTextureUnit + 1, mLiveTexture, osg::StateAttribute::ON);
@@ -350,6 +394,45 @@ namespace SceneUtil
         cv->setTraversalMask(traversalMask);
     }
 
+    void LampShadows::findCasters(LightManager* lightManager)
+    {
+        CasterVisitor visitor(mLiveMask, mStillMask);
+        for (unsigned int i = 0; i < lightManager->getNumChildren(); ++i)
+            lightManager->getChild(i)->accept(visitor);
+        mLiveCasters = std::move(visitor.mLive);
+        mLiveCasterBounds = std::move(visitor.mLiveBounds);
+
+        // A movable (a door) that turned or moved since last frame: the lamps whose light reaches it draw their still
+        // faces again, with it where it is now (two lamps a frame, as when they come into the room).
+        for (Movable& movable : mMovables)
+            movable.mSeen = false;
+        for (PositionAttitudeTransform* node : visitor.mMovables)
+        {
+            auto found = std::find_if(mMovables.begin(), mMovables.end(),
+                [&](const Movable& movable) { return movable.mNode == node; });
+            if (found == mMovables.end())
+            {
+                mMovables.push_back({ node, node->getPosition(), node->getAttitude(), true });
+                continue;
+            }
+            found->mSeen = true;
+            if (found->mPosition == node->getPosition() && found->mAttitude == node->getAttitude())
+                continue;
+            found->mPosition = node->getPosition();
+            found->mAttitude = node->getAttitude();
+            const osg::BoundingSphere& bound = node->getBound();
+            for (Slot& slot : mStill)
+            {
+                if (slot.mLight == nullptr)
+                    continue;
+                const float reach = slot.mFar + bound.radius();
+                if ((bound.center() - slot.mPosition).length2() <= reach * reach)
+                    slot.mPending = true;
+            }
+        }
+        std::erase_if(mMovables, [](const Movable& movable) { return !movable.mSeen; });
+    }
+
     void LampShadows::cullLamps(LightManager* lightManager, osgUtil::CullVisitor* cv)
     {
         const std::size_t frame = cv->getTraversalNumber();
@@ -357,6 +440,9 @@ namespace SceneUtil
         {
             releaseAll(frame);
             mMoving.clear();
+            mLiveCasters.clear();
+            mLiveCasterBounds.clear();
+            mMovables.clear();
             return;
         }
         std::erase_if(mMoving, [](const osg::observer_ptr<LightSource>& light) { return light == nullptr; });
@@ -447,6 +533,8 @@ namespace SceneUtil
             free->mMoves = 0;
         }
 
+        findCasters(lightManager);
+
         // Draw the still faces of a few waiting lamps, nearest first.
         int drawn = 0;
         for (const Candidate& candidate : candidates)
@@ -511,14 +599,6 @@ namespace SceneUtil
         }
         // Only the faces that see a character now, or saw one when last drawn (drawing clears them); all six when the
         // slot is new (whatever another lamp left in them).
-        std::vector<osg::BoundingSphere> casters;
-        if (std::any_of(mLive.begin(), mLive.end(), [](const Slot& slot) { return slot.mLight != nullptr; }))
-        {
-            CasterBoundsVisitor visitor(mLiveMask);
-            for (unsigned int i = 0; i < lightManager->getNumChildren(); ++i)
-                lightManager->getChild(i)->accept(visitor);
-            casters = std::move(visitor.mBounds);
-        }
         for (Slot& slot : mLive)
         {
             osg::ref_ptr<LightSource> light;
@@ -530,7 +610,7 @@ namespace SceneUtil
                 continue;
             slot.mPosition = still->mPosition;
             slot.mFar = still->mFar;
-            const unsigned int seeing = facesSeeing(slot, casters);
+            const unsigned int seeing = facesSeeing(slot, mLiveCasterBounds);
             const unsigned int faces = slot.mDrawn ? (seeing | slot.mFacesWithCasters) : 0x3fu;
             if (faces != 0)
                 drawFaces(slot, cv, mLiveMask, faces);

@@ -5,6 +5,7 @@
 #include <components/esm/defs.hpp>
 #include <components/misc/resourcehelpers.hpp>
 #include <components/misc/strings/algorithm.hpp>
+#include <components/sceneutil/lampshadows.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/sceneutil/shadowcasterfilter.hpp>
 #include <components/sceneutil/unrefqueue.hpp>
@@ -64,7 +65,11 @@ namespace MWRender
         SceneUtil::addUserData(*insert, ptr);
 
         if (ptr.getType() == ESM::REC_DOOR || ptr.getType() == ESM::REC_DOOR4)
+        {
             SceneUtil::addUserData(*insert, SkipOcclusion{});
+            // lamps redraw their shadows when it opens or shuts
+            SceneUtil::addUserData(*insert, SceneUtil::LampShadowMovable{});
+        }
 
         const float* f = ptr.getRefData().getPosition().pos;
 

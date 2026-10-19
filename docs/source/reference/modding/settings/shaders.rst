@@ -463,8 +463,10 @@ Shaders Settings
    creatures around them every frame, so they throw moving shadows. Only the sides of shapes turned towards a lamp
    cast: a lamp inside its own fixture (a lantern, a sconce's cage) or set a little into the wall behind it isn't
    hidden by them, but a single-sided wall seen from behind doesn't stop a lamp either. Lamps that turn out to move
-   (carried along by something) are left without. Closed doors and loose items don't cast (:ref:`light occlusion`, if on, still lets
-   doors block lamps). Only with :ref:`clustered lighting`. Needs a restart.
+   (carried along by something) are left without. Doors cast as well, and the lamps around a door draw their shadows
+   again as it opens or shuts; loose items don't cast. :ref:`light occlusion` leaves lamps with shadows alone (it
+   still handles the lamps without: farther ones, those outside, people's torches). Only with
+   :ref:`clustered lighting`. Needs a restart.
 
 .. omw-setting::
    :title: lamp shadow resolution

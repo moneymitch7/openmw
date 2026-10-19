@@ -10,6 +10,7 @@
 #include <osg/Camera>
 #include <osg/StateSet>
 #include <osg/Texture2DArray>
+#include <osg/Quat>
 #include <osg/Vec3f>
 #include <osg/observer_ptr>
 
@@ -27,6 +28,13 @@ namespace SceneUtil
 {
     class LightManager;
     class LightSource;
+    class PositionAttitudeTransform;
+
+    /// Tag on the base node of something drawn into lamps' still shadows that can move (a door turning open or shut):
+    /// the lamps around it draw their still shadows again when it does.
+    struct LampShadowMovable
+    {
+    };
 
     /// OpenMGE XE lamp shadows: the lamps placed in a room (wall sconces, candles, braziers, ...) cast real shadows,
     /// as the player's own lights do (HeldLightShadow). A lamp doesn't move, so what doesn't move either (walls,
@@ -77,6 +85,9 @@ namespace SceneUtil
         };
 
         void cullLamps(LightManager* lightManager, osgUtil::CullVisitor* cv);
+        /// Finds the characters (mLiveCasters) and the movables, and has the lamps around a movable that moved draw
+        /// their still faces again.
+        void findCasters(LightManager* lightManager);
         void drawFaces(Slot& slot, osgUtil::CullVisitor* cv, unsigned int mask, unsigned int faces = 0x3f);
         /// Which of the slot's faces see any of @a casters (bit per face).
         unsigned int facesSeeing(const Slot& slot, const std::vector<osg::BoundingSphere>& casters) const;
@@ -93,6 +104,18 @@ namespace SceneUtil
         osg::ref_ptr<osg::Callback> mCullCallback;
         // lamps found to move (on a moving platform, a spell's light): left without shadows
         std::vector<osg::observer_ptr<LightSource>> mMoving;
+        // the characters this frame (what the live faces draw) and their bounds
+        std::vector<osg::ref_ptr<osg::Node>> mLiveCasters;
+        std::vector<osg::BoundingSphere> mLiveCasterBounds;
+        // the movables and where they were
+        struct Movable
+        {
+            osg::observer_ptr<PositionAttitudeTransform> mNode;
+            osg::Vec3f mPosition;
+            osg::Quat mAttitude;
+            bool mSeen = false;
+        };
+        std::vector<Movable> mMovables;
         unsigned int mStillMask;
         unsigned int mLiveMask;
         int mResolution;

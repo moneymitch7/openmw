@@ -722,8 +722,9 @@ namespace SceneUtil
         {
             const LightSourceViewBound* light = lightList[i];
             const osg::Vec3f lightPos = osg::Vec3d(light->mViewBound.center()) * mOcclusionInverseView;
-            // its shadows are drawn
-            if (light->mLightSource->getCastsShadows())
+            // its shadows are drawn (the player's own lights, lamps with lamp shadows): they keep its light from what it
+            // can't reach, per pixel
+            if (light->mLightSource->getCastsShadows() || light->mLightSource->getLampStillLayer() >= 0)
                 continue;
             // A light within the object (a lamp's own mesh) always reaches it. Not for objects tested at their
             // surfaces, which see to that themselves: a stair tunnel's bound takes in the room beside it, whose lamp
