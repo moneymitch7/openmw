@@ -39,6 +39,7 @@
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
 #include <components/sceneutil/heldlightshadow.hpp>
+#include <components/sceneutil/lampshadows.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/occlusionculling.hpp>
@@ -337,6 +338,9 @@ namespace MWRender
         globalDefines["exponentialFog"] = exponentialFog ? "1" : "0";
         globalDefines["skyBlending"] = mSkyBlending ? "1" : "0";
         globalDefines["particlePointLighting"] = Settings::shaders().mParticlePointLighting ? "1" : "0";
+        // OpenMGE XE lamp shadows (the shaders that read them; clustered lighting only)
+        globalDefines["lampShadows"]
+            = (Settings::shaders().mLampShadows && sceneRoot->getClusteredLighting()) ? "1" : "0";
 
         for (auto itr = lightDefines.begin(); itr != lightDefines.end(); itr++)
             globalDefines[itr->first] = itr->second;
@@ -574,6 +578,18 @@ namespace MWRender
             mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(
                 shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor, 512);
             mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
+        }
+
+        // OpenMGE XE lamp shadows: the lamps placed indoors cast shadows; walls, floors, furniture and containers
+        // (statics) once per lamp, characters every frame for the nearest lamps.
+        if (Settings::shaders().mLampShadows && sceneRoot->getClusteredLighting())
+        {
+            Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
+            const int unit
+                = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::LampShadows, 2);
+            mLampShadows = std::make_unique<SceneUtil::LampShadows>(shaderManager, unit, Mask_Static,
+                Mask_Actor | Mask_Player, Settings::shaders().mLampShadowResolution);
+            mLampShadows->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 
         osg::Camera::CullingMode cullingMode = osg::Camera::DEFAULT_CULLING | osg::Camera::FAR_PLANE_CULLING;
@@ -1064,6 +1080,10 @@ namespace MWRender
         }
 
         updateCarriedLights();
+
+        if (mLampShadows != nullptr && mPlayerAnimation != nullptr)
+            mLampShadows->setFocus(
+                mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
 
         if (mHeldLightShadow != nullptr && mPlayerAnimation != nullptr)
             mHeldLightShadow->setFocus(

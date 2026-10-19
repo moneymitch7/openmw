@@ -154,6 +154,9 @@ namespace SceneUtil
 
         bool mEmpty = false;
         bool mCastsShadows = false;
+        int mLampStillLayer = -1;
+        int mLampLiveLayer = -1;
+        float mLampFar = 0.f;
 
     public:
         META_Node(SceneUtil, LightSource)
@@ -192,6 +195,18 @@ namespace SceneUtil
         /// Its shadows are drawn (HeldLightShadow), so light occlusion leaves it alone.
         void setCastsShadows(bool casts) { mCastsShadows = casts; }
         bool getCastsShadows() const { return mCastsShadows; }
+
+        /// A lamp's shadow faces (LampShadows): the first of its six still layers and of its six live ones (-1: none)
+        /// and the far end of its faces.
+        void setLampShadow(int stillLayer, int liveLayer, float farPlane)
+        {
+            mLampStillLayer = stillLayer;
+            mLampLiveLayer = liveLayer;
+            mLampFar = farPlane;
+        }
+        int getLampStillLayer() const { return mLampStillLayer; }
+        int getLampLiveLayer() const { return mLampLiveLayer; }
+        float getLampFar() const { return mLampFar; }
 
         bool getEmpty() const { return mEmpty; }
 

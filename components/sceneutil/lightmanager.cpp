@@ -354,6 +354,12 @@ namespace SceneUtil
                     // radius before the Light Radius Multiplier, see calcPointLightBounce in lib/light/util.glsl
                     if (bound.mLightSource->getBounce() >= 0.f)
                         gpuLight.mCarrierAxis.w() = bound.mLightSource->getRadius();
+                    // a lamp's shadow faces, see lampShadowLit in lib/light/util.glsl
+                    if (bound.mLightSource->getLampStillLayer() >= 0)
+                        gpuLight.mCarrierFoot
+                            = osg::Vec4f(static_cast<float>(bound.mLightSource->getLampStillLayer() + 1),
+                                static_cast<float>(bound.mLightSource->getLampLiveLayer() + 1),
+                                bound.mLightSource->getLampFar(), 0.f);
                     bound.mGpuIndex = static_cast<int>(cache.mGPULights[frameId]->getData().size());
                     cache.mGPULights[frameId]->getData().push_back(gpuLight);
                 }

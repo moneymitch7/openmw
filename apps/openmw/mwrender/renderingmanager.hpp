@@ -70,6 +70,7 @@ namespace SceneUtil
     class LightManager;
     class LightOcclusionTest;
     class HeldLightShadow;
+    class LampShadows;
     class UnrefQueue;
     class PerViewUniformStateUpdater;
     class SharedUniformStateUpdater;
@@ -397,6 +398,7 @@ namespace MWRender
         osg::ref_ptr<OccluderRegistry> mOccluderRegistry;
         osg::ref_ptr<MgeWeatherPass> mMgeWeatherPass;
         std::unique_ptr<SceneUtil::HeldLightShadow> mHeldLightShadow;
+        std::unique_ptr<SceneUtil::LampShadows> mLampShadows;
         // OpenMGE XE: worn lanterns' stand-in lights (see followCarriedLight), and where each sits in the player's own
         // frame.
         struct CarriedLightFollower

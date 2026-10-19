@@ -206,7 +206,68 @@ float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
 float heldLightShadowBounce(PointLight light, vec3 viewPos, vec3 viewNormal) {
     return heldLightShadowLit(light, viewPos, viewNormal, true);
 }
+#if @lampShadows
+// OpenMGE XE lamp shadows (SceneUtil::LampShadows): lamps placed in the room cast shadows from six depth faces each,
+// layers of these arrays: what doesn't move in lampShadowStill, drawn once, characters in lampShadowLive, drawn each
+// frame for the nearest lamps. A light's carrierFoot: x its first still layer + 1, y its first live layer + 1 (0: none),
+// z the far end of its faces.
+uniform sampler2DArrayShadow lampShadowStill;
+uniform sampler2DArrayShadow lampShadowLive;
+uniform vec3 lampShadowParams; // near, resolution, tangent of half a face's field of view
+uniform vec3 lampShadowFaceS[6];
+uniform vec3 lampShadowFaceU[6];
+
+// Whether the lamp sees the point v (from the lamp): its still face, and its live one when it has them.
+float lampShadowTap(vec3 v, float stillLayer, float liveLayer, float n, float f) {
+    vec3 a = abs(v);
+    int face = (a.x >= a.y && a.x >= a.z) ? (v.x > 0.0 ? 0 : 1) : (a.y >= a.z ? (v.y > 0.0 ? 2 : 3) : (v.z > 0.0 ? 4 : 5));
+    float z = max(max(a.x, a.y), a.z);
+    vec2 uv = vec2(dot(lampShadowFaceS[face], v), dot(lampShadowFaceU[face], v)) / (z * lampShadowParams.z) * 0.5 + 0.5;
+    float ref = ((f + n) / (f - n) - 2.0 * f * n / ((f - n) * z)) * 0.5 + 0.5;
+    float lit = texture(lampShadowStill, vec4(uv, stillLayer + float(face), ref));
+    if (liveLayer >= 0.0)
+        lit *= texture(lampShadowLive, vec4(uv, liveLayer + float(face), ref));
+    return lit;
+}
+
+// How much of a lamp's light reaches the point, 1 for all (and for lights without faces). wide: its bounce, looked up
+// over a wider spread (see heldLightShadowLit).
+float lampShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool wide) {
+    if (light.carrierFoot.x < 0.5)
+        return 1.0;
+    float stillLayer = light.carrierFoot.x - 1.0;
+    float liveLayer = light.carrierFoot.y - 1.0;
+    float n = lampShadowParams.x;
+    float f = light.carrierFoot.z;
+    vec3 v = mat3(osg_ViewMatrixInverse) * (viewPos - light.position.xyz);
+    float dist = length(v);
+    if (dist >= f || dist < 1.0)
+        return 1.0;
+    vec3 worldNormal = normalize(mat3(osg_ViewMatrixInverse) * viewNormal);
+    float texel = 2.0 * lampShadowParams.z * max(max(abs(v.x), abs(v.y)), abs(v.z)) / lampShadowParams.y;
+    float facing = dot(worldNormal, -v / dist);
+    v += worldNormal * (texel * 1.5 * (facing < 0.0 ? -1.0 : 1.0));
+    // spread along the surface, each tap compared at its own distance (see heldLightShadowLit)
+    vec3 side = normalize(cross(worldNormal, abs(worldNormal.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
+    vec3 up = cross(worldNormal, side);
+    float spread = wide ? max(texel * 1.25, dist * 0.08) : texel * 1.25;
+    float lit = lampShadowTap(v, stillLayer, liveLayer, n, f);
+    lit += lampShadowTap(v + side * spread, stillLayer, liveLayer, n, f);
+    lit += lampShadowTap(v - side * spread, stillLayer, liveLayer, n, f);
+    lit += lampShadowTap(v + up * spread, stillLayer, liveLayer, n, f);
+    lit += lampShadowTap(v - up * spread, stillLayer, liveLayer, n, f);
+    return lit * 0.2;
+}
 #else
+float lampShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool wide) {
+    return 1.0;
+}
+#endif
+#else
+float lampShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool wide) {
+    return 1.0;
+}
+
 float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
     return 1.0;
 }
@@ -229,7 +290,7 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     vec3 lightDir = lightPos / lightDistance;
 
     float attenuation = calcAttenuation(light, lightDistance) * clusterFade(viewPos, light.radius);
-    float direct = attenuation * heldLightShadow(light, viewPos, viewNormal);
+    float direct = attenuation * heldLightShadow(light, viewPos, viewNormal) * lampShadowLit(light, viewPos, viewNormal, false);
 
     float lambertTerm = lambert(viewNormal, lightDir, viewDir);
     if (lightDistance < uSelfLitRange)
@@ -238,7 +299,7 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     ambientLight += light.ambient.xyz * attenuation;
     if (pointLightBounceAmount(light) > 0.0)
         ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius)
-            * heldLightShadowBounce(light, viewPos, viewNormal);
+            * heldLightShadowBounce(light, viewPos, viewNormal) * lampShadowLit(light, viewPos, viewNormal, true);
     specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * direct;
 }
 

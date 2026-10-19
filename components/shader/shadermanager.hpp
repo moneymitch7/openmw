@@ -87,6 +87,7 @@ namespace Shader
             ShadowMaps,
             MgeWeather, // OpenMGE XE once-per-frame weather verdict
             HeldLightShadow, // OpenMGE XE lantern shadows' cube map
+            LampShadows, // OpenMGE XE lamp shadows' face arrays
             SLOT_COUNT
         };
 

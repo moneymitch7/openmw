@@ -78,6 +78,9 @@ namespace Settings
         SettingValue<float> mTerrainPaintedShading{ mIndex, "Shaders", "terrain painted shading",
             makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mHeldLightShadows{ mIndex, "Shaders", "held light shadows" };
+        SettingValue<bool> mLampShadows{ mIndex, "Shaders", "lamp shadows" };
+        SettingValue<int> mLampShadowResolution{ mIndex, "Shaders", "lamp shadow resolution",
+            makeClampSanitizerInt(128, 1024) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };
         SettingValue<bool> mSoftParticles{ mIndex, "Shaders", "soft particles" };

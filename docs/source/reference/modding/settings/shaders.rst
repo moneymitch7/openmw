@@ -451,6 +451,31 @@ Shaders Settings
    Light occlusion leaves those lights alone. Only with :ref:`clustered lighting`. Needs a restart.
 
 .. omw-setting::
+   :title: lamp shadows
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   Indoors, the lamps placed in the room (wall sconces, candles, braziers: the 32 nearest the player) cast real
+   shadows too. A lamp doesn't move, so what doesn't move either (walls, floors, furniture, containers) is drawn from
+   it once, into six depth faces, when it comes into the room, and kept; tables and pillars throw shadows and walls
+   keep its light out of the next room, per pixel. The four lamps nearest the player also draw the people and
+   creatures around them every frame, so they throw moving shadows. Only the sides of shapes turned towards a lamp
+   cast: a lamp inside its own fixture (a lantern, a sconce's cage) or set a little into the wall behind it isn't
+   hidden by them, but a single-sided wall seen from behind doesn't stop a lamp either. Lamps that turn out to move
+   (carried along by something) are left without. Closed doors and loose items don't cast (:ref:`light occlusion`, if on, still lets
+   doors block lamps). Only with :ref:`clustered lighting`. Needs a restart.
+
+.. omw-setting::
+   :title: lamp shadow resolution
+   :type: int
+   :range: 128 to 1024
+   :default: 256
+
+   Size of each of a lamp's six shadow faces, in pixels. 256 is soft and uses about 1.5 MB of video memory per lamp
+   (48 MB for 32 lamps); 512 is sharper at four times the memory. Needs a restart.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false
