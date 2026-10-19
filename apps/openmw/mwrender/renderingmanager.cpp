@@ -576,7 +576,8 @@ namespace MWRender
             const int unit = shaderManager.reserveGlobalTextureUnits(
                 Shader::ShaderManager::Slot::HeldLightShadow, SceneUtil::HeldLightShadow::sMaxLights);
             mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(
-                shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor, 512);
+                shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor,
+                Settings::shaders().mHeldLightShadowResolution, Settings::shaders().mHeldLightShadowMinCasterSize);
             mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 

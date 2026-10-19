@@ -40,7 +40,9 @@ namespace SceneUtil
 
         /// @param castMask what casts shadows (node masks)
         /// @param textureUnit the first of sMaxLights texture units, one cube map each
-        HeldLightShadow(Shader::ShaderManager& shaderManager, int textureUnit, unsigned int castMask, int resolution);
+        /// @param minCasterPixels what covers fewer pixels of a face than this casts nothing (0: everything casts)
+        HeldLightShadow(Shader::ShaderManager& shaderManager, int textureUnit, unsigned int castMask, int resolution,
+            float minCasterPixels = 0.f);
         ~HeldLightShadow();
 
         /// Draws the shadows of the lights, binds the cube maps to @a receivers (the root state set of what is lit)

@@ -82,8 +82,8 @@ namespace SceneUtil
         };
     }
 
-    HeldLightShadow::HeldLightShadow(
-        Shader::ShaderManager& shaderManager, int textureUnit, unsigned int castMask, int resolution)
+    HeldLightShadow::HeldLightShadow(Shader::ShaderManager& shaderManager, int textureUnit, unsigned int castMask,
+        int resolution, float minCasterPixels)
         : mCastMask(castMask)
         , mResolution(resolution)
         , mTextureUnit(textureUnit)
@@ -118,7 +118,16 @@ namespace SceneUtil
                 camera->setClearDepth(1.0);
                 camera->setViewport(0, 0, resolution, resolution);
                 camera->setComputeNearFarMode(osg::Camera::DO_NOT_COMPUTE_NEAR_FAR);
-                camera->setCullingMode(camera->getCullingMode() & ~osg::CullSettings::SMALL_FEATURE_CULLING);
+                // Small things far from the light (a cup across the room) cover a few pixels of a face: left out
+                // when asked, they are most of what a cluttered room has to draw six times a frame.
+                if (minCasterPixels > 0.f)
+                {
+                    camera->setCullingMode(camera->getCullingMode() | osg::CullSettings::SMALL_FEATURE_CULLING);
+                    camera->setSmallFeatureCullingPixelSize(minCasterPixels);
+                }
+                else
+                    camera->setCullingMode(
+                        camera->getCullingMode() & ~osg::CullSettings::SMALL_FEATURE_CULLING);
                 camera->attach(osg::Camera::DEPTH_BUFFER, slot.mTexture.get(), 0, static_cast<unsigned int>(face));
                 slot.mCameras[face] = camera;
             }

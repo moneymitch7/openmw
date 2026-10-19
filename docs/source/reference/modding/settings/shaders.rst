@@ -451,6 +451,27 @@ Shaders Settings
    Light occlusion leaves those lights alone. Only with :ref:`clustered lighting`. Needs a restart.
 
 .. omw-setting::
+   :title: held light shadow resolution
+   :type: int
+   :range: 128 to 2048
+   :default: 512
+
+   Size of each of the six faces of a :ref:`held light shadows` cube map, in pixels. Lower costs the GPU less and
+   makes the shadows softer. Needs a restart.
+
+.. omw-setting::
+   :title: held light shadow min caster size
+   :type: float
+   :range: 0 to 64
+   :default: 0
+
+   Things that would cover fewer pixels than this of a :ref:`held light shadows` face cast no shadow from the
+   player's lights. In a cluttered room most of what those faces draw, six times a frame, is small and far from the
+   light (cups, plates, books across the room), and their shadows are faint and a few pixels across. 0 keeps
+   everything; at 8 a cup is left out once it is a few metres from the light, where it may be seen to start or
+   stop casting as the player walks. Larger things are unaffected. Needs a restart.
+
+.. omw-setting::
    :title: lamp shadows
    :type: boolean
    :range: true, false
