@@ -303,8 +303,11 @@ namespace SceneUtil
         const osg::Matrixd projection = osg::Matrixd::perspective(
             2.0 * osg::RadiansToDegrees(std::atan(static_cast<double>(mTanHalfFov))), 1.0, sNearPlane, slot.mFar);
         unsigned int faces = 0;
-        for (const osg::BoundingSphere& caster : casters)
+        for (osg::BoundingSphere caster : casters)
         {
+            // an animated character's bound can lag its pose (a raised arm, a step): a margin, so a face isn't left
+            // out while part of them is in it
+            caster.radius() = std::max(caster.radius(), 48.f) + 24.f;
             const float reach = slot.mFar + caster.radius();
             if ((caster.center() - slot.mPosition).length2() > reach * reach)
                 continue;
@@ -382,7 +385,8 @@ namespace SceneUtil
                 continue;
             const osg::Vec3f position = transform.mWorldMatrix.getTrans();
             const float far = std::max(sNearPlane * 2.f, light->getRadius() * radiusMultiplier);
-            float score = std::max(0.f, (position - mFocus).length() - far);
+            // not clamped at 0: lamps whose light reaches the player would all tie, and swap places from frame to frame
+            float score = (position - mFocus).length() - far;
             // the lamps that have faces keep them over ones about as near (no drawing back and forth at the edge)
             if (std::any_of(mStill.begin(), mStill.end(), [&](const Slot& slot) { return slot.mLight == light; }))
                 score -= 512.f;
@@ -462,15 +466,29 @@ namespace SceneUtil
                 }
         }
 
-        // Live faces: the nearest lamps that have still faces also draw the characters around them, every frame.
-        std::vector<LightSource*> live;
+        // Live faces: the lamps nearest the player that have still faces also draw the characters around them, every
+        // frame. Those that do keep it over ones about as near: a lamp handing its live faces over loses its characters'
+        // shadows for a few frames (the slot rests), which would flicker.
+        std::vector<std::pair<float, LightSource*>> liveCandidates;
         for (const Candidate& candidate : candidates)
+        {
+            if (!std::any_of(mStill.begin(), mStill.end(),
+                    [&](const Slot& slot) { return slot.mDrawn && slot.mLight == candidate.mLight; }))
+                continue;
+            float distance = (candidate.mPosition - mFocus).length();
+            if (std::any_of(mLive.begin(), mLive.end(),
+                    [&](const Slot& slot) { return slot.mLight == candidate.mLight; }))
+                distance -= 128.f;
+            liveCandidates.emplace_back(distance, candidate.mLight);
+        }
+        std::sort(liveCandidates.begin(), liveCandidates.end(),
+            [](const auto& left, const auto& right) { return left.first < right.first; });
+        std::vector<LightSource*> live;
+        for (const auto& [distance, light] : liveCandidates)
         {
             if (live.size() >= sLiveLamps)
                 break;
-            if (std::any_of(mStill.begin(), mStill.end(),
-                    [&](const Slot& slot) { return slot.mDrawn && slot.mLight == candidate.mLight; }))
-                live.push_back(candidate.mLight);
+            live.push_back(light);
         }
         for (Slot& slot : mLive)
             if (slot.mLight != nullptr && std::find(live.begin(), live.end(), slot.mLight.get()) == live.end())
