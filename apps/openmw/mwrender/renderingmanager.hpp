@@ -433,6 +433,12 @@ namespace MWRender
         float mFirstPersonFieldOfView;
         bool mUpdateProjectionMatrix = false;
         bool mNight = false;
+        // OpenMGE XE [Shaders] held light shadows outside: the sun's shadow strength (setSunShadowFade), and whether
+        // it is dark enough outside for the lantern's shadows, switched only after a second (a lightning flash
+        // doesn't switch them off)
+        float mSunShadowFade = 1.f;
+        bool mOutsideDark = false;
+        float mOutsideDarkChange = 0.f;
         osg::Vec2f mProjectionOffset;
         const MWWorld::GroundcoverStore& mGroundCoverStore;
         std::map<std::string, std::string> mAppliedShadowDefines;

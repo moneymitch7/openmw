@@ -451,6 +451,20 @@ Shaders Settings
    Light occlusion leaves those lights alone. Only with :ref:`clustered lighting`. Needs a restart.
 
 .. omw-setting::
+   :title: held light shadows outside
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   :ref:`held light shadows` outside as well, while the sun casts little or nothing: at night, and in weather that
+   hides it (heavy cloud, rain, storms), whenever the sun's own shadows have faded to a quarter or less ([Shadows] night
+   shadows and weather shadows). The two then never cost at once. Buildings, rocks, trees, people and
+   creatures near the light cast; the ground doesn't. It costs more in towns than in the wilderness: object paging
+   merges a town's nearby buildings into large pieces, and a piece the light reaches is drawn whole into each of the
+   six faces. Switches a second after the light outside changes, so a lightning flash doesn't blink them off. Changes
+   apply immediately.
+
+.. omw-setting::
    :title: held light shadow resolution
    :type: int
    :range: 128 to 2048

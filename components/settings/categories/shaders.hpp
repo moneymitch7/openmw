@@ -78,6 +78,7 @@ namespace Settings
         SettingValue<float> mTerrainPaintedShading{ mIndex, "Shaders", "terrain painted shading",
             makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mHeldLightShadows{ mIndex, "Shaders", "held light shadows" };
+        SettingValue<bool> mHeldLightShadowsOutside{ mIndex, "Shaders", "held light shadows outside" };
         SettingValue<int> mHeldLightShadowResolution{ mIndex, "Shaders", "held light shadow resolution",
             makeClampSanitizerInt(128, 2048) };
         SettingValue<float> mHeldLightShadowMinCasterSize{ mIndex, "Shaders", "held light shadow min caster size",

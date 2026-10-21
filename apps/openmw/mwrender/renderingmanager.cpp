@@ -749,6 +749,7 @@ namespace MWRender
 
     void RenderingManager::setSunShadowFade(float fade)
     {
+        mSunShadowFade = fade;
         mSharedUniformStateUpdater->setSunShadowFade(fade);
         if (mShadowManager)
             mShadowManager->setSunShadowsSuppressed(fade <= 0.f);
@@ -1088,8 +1089,29 @@ namespace MWRender
                 mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
 
         if (mHeldLightShadow != nullptr && mPlayerAnimation != nullptr)
-            mHeldLightShadow->setFocus(
-                mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
+        {
+            // Outside, the lantern casts too when asked, while the sun casts little or nothing: at night, under heavy
+            // cloud, in rain and storms, so the two never cost at once and the lantern's shadows show where they
+            // tell. The change waits a second, so a lightning flash doesn't blink them off.
+            bool castsHere = !mSky->isEnabled();
+            if (!castsHere && Settings::shaders().mHeldLightShadowsOutside)
+            {
+                const bool dark = mNight || mSunShadowFade <= 0.25f;
+                if (dark != mOutsideDark)
+                {
+                    mOutsideDarkChange += dt;
+                    if (mOutsideDarkChange >= 1.f)
+                    {
+                        mOutsideDark = dark;
+                        mOutsideDarkChange = 0.f;
+                    }
+                }
+                else
+                    mOutsideDarkChange = 0.f;
+                castsHere = mOutsideDark;
+            }
+            mHeldLightShadow->setFocus(mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), castsHere);
+        }
 
         mWater->update(dt, paused);
         if (!paused)
