@@ -301,7 +301,9 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
 
     float edgeFade = clusterFade(viewPos, light.radius);
     float attenuation = calcAttenuation(light, lightDistance) * edgeFade;
-    float direct = attenuation * heldLightShadow(light, viewPos, viewNormal) * lampShadowLit(light, viewPos, viewNormal, false);
+    // a lamp's shadow, looked up once: its bounce reuses it (see below)
+    float lampLit = lampShadowLit(light, viewPos, viewNormal, false);
+    float direct = attenuation * heldLightShadow(light, viewPos, viewNormal) * lampLit;
 
     float lambertTerm = lambert(viewNormal, lightDir, viewDir);
     if (lightDistance < uSelfLitRange)
@@ -310,7 +312,10 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     ambientLight += light.ambient.xyz * attenuation;
     if (pointLightBounceAmount(light) > 0.0)
         ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * edgeFade
-            * heldLightShadowBounce(light, viewPos, viewNormal) * lampShadowLit(light, viewPos, viewNormal, true);
+            // A lamp's bounce takes its direct shadow rather than a wider lookup of its own: five more shadow samples
+            // per lamp for every point it reaches cost about as much as all its other light together, for a fill that
+            // is soft anyway. Walls still keep it out of the next room.
+            * heldLightShadowBounce(light, viewPos, viewNormal) * lampLit;
     specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * direct;
 }
 
