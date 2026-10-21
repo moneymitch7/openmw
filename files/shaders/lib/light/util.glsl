@@ -160,6 +160,10 @@ float heldLightShadowTap(int index, vec3 v, float n, float f) {
 // over a much wider spread (bounce comes off the surfaces around, so it softens shadows instead of keeping their
 // edges), but still kept from behind walls the light can't reach.
 float heldLightShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool wide) {
+    // only carried lights have their own bounce (position.w), and only they can be one of these: every other light
+    // leaves before the search below
+    if (light.position.w < 0.0)
+        return 1.0;
     int index = -1;
     for (int i = 0; i < 2; ++i) {
         if (heldLightShadowPos[i].w <= 0.0)
@@ -285,11 +289,18 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
 #if !@classicFalloff
     if (lightDistance > light.radius)
         return;
+#elif @lightingMethodClustered
+    // OpenMGE XE: clustered lighting fades every light to nothing at its radius whatever the falloff (calcRadiusFade),
+    // so a point past it gets nothing (a carried light's bounce reaches carrierAxis.w): skip the work, shadow lookups
+    // included. A cluster lists every light that touches any part of it, so many points in it are past some of them.
+    if (lightDistance > max(light.radius, light.carrierAxis.w))
+        return;
 #endif
 
     vec3 lightDir = lightPos / lightDistance;
 
-    float attenuation = calcAttenuation(light, lightDistance) * clusterFade(viewPos, light.radius);
+    float edgeFade = clusterFade(viewPos, light.radius);
+    float attenuation = calcAttenuation(light, lightDistance) * edgeFade;
     float direct = attenuation * heldLightShadow(light, viewPos, viewNormal) * lampShadowLit(light, viewPos, viewNormal, false);
 
     float lambertTerm = lambert(viewNormal, lightDir, viewDir);
@@ -298,7 +309,7 @@ void calcPointLighting(PointLight light, vec3 viewDir, vec3 viewPos, vec3 viewNo
     diffuseLight += light.diffuse.xyz * lambertTerm * direct;
     ambientLight += light.ambient.xyz * attenuation;
     if (pointLightBounceAmount(light) > 0.0)
-        ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * clusterFade(viewPos, light.radius)
+        ambientLight += calcPointLightBounce(light, lightDistance, lightDir, viewNormal) * edgeFade
             * heldLightShadowBounce(light, viewPos, viewNormal) * lampShadowLit(light, viewPos, viewNormal, true);
     specularLight += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * direct;
 }

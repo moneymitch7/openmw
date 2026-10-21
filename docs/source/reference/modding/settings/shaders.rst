@@ -499,6 +499,20 @@ Shaders Settings
    (48 MB for 32 lamps); 512 is sharper at four times the memory. Needs a restart.
 
 .. omw-setting::
+   :title: max lights per cluster
+   :type: int
+   :range: 0 to 64
+   :default: 0
+
+   Clustered lighting splits the view into small boxes and works out which lights reach each one; every point drawn
+   adds up all the lights of its box. With a large :ref:`light radius multiplier`, a room full of lamps can put dozens
+   of lights in each box, most of them faint and far off, and the cost grows with every one. Above 0, a box keeps only
+   this many lights, the strongest there (by brightness and distance), and the faint rest are left out: the cost of a
+   crowded room is capped, while rooms with fewer lights look and cost exactly the same. Lights the player or others
+   carry always stay. 16 to 24 is a good start; very low values can leave visible steps where neighbouring boxes kept
+   different faint lights. 0 keeps them all. Only with :ref:`clustered lighting`. Needs a restart.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

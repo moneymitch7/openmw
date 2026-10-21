@@ -163,6 +163,7 @@ namespace SceneUtil
         , mGridSizeZ(settings.mClusteredGridSize.z())
         , mNumClusters(mGridSizeX * mGridSizeY * mGridSizeZ)
         , mWorkGroupSize(settings.mClusteredWorkGroupSize)
+        , mLightCap(std::clamp(settings.mClusteredLightCap, 0, 512))
     {
     }
 
@@ -217,6 +218,7 @@ namespace SceneUtil
                             {
                                 { "workGroupSize", std::to_string(mWorkGroupSize) },
                                 { "maxLightsPerCluster", std::to_string(mMaxLightsPerCluster) },
+                                { "lightCap", std::to_string(mLightCap) },
                             },
                             osg::Shader::COMPUTE)),
                     osg::StateAttribute::ON);

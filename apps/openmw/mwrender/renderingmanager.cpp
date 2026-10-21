@@ -305,6 +305,7 @@ namespace MWRender
                 .mMaximumLightDistance = Settings::shaders().mMaximumLightDistance,
                 .mLightFadeStart = Settings::shaders().mLightFadeStart,
                 .mLightRadiusMultiplier = Settings::shaders().mLightRadiusMultiplier,
+                .mClusteredLightCap = Settings::shaders().mMaxLightsPerCluster,
             },
             resourceSystem);
 

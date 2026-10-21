@@ -83,6 +83,8 @@ namespace Settings
         SettingValue<float> mHeldLightShadowMinCasterSize{ mIndex, "Shaders", "held light shadow min caster size",
             makeClampSanitizerFloat(0, 64) };
         SettingValue<bool> mLampShadows{ mIndex, "Shaders", "lamp shadows" };
+        SettingValue<int> mMaxLightsPerCluster{ mIndex, "Shaders", "max lights per cluster",
+            makeClampSanitizerInt(0, 64) };
         SettingValue<int> mLampShadowResolution{ mIndex, "Shaders", "lamp shadow resolution",
             makeClampSanitizerInt(128, 1024) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };

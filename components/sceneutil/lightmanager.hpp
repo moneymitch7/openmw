@@ -236,6 +236,8 @@ namespace SceneUtil
         float mLightRadiusMultiplier = 1;
         osg::Vec3i mClusteredGridSize = { 16, 8, 24 };
         int mClusteredWorkGroupSize = 512;
+        /// OpenMGE XE: the most lights a cluster keeps, the strongest there (0: all, up to the 512 a cluster holds)
+        int mClusteredLightCap = 0;
     };
 
     class LightManagerCullCallback;
@@ -574,6 +576,7 @@ namespace SceneUtil
         const int mGridSizeZ;
         const int mNumClusters;
         const int mWorkGroupSize;
+        const int mLightCap;
 
         const int mMaxLightsPerCluster = 512;
     };

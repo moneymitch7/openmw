@@ -10,6 +10,12 @@ shared uint g_Count;
 shared uint g_Offset;
 shared uint g_List[@maxLightsPerCluster];
 
+#if @lightCap > 0
+// OpenMGE XE [Shaders] max lights per cluster: a cluster reached by more lights keeps the strongest of them.
+shared float g_Score[@maxLightsPerCluster];
+shared uint g_Kept[@lightCap];
+#endif
+
 bool sphereAABBIntersection(vec3 center, float radius, vec3 aabbMin, vec3 aabbMax)
 {
     vec3 closestPoint = clamp(center, aabbMin, aabbMax);
@@ -26,6 +32,26 @@ bool testSphereAABB(int i, Cluster cluster)
 
     return sphereAABBIntersection(center, radius, aabbMin, aabbMax);
 }
+
+#if @lightCap > 0
+// About how much of a light reaches the nearest point of the cluster: its brightness times its distance curve and the
+// fade to its radius (see calcAttenuation and calcPointLightBounce in lib/light/util.glsl), the bounce counted too as
+// it reaches further than the direct light. Only the order matters. Carried lights always stay.
+float lightScore(PointLight light, vec3 aabbMin, vec3 aabbMax)
+{
+    if (light.position.w >= 0.0)
+        return 3.0e38;
+    vec3 closestPoint = clamp(light.position.xyz, aabbMin, aabbMax);
+    float d = length(closestPoint - light.position.xyz);
+    float base = 1.0 / max(light.constant + light.linear * d + light.quadratic * d * d, 1.0e-4);
+    float x = clamp((d / max(light.radius, 1.0e-4) - 0.75) / 0.25, 0.0, 1.0);
+    float radiusFade = 1.0 - x * x * (3.0 - 2.0 * x);
+    // negative lights darken: as strong the other way
+    float brightness = abs(dot(light.diffuse.rgb, vec3(0.2126, 0.7152, 0.0722)))
+        + abs(dot(light.ambient.rgb, vec3(0.2126, 0.7152, 0.0722)));
+    return brightness * radiusFade * (min(base, 4.0) + 0.25 * sqrt(min(base, 1.0)));
+}
+#endif
 
 void main()
 {
@@ -53,19 +79,50 @@ void main()
             if (index >= @maxLightsPerCluster) break;
 
             g_List[index] = i;
+#if @lightCap > 0
+            g_Score[index] = lightScore(light, aabbMin, aabbMax);
+#endif
         }
     }
 
     barrier();
 
-    if (gl_LocalInvocationIndex == 0) {
-        g_Offset = atomicAdd(globalLightIndexCount, g_Count);
-        lightGrid[gl_WorkGroupID.x] = LightGrid(g_Offset, g_Count);
+    // more lights than the list holds: the others were left out above
+    uint count = min(g_Count, uint(@maxLightsPerCluster));
+
+#if @lightCap > 0
+    // Too many: each light's place in order of strength (ties by index), the first lightCap kept.
+    bool trim = count > uint(@lightCap);
+    for (uint i = gl_LocalInvocationIndex; trim && i < count; i += @workGroupSize) {
+        float score = g_Score[i];
+        uint rank = 0;
+        for (uint j = 0; j < count; ++j) {
+            float other = g_Score[j];
+            if (other > score || (other == score && j < i))
+                ++rank;
+        }
+        if (rank < uint(@lightCap))
+            g_Kept[rank] = g_List[i];
     }
 
     barrier();
 
-    for (uint i = gl_LocalInvocationIndex; i < g_Count; i += @workGroupSize) {
+    if (trim)
+        count = uint(@lightCap);
+#endif
+
+    if (gl_LocalInvocationIndex == 0) {
+        g_Offset = atomicAdd(globalLightIndexCount, count);
+        lightGrid[gl_WorkGroupID.x] = LightGrid(g_Offset, count);
+    }
+
+    barrier();
+
+    for (uint i = gl_LocalInvocationIndex; i < count; i += @workGroupSize) {
+#if @lightCap > 0
+        lightIndexList[g_Offset + i] = trim ? g_Kept[i] : g_List[i];
+#else
         lightIndexList[g_Offset + i] = g_List[i];
+#endif
     }
 }
