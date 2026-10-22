@@ -50,8 +50,9 @@ namespace SceneUtil
         void install(LightManager* lightManager, osg::StateSet* receivers);
 
         /// Call every frame: where the player is (the lights carried by the player, or carried by no one within
-        /// reach of this point, cast the shadows), and whether shadows are wanted at all now.
-        void setFocus(const osg::Vec3f& position, bool enabled);
+        /// reach of this point, cast the shadows), and whether shadows are wanted at all now. @a castMask: what casts
+        /// now (0: the mask given at construction).
+        void setFocus(const osg::Vec3f& position, bool enabled, unsigned int castMask = 0);
 
         void cull(LightManager* lightManager, osgUtil::CullVisitor* cv);
 
@@ -76,6 +77,7 @@ namespace SceneUtil
         osg::observer_ptr<LightManager> mInstalledOn;
         osg::ref_ptr<osg::Callback> mCullCallback;
         unsigned int mCastMask;
+        unsigned int mCurrentCastMask;
         int mResolution;
         int mTextureUnit;
         osg::Vec3f mFocus;

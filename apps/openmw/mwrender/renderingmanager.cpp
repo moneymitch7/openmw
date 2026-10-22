@@ -1093,6 +1093,9 @@ namespace MWRender
             // Outside, the lantern casts too when asked, while the sun casts little or nothing: at night, under heavy
             // cloud, in rain and storms, so the two never cost at once and the lantern's shadows show where they
             // tell. The change waits a second, so a lightning flash doesn't blink them off.
+            // Only people, creatures and loose objects cast outside: object paging merges a town's buildings and
+            // statics into large chunks, and a chunk the light reaches is drawn whole into each of the six faces
+            // (millions of triangles a frame in a town).
             bool castsHere = !mSky->isEnabled();
             if (!castsHere && Settings::shaders().mHeldLightShadowsOutside)
             {
@@ -1110,7 +1113,9 @@ namespace MWRender
                     mOutsideDarkChange = 0.f;
                 castsHere = mOutsideDark;
             }
-            mHeldLightShadow->setFocus(mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), castsHere);
+            const unsigned int castMask = mSky->isEnabled() ? (Mask_Object | Mask_Actor) : 0u;
+            mHeldLightShadow->setFocus(
+                mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), castsHere, castMask);
         }
 
         mWater->update(dt, paused);

@@ -458,10 +458,10 @@ Shaders Settings
 
    :ref:`held light shadows` outside as well, while the sun casts little or nothing: at night, and in weather that
    hides it (heavy cloud, rain, storms), whenever the sun's own shadows have faded to a quarter or less ([Shadows] night
-   shadows and weather shadows). The two then never cost at once. Buildings, rocks, trees, people and
-   creatures near the light cast; the ground doesn't. It costs more in towns than in the wilderness: object paging
-   merges a town's nearby buildings into large pieces, and a piece the light reaches is drawn whole into each of the
-   six faces. Switches a second after the light outside changes, so a lightning flash doesn't blink them off. Changes
+   shadows and weather shadows). The two then never cost at once. People, creatures and loose objects near the light
+   cast; buildings, rocks, trees and the ground don't: object paging merges a town's buildings and statics into large
+   pieces, and a piece the light reaches would be drawn whole into each of the six faces, millions of triangles a frame
+   in a town. Switches a second after the light outside changes, so a lightning flash doesn't blink them off. Changes
    apply immediately.
 
 .. omw-setting::

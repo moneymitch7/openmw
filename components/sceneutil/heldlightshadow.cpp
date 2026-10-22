@@ -85,6 +85,7 @@ namespace SceneUtil
     HeldLightShadow::HeldLightShadow(Shader::ShaderManager& shaderManager, int textureUnit, unsigned int castMask,
         int resolution, float minCasterPixels)
         : mCastMask(castMask)
+        , mCurrentCastMask(castMask)
         , mResolution(resolution)
         , mTextureUnit(textureUnit)
     {
@@ -222,10 +223,11 @@ namespace SceneUtil
         mInstalledOn = lightManager;
     }
 
-    void HeldLightShadow::setFocus(const osg::Vec3f& position, bool enabled)
+    void HeldLightShadow::setFocus(const osg::Vec3f& position, bool enabled, unsigned int castMask)
     {
         mFocus = position;
         mEnabled = enabled;
+        mCurrentCastMask = castMask != 0 ? castMask : mCastMask;
     }
 
     void HeldLightShadow::cull(LightManager* lightManager, osgUtil::CullVisitor* cv)
@@ -315,7 +317,7 @@ namespace SceneUtil
                 = std::max(sNearPlane * 2.f, caster->getRadius() * lightManager->getPointLightRadiusMultiplier());
             const osg::Matrixd projection = osg::Matrixd::perspective(90.0, 1.0, sNearPlane, farPlane);
 
-            cv->setTraversalMask(mCastMask);
+            cv->setTraversalMask(mCurrentCastMask);
             cv->pushStateSet(mCastingStateSet);
             mInFaces = true;
             for (std::size_t face = 0; face < slot.mCameras.size(); ++face)
