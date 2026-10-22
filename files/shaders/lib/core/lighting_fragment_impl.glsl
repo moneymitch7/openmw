@@ -31,13 +31,7 @@ void doLighting(vec2 screenCoord, vec3 viewPos, vec3 viewNormal, float shininess
     LightGrid grid = lightGrid[getClusterTileIndex(screenRes, gridSize, near, screenCoord, viewPos.z)];
     for (uint i = 0u; i < grid.count; ++i) {
         uint lightIndex = lightIndexList[grid.offset + i];
-        float visibility = lightVisibility(lightIndex);
-        if (visibility <= 0.0)
-            continue;
         PointLight light = pointLight[lightIndex];
-        light.diffuse *= visibility;
-        light.ambient *= visibility;
-        light.specular *= visibility;
 #else
     for (int i = 0; i < PointLightCount; ++i) {
         PointLight light = PointLight(
@@ -67,17 +61,13 @@ vec3 doSpecularLighting(vec2 screenCoord, vec3 viewPos, vec3 viewNormal) {
     LightGrid grid = lightGrid[getClusterTileIndex(screenRes, gridSize, near, screenCoord, viewPos.z)];
     for (uint i = 0u; i < grid.count; ++i) {
         uint lightIndex = lightIndexList[grid.offset + i];
-        float visibility = lightVisibility(lightIndex);
-        if (visibility <= 0.0)
-            continue;
         PointLight light = pointLight[lightIndex];
 
         vec3 lightPos = light.position.xyz - viewPos;
         float lightDistance = length(lightPos);
         vec3 lightDir = lightPos / lightDistance;
         float attenuation = calcAttenuation(light, lightDistance) * clusterFade(viewPos, light.radius);
-        specular += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * attenuation
-            * visibility;
+        specular += light.specular.xyz * specularIntensity(viewNormal, viewDir, shininess, lightDir) * attenuation;
     }
 
     return specular;

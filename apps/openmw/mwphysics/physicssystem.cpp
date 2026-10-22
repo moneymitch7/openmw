@@ -20,7 +20,6 @@
 #include <LinearMath/btVector3.h>
 
 #include <components/debug/debuglog.hpp>
-#include <components/esm3/loaddoor.hpp>
 #include <components/esm3/loadgmst.hpp>
 #include <components/esm3/loadmgef.hpp>
 #include <components/misc/convert.hpp>
@@ -186,131 +185,6 @@ namespace MWPhysics
         if (!foundObj->second->isSolid())
             return false;
 
-        return true;
-    }
-
-    namespace
-    {
-        bool containsPoint(const btVector3& min, const btVector3& max, const btVector3& point)
-        {
-            return point.x() >= min.x() && point.y() >= min.y() && point.z() >= min.z() && point.x() <= max.x()
-                && point.y() <= max.y() && point.z() <= max.z();
-        }
-
-        // Stops at the first wall-like hit (see PhysicsSystem::isLightBlocked).
-        class LightBlockerCallback : public btCollisionWorld::RayResultCallback
-        {
-        public:
-            LightBlockerCallback(const btVector3& from, const btVector3& to, bool toSurface = false)
-                : mFrom(from)
-                , mTo(to)
-                , mToSurface(toSurface)
-            {
-                m_collisionFilterGroup = 0xff;
-                m_collisionFilterMask = CollisionType_World | CollisionType_Door | CollisionType_HeightMap;
-            }
-
-            bool needsCollision(btBroadphaseProxy* proxy) const override
-            {
-                if (!btCollisionWorld::RayResultCallback::needsCollision(proxy))
-                    return false;
-                if (mToSurface)
-                {
-                    // To a point just off a surface: every large solid counts, chunky ones and the lit object itself
-                    // included, as the ray ends in the open. Left out: small shapes, and shapes up to brazier size
-                    // around the light (its own lamp, candlestick or brazier).
-                    if (proxy->m_collisionFilterGroup & (CollisionType_Door | CollisionType_HeightMap))
-                        return true;
-                    const btVector3 size = proxy->m_aabbMax - proxy->m_aabbMin;
-                    btScalar sides[3] = { size.x(), size.y(), size.z() };
-                    std::sort(std::begin(sides), std::end(sides));
-                    if (sides[1] < 128)
-                        return false;
-                    return !(sides[2] < 256 && containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mFrom));
-                }
-                // Shapes around either end are left out: the lamp's own mesh, and the lit object or a room shell
-                // around it. Not a closed door near the lit end: a doorway is part of the room piece beyond it, and a
-                // ray to that piece ends close to the door, which then let a corridor's lamp light the room through it.
-                const bool door = proxy->m_collisionFilterGroup & CollisionType_Door;
-                if (containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mFrom)
-                    || (!door && containsPoint(proxy->m_aabbMin, proxy->m_aabbMax, mTo)))
-                    return false;
-                if (proxy->m_collisionFilterGroup & (CollisionType_Door | CollisionType_HeightMap))
-                    return true;
-                // Wall-like: a slab, two sides of its bounds a couple of metres or more and the third thin next to
-                // them (a wall, a floor between storeys). Chunky pieces (curved stairs, the rounded corners and
-                // alcoves of Dunmer interiors, cave rock) don't count: their bounds are mostly empty space or the
-                // room itself, so a ray through them says little about whether the light is really behind a wall,
-                // and they darkened things in the same room as the lamp.
-                constexpr btScalar minSide = 128;
-                constexpr btScalar maxThickness = 64;
-                const btVector3 size = proxy->m_aabbMax - proxy->m_aabbMin;
-                btScalar sides[3] = { size.x(), size.y(), size.z() };
-                std::sort(std::begin(sides), std::end(sides));
-                return sides[1] >= minSide && sides[0] <= std::max(maxThickness, sides[1] * btScalar(0.25));
-            }
-
-            btScalar addSingleResult(btCollisionWorld::LocalRayResult& rayResult, bool /*normalInWorldSpace*/) override
-            {
-                m_collisionObject = rayResult.m_collisionObject;
-                m_closestHitFraction = 0; // any hit will do: ends the test
-                return 0;
-            }
-
-        private:
-            btVector3 mFrom;
-            btVector3 mTo;
-            bool mToSurface;
-        };
-    }
-
-    bool PhysicsSystem::isLightBlocked(const osg::Vec3f& from, const osg::Vec3f& to) const
-    {
-        if (from == to)
-            return false;
-        const btVector3 btFrom = Misc::Convert::toBullet(from);
-        const btVector3 btTo = Misc::Convert::toBullet(to);
-        LightBlockerCallback callback(btFrom, btTo);
-        mTaskScheduler->rayTest(btFrom, btTo, callback);
-        return callback.hasHit();
-    }
-
-    bool PhysicsSystem::isLightBlockedToSurface(const osg::Vec3f& from, const osg::Vec3f& to) const
-    {
-        if (from == to)
-            return false;
-        const btVector3 btFrom = Misc::Convert::toBullet(from);
-        const btVector3 btTo = Misc::Convert::toBullet(to);
-        LightBlockerCallback callback(btFrom, btTo, true);
-        mTaskScheduler->rayTest(btFrom, btTo, callback);
-        return callback.hasHit();
-    }
-
-    void PhysicsSystem::noteLightBlockerMoved(const MWWorld::Ptr& ptr, const btCollisionObject* collisionObject)
-    {
-        if (ptr.getType() != ESM::Door::sRecordId || collisionObject == nullptr
-            || collisionObject->getCollisionShape() == nullptr)
-            return;
-        btVector3 min;
-        btVector3 max;
-        collisionObject->getCollisionShape()->getAabb(collisionObject->getWorldTransform(), min, max);
-        ++mLightBlockerChangeCount;
-        mLightBlockerChanges.emplace_back(mLightBlockerChangeCount,
-            osg::BoundingBox(Misc::Convert::toOsg(min), Misc::Convert::toOsg(max)));
-        while (mLightBlockerChanges.size() > 512)
-            mLightBlockerChanges.pop_front();
-    }
-
-    bool PhysicsSystem::getLightBlockerChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const
-    {
-        if (count == mLightBlockerChangeCount)
-            return true;
-        // the moves after count, if still kept
-        if (mLightBlockerChanges.empty() || mLightBlockerChanges.front().first > count + 1)
-            return false;
-        for (const auto& [changeCount, box] : mLightBlockerChanges)
-            if (changeCount > count)
-                out.push_back(box);
         return true;
     }
 
@@ -656,7 +530,6 @@ namespace MWPhysics
         {
             foundObject->second->setRotation(rotate);
             mTaskScheduler->updateSingleAabb(foundObject->second);
-            noteLightBlockerMoved(ptr, foundObject->second->getCollisionObject());
         }
         else if (auto foundActor = mActors.find(ptr.mRef); foundActor != mActors.end())
         {
@@ -674,7 +547,6 @@ namespace MWPhysics
         {
             foundObject->second->updatePosition();
             mTaskScheduler->updateSingleAabb(foundObject->second);
-            noteLightBlockerMoved(ptr, foundObject->second->getCollisionObject());
         }
         else if (auto foundActor = mActors.find(ptr.mRef); foundActor != mActors.end())
         {

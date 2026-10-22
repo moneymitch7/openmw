@@ -286,45 +286,6 @@ Shaders Settings
    :ref:`light bounce` for lamps outside, while :ref:`separate outdoor lights` is on.
 
 .. omw-setting::
-   :title: light occlusion
-   :type: boolean
-   :range: true, false
-   :default: true
-   :location: :bdg-info:`In Game > Settings > Options > Video > Lights`
-
-   Point lights don't cast shadows, so a lamp lights everything within its reach, including the next room through
-   the wall. With this on, a light stops lighting an object when solid world geometry (a wall, floor, closed door or
-   other large shape) lies between the light and the object's centre and six points around it. Still objects that
-   aren't tiny (walls, floors, stairs, columns, room pieces) are tested instead at 16 points spread over their own
-   surfaces, each a little way off the surface: they get the share of the points facing the light that it reaches.
-   Surfaces turned away from a light take nothing from it, and anything large between it and a point counts, the
-   object itself and chunky pieces included, so a stair tunnel's ceiling hides a lamp above from its steps and the
-   walls of a lamp's own room keep its light. Animated objects (actors) are tested by their box, at the part nearest
-   the light.
-   For those, only slab-shaped pieces count (walls, floors between storeys, doors): small shapes such as furniture,
-   crates and pillars don't, nor do chunky pieces such as curved stairs, rounded corners and cave rock, nor shapes
-   around the light or the object themselves. Small shapes never count, nor brazier-sized ones around the light.
-   Objects larger than a room (merged distant statics, whole-room meshes) are always lit.
-   Each light and object pair is tested once and retested when either moves, when a door turns across the way
-   between them, or every few seconds. Rays end just short of the object's surface, so the next floor or wall tile
-   along doesn't hide a lamp from its neighbour.
-   The test is per object, not per pixel. With :ref:`clustered lighting` an object gets the share of a light that
-   reaches it (a floor that sees a lamp only through a doorway gets part of its light), and a light fades in and out
-   over half a second when that changes, for the 1024 lights nearest the camera. With the other lighting methods an
-   object keeps a light while it reaches a quarter of it.
-
-.. omw-setting::
-   :title: light occlusion time per frame
-   :type: float32
-   :range: 0.1-8.0
-   :default: 1.0
-
-   Milliseconds :ref:`light occlusion` may spend in one frame retesting light and object pairs it has tested
-   before. Pairs not tested yet (just come into view) or that have moved may use four times as much, so they are
-   tested as they appear. Pairs not yet tested keep the light. Every ten seconds or so the log says how much was
-   tested and how long it took.
-
-.. omw-setting::
    :title: sunlight brightness
    :type: float32
    :range: 0.25-3.0
@@ -448,7 +409,7 @@ Shaders Settings
    Indoors, the lights the player carries (a torch, and the stand-in light of a worn lantern; up to two) cast real
    shadows. Each frame the room around each light is drawn from it into a depth cube map, and the light no longer
    reaches what it can't see: furniture, pillars and people throw shadows, and walls keep it out of the next room.
-   Light occlusion leaves those lights alone. Only with :ref:`clustered lighting`. Needs a restart.
+   Only with :ref:`clustered lighting`. Needs a restart.
 
 .. omw-setting::
    :title: held light shadows outside
@@ -499,9 +460,7 @@ Shaders Settings
    cast: a lamp inside its own fixture (a lantern, a sconce's cage) or set a little into the wall behind it isn't
    hidden by them, but a single-sided wall seen from behind doesn't stop a lamp either. Lamps that turn out to move
    (carried along by something) are left without. Doors cast as well, and the lamps around a door draw their shadows
-   again as it opens or shuts; loose items don't cast. :ref:`light occlusion` leaves lamps with shadows alone (it
-   still handles the lamps without: farther ones, those outside, people's torches). Only with
-   :ref:`clustered lighting`. Needs a restart.
+   again as it opens or shuts; loose items don't cast. Only with :ref:`clustered lighting`. Needs a restart.
 
 .. omw-setting::
    :title: lamp shadow resolution

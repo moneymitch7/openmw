@@ -759,7 +759,6 @@ namespace MWGui
         Settings::shaders().mOutdoorLightBrightness.reset();
         Settings::shaders().mOutdoorLightBounce.reset();
         Settings::shaders().mMoonlightFollowsMoonPhases.reset();
-        Settings::shaders().mLightOcclusion.reset();
         Settings::shaders().mExteriorAmbient.reset();
         Settings::shaders().mHeldLightBrightness.reset();
         Settings::shaders().mHeldLightReach.reset();

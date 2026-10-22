@@ -113,36 +113,6 @@ namespace MWWorld
 {
     namespace
     {
-        // OpenMGE XE light occlusion: lights test for walls with the physics world.
-        class PhysicsLightOcclusion : public SceneUtil::LightOcclusionTest
-        {
-        public:
-            explicit PhysicsLightOcclusion(const MWPhysics::PhysicsSystem& physics)
-                : mPhysics(physics)
-            {
-            }
-
-            bool isBlocked(const osg::Vec3f& from, const osg::Vec3f& to) override
-            {
-                return mPhysics.isLightBlocked(from, to);
-            }
-
-            bool isBlockedToSurface(const osg::Vec3f& from, const osg::Vec3f& to) override
-            {
-                return mPhysics.isLightBlockedToSurface(from, to);
-            }
-
-            unsigned int getChangeCount() const override { return mPhysics.getLightBlockerChangeCount(); }
-
-            bool getChangesSince(unsigned int count, std::vector<osg::BoundingBox>& out) const override
-            {
-                return mPhysics.getLightBlockerChangesSince(count, out);
-            }
-
-        private:
-            const MWPhysics::PhysicsSystem& mPhysics;
-        };
-
         std::vector<std::pair<GlobalVariableName, ESM::Variant>> generateDefaultGlobals()
         {
             return {
@@ -292,7 +262,6 @@ namespace MWWorld
 
         mRendering = std::make_unique<MWRender::RenderingManager>(
             viewer, rootNode, mResourceSystem, workQueue, *mNavigator, mGroundcoverStore, unrefQueue);
-        mRendering->setLightOcclusionTest(new PhysicsLightOcclusion(*mPhysics));
         mProjectileManager = std::make_unique<ProjectileManager>(
             mRendering->getLightRoot()->asGroup(), mResourceSystem, mRendering.get(), mPhysics.get());
         mRendering->preloadCommonAssets();

@@ -37,13 +37,7 @@ void pointLighting(vec2 screenCoord, vec3 viewDir, vec3 viewPos, vec3 viewNormal
     LightGrid grid = lightGrid[getClusterTileIndex(screenRes, gridSize, near, screenCoord, viewPos.z)];
     for (uint i = 0u; i < grid.count; ++i) {
         uint lightIndex = lightIndexList[grid.offset + i];
-        float visibility = lightVisibility(lightIndex);
-        if (visibility <= 0.0)
-            continue;
         PointLight light = pointLight[lightIndex];
-        light.diffuse *= visibility;
-        light.ambient *= visibility;
-        light.specular *= visibility;
 #else
     for (int i = 0; i < PointLightCount; ++i) {
         PointLight light = PointLight(
