@@ -41,8 +41,11 @@ namespace SceneUtil
         /// @param castMask what casts shadows (node masks)
         /// @param textureUnit the first of sMaxLights texture units, one cube map each
         /// @param minCasterPixels what covers fewer pixels of a face than this casts nothing (0: everything casts)
+        /// @param cacheDistance while a light stays within this distance of where it was, the faces keep what doesn't
+        /// move (drawn once, then one face a frame) and draw only @a liveMask (characters) anew (0: all every frame)
+        /// @param maxDistance the shadows reach no further than this from the light (0: as far as its light)
         HeldLightShadow(Shader::ShaderManager& shaderManager, int textureUnit, unsigned int castMask, int resolution,
-            float minCasterPixels = 0.f);
+            float minCasterPixels = 0.f, float cacheDistance = 0.f, unsigned int liveMask = 0, float maxDistance = 0.f);
         ~HeldLightShadow();
 
         /// Draws the shadows of the lights, binds the cube maps to @a receivers (the root state set of what is lit)
@@ -64,14 +67,28 @@ namespace SceneUtil
             osg::ref_ptr<osg::TextureCubeMap> mTexture;
             std::array<osg::ref_ptr<osg::Camera>, 6> mCameras;
             osg::observer_ptr<LightSource> mCaster;
+
+            // The cache (cache distance): what doesn't move, drawn from mAnchor into mStillTexture; each frame the
+            // faces seen copy it and draw the characters over it.
+            osg::ref_ptr<osg::TextureCubeMap> mStillTexture;
+            std::array<osg::ref_ptr<osg::Camera>, 6> mStillCameras;
+            const LightSource* mAnchorLight = nullptr;
+            osg::Vec3f mAnchor;
+            float mAnchorFar = 0.f;
+            unsigned int mAnchorMask = 0;
+            std::size_t mAnchorFrame = 0;
+            bool mStillReady = false;
+            std::size_t mNextStillFace = 0;
         };
 
         std::array<Slot, sMaxLights> mSlots;
         osg::ref_ptr<osg::StateSet> mCastingStateSet;
         osg::ref_ptr<osg::StateSet> mBinStateSet;
+        osg::ref_ptr<osg::StateSet> mCopyStateSet;
         // double buffered by frame: the draw of the previous frame may still read the other
         std::array<osg::ref_ptr<osg::StateSet>, 2> mReceiverStateSets;
         std::array<osg::ref_ptr<osg::Uniform>, 2> mPositionUniforms;
+        std::array<osg::ref_ptr<osg::Uniform>, 2> mCenterUniforms;
         osg::ref_ptr<osg::StateSet> mInactiveStateSet;
         LightManager* mLightManager = nullptr;
         osg::observer_ptr<LightManager> mInstalledOn;
@@ -79,6 +96,9 @@ namespace SceneUtil
         unsigned int mCastMask;
         unsigned int mCurrentCastMask;
         int mResolution;
+        float mCacheDistance;
+        unsigned int mLiveMask;
+        float mMaxDistance;
         int mTextureUnit;
         osg::Vec3f mFocus;
         bool mEnabled = false;

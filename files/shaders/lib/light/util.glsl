@@ -141,6 +141,9 @@ float clusterFade(vec3 viewPos, float radius) {
 uniform samplerCubeShadow heldLightShadowMap0;
 uniform samplerCubeShadow heldLightShadowMap1;
 uniform vec4 heldLightShadowPos[2];
+// where the faces of light i were drawn from (where it was, with the cache); in w, where its shadows start to fade out
+// when they end before its light does (held light shadow distance, 0: they don't)
+uniform vec4 heldLightShadowCenter[2];
 uniform vec2 heldLightShadowRange; // near, resolution
 uniform mat4 osg_ViewMatrix;
 uniform mat4 osg_ViewMatrixInverse;
@@ -179,7 +182,7 @@ float heldLightShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool w
     float f = lightPos.w;
     vec3 worldPos = (osg_ViewMatrixInverse * vec4(viewPos, 1.0)).xyz;
     vec3 worldNormal = normalize(mat3(osg_ViewMatrixInverse) * viewNormal);
-    vec3 v = worldPos - lightPos.xyz;
+    vec3 v = worldPos - heldLightShadowCenter[index].xyz;
     float dist = length(v);
     if (dist >= f || dist < 1.0)
         return 1.0;
@@ -200,7 +203,8 @@ float heldLightShadowLit(PointLight light, vec3 viewPos, vec3 viewNormal, bool w
     lit += heldLightShadowTap(index, v - side * spread, n, f);
     lit += heldLightShadowTap(index, v + up * spread, n, f);
     lit += heldLightShadowTap(index, v - up * spread, n, f);
-    return lit * 0.2;
+    float fadeStart = heldLightShadowCenter[index].w;
+    return fadeStart > 0.0 ? mix(lit * 0.2, 1.0, smoothstep(fadeStart, f, dist)) : lit * 0.2;
 }
 
 float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {

@@ -80,6 +80,10 @@ namespace Settings
             makeClampSanitizerInt(128, 2048) };
         SettingValue<float> mHeldLightShadowMinCasterSize{ mIndex, "Shaders", "held light shadow min caster size",
             makeClampSanitizerFloat(0, 64) };
+        SettingValue<float> mHeldLightShadowCacheDistance{ mIndex, "Shaders", "held light shadow cache distance",
+            makeClampSanitizerFloat(0, 32) };
+        SettingValue<float> mHeldLightShadowDistance{ mIndex, "Shaders", "held light shadow distance",
+            makeClampSanitizerFloat(0, 16384) };
         SettingValue<bool> mLampShadows{ mIndex, "Shaders", "lamp shadows" };
         SettingValue<int> mMaxLightsPerCluster{ mIndex, "Shaders", "max lights per cluster",
             makeClampSanitizerInt(0, 64) };

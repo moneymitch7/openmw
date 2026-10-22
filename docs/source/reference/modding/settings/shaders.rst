@@ -447,6 +447,32 @@ Shaders Settings
    stop casting as the player walks. Larger things are unaffected. Needs a restart.
 
 .. omw-setting::
+   :title: held light shadow cache distance
+   :type: float
+   :range: 0 to 32
+   :default: 0
+
+   While a light the player carries stays within this many units of where it was (standing still, looking around, a
+   torch swaying in hand), its :ref:`held light shadows` keep what doesn't move: walls, furniture and clutter are drawn
+   once into a second cube map, then one of its six faces a frame (so an opened door or a taken item shows within a few
+   frames), and each frame the faces in view copy it and draw only the people and creatures around the light. The
+   shadows are then cast from where the light was, at most this far from where it is. Moving further draws everything
+   from the light again, as with 0. Needs OpenGL 4.3 (copying between textures) and memory for the second cube map
+   (six faces at :ref:`held light shadow resolution`). 0 draws everything every frame; 4 covers a torch's sway.
+   Needs a restart.
+
+.. omw-setting::
+   :title: held light shadow distance
+   :type: float
+   :range: 0 to 16384
+   :default: 0
+
+   How far from a light the player carries its :ref:`held light shadows` reach, in units. The faces are drawn out to
+   the light's reach (its radius times :ref:`light radius multiplier`), so a large multiplier has them draw much more
+   of the room; with this set lower, they stop here instead, the shadows fading out over the last fifth, and the light
+   shines on unshadowed past it (through walls too). 0 lets the shadows reach as far as the light. Needs a restart.
+
+.. omw-setting::
    :title: lamp shadows
    :type: boolean
    :range: true, false

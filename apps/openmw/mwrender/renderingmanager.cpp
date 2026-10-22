@@ -578,7 +578,9 @@ namespace MWRender
                 Shader::ShaderManager::Slot::HeldLightShadow, SceneUtil::HeldLightShadow::sMaxLights);
             mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(
                 shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor,
-                Settings::shaders().mHeldLightShadowResolution, Settings::shaders().mHeldLightShadowMinCasterSize);
+                Settings::shaders().mHeldLightShadowResolution, Settings::shaders().mHeldLightShadowMinCasterSize,
+                Settings::shaders().mHeldLightShadowCacheDistance, Mask_Actor,
+                Settings::shaders().mHeldLightShadowDistance);
             mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 
