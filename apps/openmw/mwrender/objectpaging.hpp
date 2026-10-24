@@ -112,6 +112,7 @@ namespace MWRender
         float mMinSizeMergeFactor;
         float mMinSizeCostMultiplier;
         float mReflectionStaticsDistance; // [Water] reflection statics distance, 0 = no limit
+        float mActiveGridMergeSize; // [Terrain] object paging active grid merge size, 0 = one piece per chunk
 
         std::mutex mRefTrackerMutex;
         struct RefTracker

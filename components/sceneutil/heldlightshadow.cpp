@@ -174,6 +174,7 @@ namespace SceneUtil
         , mCacheDistance(liveMask != 0 ? cacheDistance : 0.f)
         , mLiveMask(liveMask)
         , mMaxDistance(maxDistance)
+        , mCurrentMaxDistance(maxDistance)
         , mTextureUnit(textureUnit)
     {
         const auto makeTexture = [&] {
@@ -347,11 +348,13 @@ namespace SceneUtil
         mInstalledOn = lightManager;
     }
 
-    void HeldLightShadow::setFocus(const osg::Vec3f& position, bool enabled, unsigned int castMask)
+    void HeldLightShadow::setFocus(const osg::Vec3f& position, bool enabled, unsigned int castMask, float maxDistance)
     {
         mFocus = position;
         mEnabled = enabled;
         mCurrentCastMask = castMask != 0 ? castMask : mCastMask;
+        mCurrentMaxDistance
+            = maxDistance > 0.f && (mMaxDistance <= 0.f || maxDistance < mMaxDistance) ? maxDistance : mMaxDistance;
     }
 
     void HeldLightShadow::cull(LightManager* lightManager, osgUtil::CullVisitor* cv)
@@ -476,8 +479,8 @@ namespace SceneUtil
             const osg::Vec3f actual = casters[i]->mWorldMatrix.getTrans();
             const float reach = caster->getRadius() * lightManager->getPointLightRadiusMultiplier();
             // held light shadow distance: the shadows end there, fading out over the last fifth, the light reaching on
-            const bool capped = mMaxDistance > 0.f && mMaxDistance < reach;
-            const float actualFar = std::max(sNearPlane * 2.f, capped ? mMaxDistance : reach);
+            const bool capped = mCurrentMaxDistance > 0.f && mCurrentMaxDistance < reach;
+            const float actualFar = std::max(sNearPlane * 2.f, capped ? mCurrentMaxDistance : reach);
 
             // The cache: while the light stays near where it was (standing, a torch swaying in hand), its faces are
             // drawn from there; what doesn't move is drawn once into the cache's faces, then one of those a frame

@@ -54,8 +54,9 @@ namespace SceneUtil
 
         /// Call every frame: where the player is (the lights carried by the player, or carried by no one within
         /// reach of this point, cast the shadows), and whether shadows are wanted at all now. @a castMask: what casts
-        /// now (0: the mask given at construction).
-        void setFocus(const osg::Vec3f& position, bool enabled, unsigned int castMask = 0);
+        /// now (0: the mask given at construction). @a maxDistance: the shadows reach no further than this now (0: as
+        /// far as given at construction).
+        void setFocus(const osg::Vec3f& position, bool enabled, unsigned int castMask = 0, float maxDistance = 0.f);
 
         void cull(LightManager* lightManager, osgUtil::CullVisitor* cv);
 
@@ -99,6 +100,7 @@ namespace SceneUtil
         float mCacheDistance;
         unsigned int mLiveMask;
         float mMaxDistance;
+        float mCurrentMaxDistance = 0.f;
         int mTextureUnit;
         osg::Vec3f mFocus;
         bool mEnabled = false;

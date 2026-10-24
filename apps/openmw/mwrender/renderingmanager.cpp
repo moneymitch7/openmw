@@ -1101,9 +1101,15 @@ namespace MWRender
                     mOutsideDarkChange = 0.f;
                 castsHere = mOutsideDark;
             }
-            const unsigned int castMask = mSky->isEnabled() ? (Mask_Object | Mask_Actor) : 0u;
-            mHeldLightShadow->setFocus(
-                mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), castsHere, castMask);
+            // With [Shaders] held light shadows outside statics distance, buildings, rocks and trees near the light
+            // cast too, the faces outside ending at that distance (the merged statics in squares, see [Terrain]
+            // object paging active grid merge size, so that only the squares near the light are drawn).
+            const float staticsDistance = Settings::shaders().mHeldLightShadowsOutsideStaticsDistance;
+            const unsigned int castMask = !mSky->isEnabled() ? 0u
+                : staticsDistance > 0.f                      ? (Mask_Static | Mask_Object | Mask_Actor)
+                                                             : (Mask_Object | Mask_Actor);
+            mHeldLightShadow->setFocus(mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), castsHere,
+                castMask, mSky->isEnabled() ? staticsDistance : 0.f);
         }
 
         mWater->update(dt, paused);

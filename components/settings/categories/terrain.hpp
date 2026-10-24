@@ -30,6 +30,8 @@ namespace Settings
         SettingValue<bool> mObjectPaging{ mIndex, "Terrain", "object paging" };
         SettingValue<bool> mObjectPagingActiveGrid{ mIndex, "Terrain", "object paging active grid" };
         SettingValue<bool> mObjectPagingActiveGridItems{ mIndex, "Terrain", "object paging active grid items" };
+        SettingValue<float> mObjectPagingActiveGridMergeSize{ mIndex, "Terrain", "object paging active grid merge size",
+            makeClampSanitizerFloat(0, 8192) };
         SettingValue<float> mObjectPagingMergeFactor{ mIndex, "Terrain", "object paging merge factor",
             makeMaxStrictSanitizerFloat(0) };
         SettingValue<float> mObjectPagingMinSize{ mIndex, "Terrain", "object paging min size",

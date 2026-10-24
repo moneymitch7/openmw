@@ -426,6 +426,17 @@ Shaders Settings
    apply immediately.
 
 .. omw-setting::
+   :title: held light shadows outside statics distance
+   :type: float
+   :range: 0 to 4096
+   :default: 0
+
+   With :ref:`held light shadows outside`, buildings, rocks and trees near the light cast its shadows too, up to this
+   many units from it: outside, the lantern's shadows end there, fading out over the last fifth. Set
+   :ref:`object paging active grid merge size` too (2048 or less), or each merged piece of a town the light reaches is
+   drawn whole into the faces. 0: only people, creatures and loose objects cast outside. Changes apply immediately.
+
+.. omw-setting::
    :title: held light shadow resolution
    :type: int
    :range: 128 to 2048

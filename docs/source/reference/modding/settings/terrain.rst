@@ -156,6 +156,19 @@ Terrain Settings
    Has no effect unless 'object paging active grid' is enabled.
 
 .. omw-setting::
+   :title: object paging active grid merge size
+   :type: float
+   :range: 0 to 8192
+   :default: 0
+
+   The statics merged into the active grid's chunks are merged in squares this many units across, instead of into
+   one piece per chunk (a cell). A view that sees only part of a cell then draws only the squares it sees: the camera
+   leaves out those behind it, the sun's nearest shadow cascade those outside it, and a carried light's shadow faces
+   (:ref:`held light shadows outside statics distance`) only those near the light. The cost is a few more draw calls
+   (more, smaller pieces). 0 keeps one piece per chunk; 2048 is a quarter of a cell. Has no effect unless 'object
+   paging active grid' is enabled. Needs a restart.
+
+.. omw-setting::
    :title: object paging merge factor
    :type: float32
    :range: >0

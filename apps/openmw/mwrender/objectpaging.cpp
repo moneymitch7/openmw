@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <tuple>
 #include <iomanip>
 #include <limits>
 #include <optional>
@@ -621,6 +622,7 @@ namespace MWRender
         , mMinSizeMergeFactor(Settings::terrain().mObjectPagingMinSizeMergeFactor)
         , mMinSizeCostMultiplier(Settings::terrain().mObjectPagingMinSizeCostMultiplier)
         , mReflectionStaticsDistance(Settings::water().mReflectionStaticsDistance)
+        , mActiveGridMergeSize(Settings::terrain().mObjectPagingActiveGridMergeSize)
         , mRefTrackerLocked(false)
     {
         sMergeItems = mActiveGrid && Settings::terrain().mObjectPagingActiveGridItems;
@@ -985,6 +987,11 @@ namespace MWRender
         // the shadows when object shadows are off), so they are merged among themselves, apart from the statics.
         osg::ref_ptr<osg::Group> itemGroup = new osg::Group;
         osg::ref_ptr<osg::Group> itemMergeGroup = new osg::Group;
+        // OpenMGE XE [Terrain] object paging active grid merge size: the active grid's merged statics in squares this
+        // size each, not one piece per chunk, so a view that sees part of the chunk (a lantern's shadow faces, the
+        // sun's nearest shadow cascade, the camera) culls the rest. Key: item or not, square x, square y.
+        const bool mergeInSquares = activeGrid && mActiveGridMergeSize > 0.f;
+        std::map<std::tuple<bool, int, int>, osg::ref_ptr<osg::Group>> mergeSquares;
         std::vector<osg::ref_ptr<const osg::Node>> templateRefs;
         osgUtil::StateToCompile stateToCompile(0, nullptr);
         CopyOp copyop(activeGrid, copyMask);
@@ -1110,8 +1117,18 @@ namespace MWRender
                 }
 
                 const bool item = activeGrid && isItemType(store.findStatic(ref.mRefId));
-                osg::Group* const attachTo = item ? (merge ? itemMergeGroup.get() : itemGroup.get())
-                                                  : (merge ? mergeGroup.get() : group.get());
+                osg::Group* attachTo = item ? (merge ? itemMergeGroup.get() : itemGroup.get())
+                                            : (merge ? mergeGroup.get() : group.get());
+                if (merge && mergeInSquares)
+                {
+                    const auto key = std::make_tuple(item,
+                        static_cast<int>(std::floor(nodePos.x() / mActiveGridMergeSize)),
+                        static_cast<int>(std::floor(nodePos.y() / mActiveGridMergeSize)));
+                    osg::ref_ptr<osg::Group>& square = mergeSquares[key];
+                    if (square == nullptr)
+                        square = new osg::Group;
+                    attachTo = square.get();
+                }
                 attachTo->addChild(trans);
                 ++numinstances;
             }
@@ -1167,6 +1184,8 @@ namespace MWRender
         };
         mergeChildren(*mergeGroup, *group);
         mergeChildren(*itemMergeGroup, *itemGroup);
+        for (auto& [key, square] : mergeSquares)
+            mergeChildren(*square, std::get<0>(key) ? *itemGroup : *group);
         if (itemGroup->getNumChildren() != 0)
         {
             itemGroup->setNodeMask(Mask_Object);
