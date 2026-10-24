@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include <unicode/locid.h>
 
@@ -114,6 +115,78 @@ namespace
             box->setIndexSelected(2);
         else
             box->setIndexSelected(Settings::shaders().mClampLightingActors ? 1 : 0);
+    }
+
+    // Lighting Quality: the settings that cost performance, set together. The look is never touched. The choice
+    // shown is the preset all of them match (Custom when none does), so there is no setting of its own.
+    struct LightingPreset
+    {
+        float mReach;
+        float mOutdoorReach;
+        float mBounce;
+        int mLightsPerCluster;
+        bool mHeldShadows;
+        int mHeldShadowResolution;
+        float mHeldShadowMinCasterSize;
+        float mHeldShadowCacheDistance;
+        bool mLampShadows;
+        int mLampShadowResolution;
+    };
+
+    // Low, Medium, High, Ultra (the combo box's items 1 to 4; 0 is Custom)
+    constexpr std::array<LightingPreset, 4> sLightingPresets{ {
+        { 1.0f, 1.0f, 0.0f, 8, false, 256, 16.f, 4.f, false, 256 },
+        { 1.5f, 1.5f, 0.05f, 12, true, 256, 8.f, 4.f, false, 256 },
+        { 2.0f, 2.0f, 0.1f, 16, true, 256, 8.f, 4.f, true, 256 },
+        { 2.5f, 3.0f, 0.1f, 24, true, 512, 4.f, 4.f, true, 512 },
+    } };
+
+    bool matchesLightingPreset(const LightingPreset& preset)
+    {
+        const auto& shaders = Settings::shaders();
+        const auto near = [](float a, float b) { return std::abs(a - b) < 0.005f; };
+        return near(shaders.mLightRadiusMultiplier, preset.mReach)
+            && near(shaders.mOutdoorLightRadiusMultiplier, preset.mOutdoorReach)
+            && near(shaders.mLightBounce, preset.mBounce) && shaders.mMaxLightsPerCluster == preset.mLightsPerCluster
+            && shaders.mHeldLightShadows == preset.mHeldShadows
+            && shaders.mHeldLightShadowResolution == preset.mHeldShadowResolution
+            && near(shaders.mHeldLightShadowMinCasterSize, preset.mHeldShadowMinCasterSize)
+            && near(shaders.mHeldLightShadowCacheDistance, preset.mHeldShadowCacheDistance)
+            && shaders.mLampShadows == preset.mLampShadows
+            && shaders.mLampShadowResolution == preset.mLampShadowResolution;
+    }
+
+    void updateLightingQualityComboBox(MyGUI::ComboBox* box)
+    {
+        std::size_t selected = 0;
+        for (std::size_t i = 0; i < sLightingPresets.size(); ++i)
+            if (matchesLightingPreset(sLightingPresets[i]))
+                selected = i + 1;
+        box->setIndexSelected(selected);
+    }
+
+    /// @return whether something that needs a restart changed
+    bool applyLightingPreset(const LightingPreset& preset)
+    {
+        auto& shaders = Settings::shaders();
+        const bool restart = shaders.mMaxLightsPerCluster != preset.mLightsPerCluster
+            || shaders.mHeldLightShadows != preset.mHeldShadows
+            || shaders.mHeldLightShadowResolution != preset.mHeldShadowResolution
+            || shaders.mHeldLightShadowMinCasterSize != preset.mHeldShadowMinCasterSize
+            || shaders.mHeldLightShadowCacheDistance != preset.mHeldShadowCacheDistance
+            || shaders.mLampShadows != preset.mLampShadows
+            || shaders.mLampShadowResolution != preset.mLampShadowResolution;
+        shaders.mLightRadiusMultiplier.set(preset.mReach);
+        shaders.mOutdoorLightRadiusMultiplier.set(preset.mOutdoorReach);
+        shaders.mLightBounce.set(preset.mBounce);
+        shaders.mMaxLightsPerCluster.set(preset.mLightsPerCluster);
+        shaders.mHeldLightShadows.set(preset.mHeldShadows);
+        shaders.mHeldLightShadowResolution.set(preset.mHeldShadowResolution);
+        shaders.mHeldLightShadowMinCasterSize.set(preset.mHeldShadowMinCasterSize);
+        shaders.mHeldLightShadowCacheDistance.set(preset.mHeldShadowCacheDistance);
+        shaders.mLampShadows.set(preset.mLampShadows);
+        shaders.mLampShadowResolution.set(preset.mLampShadowResolution);
+        return restart;
     }
 
     void updateMaxLightsComboBox(MyGUI::ComboBox* box)
@@ -344,6 +417,7 @@ namespace MWGui
         getWidget(mClassicFalloffWidget, "ClassicFalloffWidget");
         getWidget(mMaxLightsWidget, "MaxLightsWidget");
         getWidget(mClampLightingMode, "ClampLightingMode");
+        getWidget(mLightingQuality, "LightingQuality");
         getWidget(mActorShadowsButton, "ActorShadowsButton");
         getWidget(mPlayerShadowsButton, "PlayerShadowsButton");
         getWidget(mTerrainShadowsButton, "TerrainShadowsButton");
@@ -413,6 +487,8 @@ namespace MWGui
             += MyGUI::newDelegate(this, &SettingsWindow::onShadowUpdateIntervalChanged);
         mClampLightingMode->eventComboChangePosition
             += MyGUI::newDelegate(this, &SettingsWindow::onClampLightingModeChanged);
+        mLightingQuality->eventComboChangePosition
+            += MyGUI::newDelegate(this, &SettingsWindow::onLightingQualityChanged);
 
         mWindowModeList->eventComboChangePosition += MyGUI::newDelegate(this, &SettingsWindow::onWindowModeChanged);
         mVSyncModeList->eventComboChangePosition += MyGUI::newDelegate(this, &SettingsWindow::onVSyncModeChanged);
@@ -475,6 +551,7 @@ namespace MWGui
 
         updateMaxLightsComboBox(mMaxLights);
         updateClampLightingComboBox(mClampLightingMode);
+        updateLightingQualityComboBox(mLightingQuality);
 
         updateShadowMapResolutionComboBox(mShadowMapResolution);
         {
@@ -728,6 +805,20 @@ namespace MWGui
         apply();
     }
 
+    void SettingsWindow::onLightingQualityChanged(MyGUI::ComboBox* /*sender*/, size_t pos)
+    {
+        // Custom: whatever the options are now
+        if (pos == MyGUI::ITEM_NONE || pos == 0 || pos > sLightingPresets.size())
+            return;
+        const bool restart = applyLightingPreset(sLightingPresets[pos - 1]);
+        apply();
+        configureWidgets(mMainWidget, false);
+        updateLightingQualityComboBox(mLightingQuality);
+        if (restart)
+            MWBase::Environment::get().getWindowManager()->interactiveMessageBox(
+                "#{OMWEngine:ChangeRequiresRestart}", { "#{Interface:OK}" }, true);
+    }
+
     void SettingsWindow::onLightsResetButtonClicked(MyGUI::Widget* /*sender*/)
     {
         std::vector<std::string> buttons = { "#{Interface:Yes}", "#{Interface:No}" };
@@ -774,6 +865,7 @@ namespace MWGui
 
         apply();
         configureWidgets(mMainWidget, false);
+        updateLightingQualityComboBox(mLightingQuality);
     }
 
     void SettingsWindow::onButtonToggled(MyGUI::Widget* sender)
@@ -948,6 +1040,7 @@ namespace MWGui
             updateSliderLabel(scroller, getSliderLabel(scroller), argNames, args);
 
             apply();
+            updateLightingQualityComboBox(mLightingQuality);
         }
     }
 
@@ -1031,6 +1124,8 @@ namespace MWGui
 
     void SettingsWindow::updateLightSettings()
     {
+        updateLightingQualityComboBox(mLightingQuality);
+
         mClusteredLightingButton->setEnabled(
             MWBase::Environment::get().getResourceSystem()->getSceneManager()->isClusteredLightingSupported());
 

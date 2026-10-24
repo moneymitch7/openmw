@@ -54,6 +54,7 @@ namespace MWGui
         MyGUI::Widget* mMaxLightsWidget;
         MyGUI::Button* mLightsResetButton;
         MyGUI::ComboBox* mClampLightingMode;
+        MyGUI::ComboBox* mLightingQuality;
 
         MyGUI::Button* mActorShadowsButton;
         MyGUI::Button* mPlayerShadowsButton;
@@ -108,6 +109,7 @@ namespace MWGui
 
         void onShadowUpdateIntervalChanged(MyGUI::ComboBox* sender, size_t pos);
         void onClampLightingModeChanged(MyGUI::ComboBox* sender, size_t pos);
+        void onLightingQualityChanged(MyGUI::ComboBox* sender, size_t pos);
 
         void onPrimaryLanguageChanged(MyGUI::ComboBox* sender, size_t pos) { onLanguageChanged(0, sender, pos); }
         void onSecondaryLanguageChanged(MyGUI::ComboBox* sender, size_t pos) { onLanguageChanged(1, sender, pos); }

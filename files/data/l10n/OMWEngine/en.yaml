@@ -169,6 +169,22 @@ HeldLightSoftnessDesc: "Removes the glare right around the torch."
 HeldLightBounceDesc: "Soft glow carried lights send onto the walls around you."
 HeldLightFlickerDesc: "How much carried torches and lanterns waver like a flame."
 LightsSectionLamps: "Lamps & Torches"
+LightingQuality: "Lighting Quality"
+LightingQualityDesc: "Sets the lighting options that cost performance at once."
+LightingQualityCustom: "Custom"
+LightingQualityLow: "Low"
+LightingQualityMedium: "Medium"
+LightingQualityHigh: "High"
+LightingQualityUltra: "Ultra"
+LightingQualityTooltip: |-
+  Sets the lighting options that cost the most performance together. The look (brightness, falloff, ambient, sunlight) is never changed.
+
+  Low: Light Reach 1.00 (outside 1.00), no Light Bounce, 8 lights per spot, no lantern or lamp shadows.
+  Medium: Light Reach 1.50 (outside 1.50), Light Bounce 0.05, 12 lights per spot, lantern shadows.
+  High: Light Reach 2.00 (outside 2.00), Light Bounce 0.10, 16 lights per spot, lantern and lamp shadows.
+  Ultra: Light Reach 2.50 (outside 3.00), Light Bounce 0.10, 24 lights per spot, sharper lantern and lamp shadows.
+
+  Moving Light Reach, Light Reach Outside or Light Bounce yourself switches this to Custom; choosing Custom changes nothing. Shadow changes apply after a restart.
 LightsSectionDaylight: "Daylight & Rooms"
 LightsSectionCarried: "Carried Lights (yours and NPCs')"
 LightsSectionAdvanced: "Advanced"
