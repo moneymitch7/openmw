@@ -42,9 +42,14 @@ namespace Resource
         /// mipmaps). 0 for no limit.
         void setMaxTextureSize(int size) { mMaxTextureSize = size; }
 
+        /// Tools that only need to know which textures a model uses (openmw-distantlandtool): images are not read, an
+        /// existing one is a 1x1 placeholder named after its path.
+        void setNamesOnly(bool namesOnly) { mNamesOnly = namesOnly; }
+
     private:
         osg::ref_ptr<osg::Image> mWarningImage;
         int mMaxTextureSize = 0;
+        bool mNamesOnly = false;
         osg::ref_ptr<osgDB::Options> mOptions;
 
         ImageManager(const ImageManager&);

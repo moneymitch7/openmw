@@ -270,8 +270,16 @@ namespace
     VFS::Path::Normalized getBestLODMeshName(
         VFS::Path::NormalizedView resPath, const VFS::Manager& vfs, std::string_view pattern)
     {
-        if (VFS::Path::Normalized result = getLODMeshNameImpl(resPath, pattern); vfs.exists(result))
+        VFS::Path::Normalized result = getLODMeshNameImpl(resPath, pattern);
+        if (vfs.exists(result))
             return result;
+        // OpenMGE XE: or one made by openmw-distantlandtool, in OSG's binary format
+        if (result != resPath)
+        {
+            constexpr VFS::Path::ExtensionView osgb("osgb");
+            if (result.changeExtension(osgb) && vfs.exists(result))
+                return result;
+        }
         return VFS::Path::Normalized(resPath);
     }
 

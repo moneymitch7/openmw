@@ -52,6 +52,7 @@ option(BUILD_WITH_CODE_COVERAGE "Enable code coverage with gconv" OFF)
 option(BUILD_COMPONENTS_TESTS   "Build components library tests" OFF)
 option(BUILD_BENCHMARKS         "Build benchmarks with Google Benchmark" OFF)
 option(BUILD_NAVMESHTOOL        "Build navmesh tool" ON)
+option(BUILD_DISTANTLANDTOOL    "Build distant land tool (OpenMGE XE)" ON)
 option(BUILD_BULLETOBJECTTOOL   "Build Bullet object tool" ON)
 option(BUILD_OPENCS_TESTS       "Build OpenMW Construction Set tests" OFF)
 option(BUILD_OPENMW_TESTS       "Build OpenMW tests" OFF)
@@ -793,6 +794,10 @@ endif()
 
 if (BUILD_NAVMESHTOOL)
     add_subdirectory(apps/navmeshtool)
+endif()
+
+if (BUILD_DISTANTLANDTOOL)
+    add_subdirectory(apps/distantlandtool)
 endif()
 
 if (BUILD_BULLETOBJECTTOOL)

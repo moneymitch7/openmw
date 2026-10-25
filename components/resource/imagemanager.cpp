@@ -160,6 +160,19 @@ namespace Resource
         osg::ref_ptr<osg::Object> obj = mCache->getRefFromObjectCache(path);
         if (obj)
             return osg::ref_ptr<osg::Image>(static_cast<osg::Image*>(obj.get()));
+        else if (mNamesOnly)
+        {
+            if (!mVFS->exists(path))
+            {
+                mCache->addEntryToObjectCache(path.value(), mWarningImage);
+                return mWarningImage;
+            }
+            osg::ref_ptr<osg::Image> image = new osg::Image;
+            image->allocateImage(1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE);
+            image->setFileName(std::string(path.value()));
+            mCache->addEntryToObjectCache(path.value(), image);
+            return image;
+        }
         else
         {
             Files::IStreamPtr stream;
