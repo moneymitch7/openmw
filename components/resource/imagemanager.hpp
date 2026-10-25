@@ -42,7 +42,7 @@ namespace Resource
         /// mipmaps). 0 for no limit.
         void setMaxTextureSize(int size) { mMaxTextureSize = size; }
 
-        /// Tools that only need to know which textures a model uses (openmw-distantlandtool): images are not read, an
+        /// Tools that only need to know which textures a model uses (openmw-distantlandtool, github.com/moneymitch7/openmw-distantlandtool): images are not read, an
         /// existing one is a 1x1 placeholder named after its path.
         void setNamesOnly(bool namesOnly) { mNamesOnly = namesOnly; }
 
