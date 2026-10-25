@@ -1,13 +1,15 @@
 #include "objectpaging.hpp"
 
+#include "distantbake.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <tuple>
 #include <iomanip>
 #include <limits>
 #include <optional>
 #include <shared_mutex>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -53,8 +55,8 @@
 #include <components/misc/rng.hpp>
 #include <components/nifosg/autotransform.hpp>
 #include <components/resource/scenemanager.hpp>
-#include <components/sceneutil/geometrymemory.hpp>
 #include <components/sceneutil/drawcount.hpp>
+#include <components/sceneutil/geometrymemory.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/loadprofile.hpp>
 #include <components/sceneutil/material.hpp>
@@ -626,6 +628,20 @@ namespace MWRender
         , mRefTrackerLocked(false)
     {
         sMergeItems = mActiveGrid && Settings::terrain().mObjectPagingActiveGridItems;
+        if (Settings::terrain().mObjectPagingDistantTextureSet)
+        {
+            // read once: the worldspaces' object pagings share it
+            static std::mutex sMutex;
+            static std::shared_ptr<DistantTextureSet> sSet;
+            static bool sLoaded = false;
+            const std::lock_guard lock(sMutex);
+            if (!sLoaded)
+            {
+                sSet = DistantTextureSet::load(*mSceneManager->getVFS());
+                sLoaded = true;
+            }
+            mDistantTextures = sSet;
+        }
         mRebuildOwner = std::make_shared<RebuildOwner>();
         mRebuildOwner->mObjectPaging = this;
     }
@@ -995,6 +1011,10 @@ namespace MWRender
         std::vector<osg::ref_ptr<const osg::Node>> templateRefs;
         osgUtil::StateToCompile stateToCompile(0, nullptr);
         CopyOp copyop(activeGrid, copyMask);
+        // OpenMGE XE distant land, stage 2: a distant chunk's objects textured from the distant texture set, merged
+        std::optional<DistantChunkBaker> baker;
+        if (!activeGrid && mDistantTextures != nullptr)
+            baker.emplace(*mDistantTextures, *mSceneManager);
 
         // OpenMGE XE occlusion culling: simplified meshes of building-sized objects, rasterized as
         // occluders by PagedOccluderCallback and the nearest-first pre-pass. Active-grid chunks (the
@@ -1037,6 +1057,45 @@ namespace MWRender
                     * osg::Quat(ref.mRotation.y(), osg::Vec3f(0, -1, 0))
                     * osg::Quat(ref.mRotation.x(), osg::Vec3f(-1, 0, 0));
                 const osg::Vec3f nodeScale(ref.mScale, ref.mScale, ref.mScale);
+
+                if (baker.has_value())
+                {
+                    osg::Matrixf matrix;
+                    matrix.preMultTranslate(nodePos);
+                    matrix.preMultRotate(nodeAttitude);
+                    matrix.preMultScale(nodeScale);
+                    if (baker->add(*cnode, matrix))
+                    {
+                        if (buildOccluders && cnode->getBound().radius() * ref.mScale >= occluderMinRadius)
+                        {
+                            const float scaledRadius = cnode->getBound().radius() * ref.mScale;
+                            int adaptiveRes = occluderMeshRes;
+                            if (scaledRadius > occluderMinRadius && occluderMinRadius > 0)
+                                adaptiveRes
+                                    = std::clamp(static_cast<int>(occluderMeshRes * (scaledRadius / occluderMinRadius)),
+                                        occluderMeshRes, occluderMaxMeshRes);
+                            osg::ref_ptr<osg::Group> occluderTrans = new osg::MatrixTransform(matrix);
+                            copyop.setCopyFlags(osg::CopyOp::DEEP_COPY_NODES);
+                            copyop.mDistances = lodDistances / ref.mScale;
+                            copyop.copy(cnode, occluderTrans);
+                            const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectOccluders);
+                            OccluderMesh occMesh
+                                = buildSimplifiedMesh(occluderTrans, adaptiveRes, occluderShrinkFactor);
+                            if (!occMesh.indices.empty())
+                            {
+                                occMesh.aabb = osg::BoundingBox();
+                                for (osg::Vec3f& v : occMesh.vertices)
+                                {
+                                    v += worldCenter;
+                                    occMesh.aabb.expandBy(v);
+                                }
+                                pagedOccluders.mOccluderMeshes.push_back(std::move(occMesh));
+                            }
+                        }
+                        ++numinstances;
+                        continue;
+                    }
+                }
 
                 osg::ref_ptr<osg::Group> trans;
                 if (merge)
@@ -1121,9 +1180,9 @@ namespace MWRender
                                             : (merge ? mergeGroup.get() : group.get());
                 if (merge && mergeInSquares)
                 {
-                    const auto key = std::make_tuple(item,
-                        static_cast<int>(std::floor(nodePos.x() / mActiveGridMergeSize)),
-                        static_cast<int>(std::floor(nodePos.y() / mActiveGridMergeSize)));
+                    const auto key
+                        = std::make_tuple(item, static_cast<int>(std::floor(nodePos.x() / mActiveGridMergeSize)),
+                            static_cast<int>(std::floor(nodePos.y() / mActiveGridMergeSize)));
                     osg::ref_ptr<osg::Group>& square = mergeSquares[key];
                     if (square == nullptr)
                         square = new osg::Group;
@@ -1183,6 +1242,21 @@ namespace MWRender
             }
         };
         mergeChildren(*mergeGroup, *group);
+        if (baker.has_value() && baker->getNumInstances() > 0)
+        {
+            osg::ref_ptr<osg::Group> baked = new osg::Group;
+            {
+                const SceneUtil::LoadProfile::Scope profile(SceneUtil::LoadProfile::Step::ObjectMerging);
+                baker->build(*baked);
+            }
+            if (compile)
+            {
+                stateToCompile._mode = osgUtil::GLObjectsVisitor::COMPILE_DISPLAY_LISTS
+                    | osgUtil::GLObjectsVisitor::COMPILE_STATE_ATTRIBUTES;
+                baked->accept(stateToCompile);
+            }
+            group->addChild(baked);
+        }
         mergeChildren(*itemMergeGroup, *itemGroup);
         for (auto& [key, square] : mergeSquares)
             mergeChildren(*square, std::get<0>(key) ? *itemGroup : *group);

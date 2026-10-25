@@ -169,6 +169,18 @@ Terrain Settings
    paging active grid' is enabled. Needs a restart.
 
 .. omw-setting::
+   :title: object paging distant texture set
+   :type: boolean
+   :range: true, false
+   :default: true
+
+   Distant land, stage 2. When the data folders hold ``distantland/textures.bin``, made by openmw-distantlandtool
+   (small copies of the base textures of the models placed outside, in texture arrays), the distant chunks (past the
+   active grid) draw every object whose textures are all in it from a few merged shapes per chunk (solid, alpha
+   tested and two-sided) instead of a draw call per texture. Objects with blending, glow, animation or textures not in
+   the set are drawn as before. Without the file this does nothing. Needs a restart.
+
+.. omw-setting::
    :title: object paging merge factor
    :type: float32
    :range: >0

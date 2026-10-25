@@ -9,6 +9,10 @@ varying vec2 diffuseMapUV;
 uniform mat4 texMat@diffuseMapUV;
 #endif
 
+#if @diffuseMapArray
+varying vec3 diffuseMapArrayUV;
+#endif
+
 #if @darkMap
 varying vec2 darkMapUV;
 uniform mat4 texMat@darkMapUV;
@@ -135,6 +139,10 @@ void main(void)
 
 #if @diffuseMap
     diffuseMapUV = (texMat@diffuseMapUV * gl_MultiTexCoord@diffuseMapUV).xy;
+#endif
+
+#if @diffuseMapArray
+    diffuseMapArrayUV = vec3(gl_MultiTexCoord0.xy, gl_MultiTexCoord1.x);
 #endif
 
 #if @darkMap

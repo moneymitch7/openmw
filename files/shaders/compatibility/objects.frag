@@ -6,9 +6,19 @@
     #extension GL_EXT_gpu_shader4: require
 #endif
 
+#if @diffuseMapArray
+    #extension GL_EXT_texture_array: require
+#endif
+
 #if @diffuseMap
 uniform sampler2D diffuseMap;
 varying vec2 diffuseMapUV;
+#endif
+
+#if @diffuseMapArray
+// distant land: merged distant shapes, their base textures in one array (layer in z)
+uniform sampler2DArray diffuseMapArray;
+varying vec3 diffuseMapArrayUV;
 #endif
 
 #if @darkMap
@@ -154,6 +164,9 @@ vec2 screenCoords = gl_FragCoord.xy / screenRes;
 #else
     gl_FragData[0].a *= coveragePreservingAlphaScale(diffuseMap, diffuseMapUV + offset);
 #endif
+#elif @diffuseMapArray
+    // the set's smaller levels already keep the alpha tested coverage
+    gl_FragData[0] = texture2DArray(diffuseMapArray, diffuseMapArrayUV);
 #else
     gl_FragData[0] = vec4(1.0);
 #endif

@@ -34,6 +34,7 @@ namespace SceneUtil
 namespace MWRender
 {
     class OccluderRegistry;
+    class DistantTextureSet;
 
     typedef std::tuple<osg::Vec2f, float, bool> ChunkId; // Center, Size, ActiveGrid
 
@@ -113,6 +114,8 @@ namespace MWRender
         float mMinSizeCostMultiplier;
         float mReflectionStaticsDistance; // [Water] reflection statics distance, 0 = no limit
         float mActiveGridMergeSize; // [Terrain] object paging active grid merge size, 0 = one piece per chunk
+        // [Terrain] object paging distant texture set: distantland/textures.bin, nullptr when off or missing
+        std::shared_ptr<DistantTextureSet> mDistantTextures;
 
         std::mutex mRefTrackerMutex;
         struct RefTracker
