@@ -6,6 +6,7 @@
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/texturetype.hpp>
 #include <components/sceneutil/util.hpp>
+#include <components/shader/removedalphafunc.hpp>
 #include <components/vfs/manager.hpp>
 #include <components/vfs/pathutil.hpp>
 
@@ -324,7 +325,17 @@ namespace MWRender
                         // Many models test with a low threshold (often "greater than 0") on textures whose alpha
                         // is mostly low (a gloss mask, not a cut-out): the merged shapes test at 0.5, so their alpha
                         // is scaled to keep the model's own threshold.
-                        const float ref = std::max(alpha->getReferenceValue(), 1.f / 512.f);
+                        // The shaders made for the model keep its threshold in the alphaRef uniform: the alpha
+                        // function left in its state set is then a stand-in (RemovedAlphaFunc) with a default one.
+                        float modelRef = alpha->getReferenceValue();
+                        if (const osg::Uniform* uniform = stateset.getUniform("alphaRef"))
+                            uniform->get(modelRef);
+                        else if (dynamic_cast<const Shader::RemovedAlphaFunc*>(alpha) != nullptr)
+                        {
+                            mUsable = false;
+                            return;
+                        }
+                        const float ref = std::max(modelRef, 1.f / 512.f);
                         alphaScale = std::clamp(0.5f / ref, 0.25f, 256.f);
                     }
                 const osg::StateAttribute::GLModeValue cull = stateset.getMode(GL_CULL_FACE);
