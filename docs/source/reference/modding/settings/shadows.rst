@@ -205,3 +205,23 @@ Shadows Settings
 
    Minimum near/far ratio for Light Space Perspective Shadow Map.
    Controls distribution of shadow detail near and far from the camera.
+
+.. omw-setting::
+   :title: stable shadows
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   Stable sun shadows. Normally each shadow map is fitted to the view (perspective-warped), which keeps close
+   shadows sharp but moves the shadow map's pixels with every turn and step of the camera, so shadow edges shimmer.
+   With this, each shadow map keeps the same size whichever way the camera looks and moves only in whole shadow map
+   pixels, so edges stay still while the camera moves. Close shadows are a little softer for it. Needs a restart.
+
+.. omw-setting::
+   :title: shadow sun direction step
+   :type: float32
+   :range: 0 to 5
+   :default: 0
+
+   The sun's direction for shadows changes only in steps of this many degrees, so shadow edges stay still between
+   steps instead of creeping a pixel at a time as the sun moves. 0 follows the sun smoothly.

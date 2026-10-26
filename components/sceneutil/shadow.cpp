@@ -83,6 +83,12 @@ namespace SceneUtil
             mShadowTechnique->disableFrontFaceCulling();
 
         mShadowSettings->setMultipleShadowMapHint(osgShadow::ShadowSettings::CASCADED);
+        // OpenMGE XE: stable shadows are orthographic (no LiSPSM warp), sized and snapped to stay still
+        mShadowSettings->setShadowMapProjectionHint(settings.mStableShadows
+                ? osgShadow::ShadowSettings::ORTHOGRAPHIC_SHADOW_MAP
+                : osgShadow::ShadowSettings::PERSPECTIVE_SHADOW_MAP);
+        mShadowTechnique->setStableShadows(settings.mStableShadows);
+        mShadowTechnique->setSunDirectionStep(osg::DegreesToRadians(settings.mShadowSunDirectionStep.get()));
 
         if (mEnableShadows && settings.mEnableDebugHud)
             mShadowTechnique->enableDebugHUD();

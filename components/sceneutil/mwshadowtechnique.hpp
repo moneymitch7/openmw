@@ -294,6 +294,12 @@ namespace SceneUtil {
 
         void setFrustumExpansion(double base, double perSkip) { _frustumExpansionBase = base; _frustumExpansionPerSkip = perSkip; }
 
+        /// OpenMGE XE: each cascade a fixed-size square around a sphere holding its part of the view, moved in whole
+        /// shadow map texels in world space, so the shadow map's pixels don't move with the camera.
+        void setStableShadows(bool stable) { _stableShadows = stable; }
+        /// OpenMGE XE: the sun's direction for shadows in steps of this many radians (0 = smooth).
+        void setSunDirectionStep(double radians) { _sunDirectionStep = radians; }
+
         osg::ref_ptr<osg::StateSet> getOrCreateShadowsBinStateSet();
 
     protected:
@@ -337,6 +343,9 @@ namespace SceneUtil {
 
         double                                  _frustumExpansionBase = 0.0;
         double                                  _frustumExpansionPerSkip = 0.0;
+
+        bool                                    _stableShadows = false;
+        double                                  _sunDirectionStep = 0.0;
 
         class DebugHUD final : public osg::Referenced
         {

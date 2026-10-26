@@ -28,6 +28,8 @@
 #include <osg/Depth>
 #include <osg/ClipControl>
 
+#include <array>
+#include <cmath>
 #include <sstream>
 #include <vector>
 
@@ -1308,6 +1310,14 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
         reducedNear = minZNear;
         reducedFar = maxZFar;
     }
+    // OpenMGE XE [Shadows] stable shadows: the cascades split the same distances every frame (those that follow what
+    // is in view would change their sizes as the camera turns), as long as there is a maximum shadow map distance
+    const bool stableSplits = _stableShadows && maxZFar < 1e7;
+    if (stableSplits)
+    {
+        reducedNear = minZNear;
+        reducedFar = maxZFar;
+    }
  
     // return compute near far mode back to it's original settings
     cv.setComputeNearFarMode(cachedNearFarMode);
@@ -1423,8 +1433,11 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                     maxZ = osg::maximum<double>(maxZ, -corner.z());
                     minZ = osg::minimum<double>(minZ, -corner.z());
                 }
-                reducedNear = osg::maximum<double>(reducedNear, minZ);
-                reducedFar = osg::minimum<double>(reducedFar, maxZ);
+                if (!stableSplits)
+                {
+                    reducedNear = osg::maximum<double>(reducedNear, minZ);
+                    reducedFar = osg::minimum<double>(reducedFar, maxZ);
+                }
 
                 // OSG_NOTICE<<"  xMid="<<xMid<<", yMid="<<yMid<<", xRange="<<xRange<<", yRange="<<yRange<<std::endl;
 
@@ -1746,6 +1759,16 @@ bool MWShadowTechnique::selectActiveLights(osgUtil::CullVisitor* cv, ViewDepende
     if (lightManagerFinder.mLightManager && lightManagerFinder.mLightManager->getSunlight()) {
         LightData* ld = new LightData(vdd);
         ld->setLightData(lightManagerFinder.mLocalToWorld, lightManagerFinder.mLightManager->getSunlight(), modelViewMatrix);
+        // OpenMGE XE [Shadows] shadow sun direction step: the shadows follow the sun in steps
+        if (_sunDirectionStep > 0.0 && ld->directionalLight)
+        {
+            osg::Vec3d dir = ld->lightDir;
+            const double azimuth = std::atan2(dir.y(), dir.x());
+            const double elevation = std::asin(std::clamp(dir.z(), -1.0, 1.0));
+            const double qa = std::round(azimuth / _sunDirectionStep) * _sunDirectionStep;
+            const double qe = std::round(elevation / _sunDirectionStep) * _sunDirectionStep;
+            ld->lightDir.set(std::cos(qe) * std::cos(qa), std::cos(qe) * std::sin(qa), std::sin(qe));
+        }
         pll.push_back(ld);
     }
 
@@ -2029,6 +2052,17 @@ bool MWShadowTechnique::computeShadowCameraSettings(Frustum& frustum, LightData&
     {
         lightSide = positionedLight.lightDir ^ frustum.frustumCenterLine;
         lightSide.normalize();
+    }
+
+    // OpenMGE XE [Shadows] stable shadows: the light's view axes from the world, not from where the camera looks, so
+    // that turning the camera doesn't turn the shadow map's pixel grid
+    if (_stableShadows)
+    {
+        osg::Vec3d side = positionedLight.lightDir ^ osg::Vec3d(0.0, 0.0, 1.0);
+        if (side.length2() < 1e-6)
+            side = positionedLight.lightDir ^ osg::Vec3d(0.0, 1.0, 0.0);
+        side.normalize();
+        lightSide = side;
     }
 
     osg::Vec3d lightUp = lightSide ^ positionedLight.lightDir;
@@ -2800,6 +2834,76 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
     }
     else
         return false;
+
+    // OpenMGE XE [Shadows] stable shadows: the cascade covers a fixed-size square around the sphere holding its slice
+    // of the view (the same whichever way the camera looks), moved only in whole texels of a grid fixed in the world,
+    // so the shadow map's pixels stay put on the ground while the camera turns and moves (no shimmering edges).
+    if (_stableShadows && frustum.corners.size() == 8)
+    {
+        // the slice of the view frustum from viewNear to viewFar, by its eight corners (on the frustum's four side
+        // edges: near plane corners 0, 1, 5, 4 to far plane corners 3, 2, 6, 7)
+        constexpr std::array<std::pair<int, int>, 4> edges{ { { 0, 3 }, { 1, 2 }, { 5, 6 }, { 4, 7 } } };
+        std::array<osg::Vec3d, 8> slice;
+        const osg::Vec3d& line = frustum.frustumCenterLine;
+        for (int i = 0; i < 4; ++i)
+        {
+            const osg::Vec3d& nearCorner = frustum.corners[edges[i].first];
+            const osg::Vec3d& farCorner = frustum.corners[edges[i].second];
+            const double nearDepth = (nearCorner - frustum.eye) * line;
+            const double farDepth = (farCorner - frustum.eye) * line;
+            const double span = farDepth - nearDepth;
+            const auto at = [&](double depth) {
+                const double t = span > 1e-6 ? (depth - nearDepth) / span : 0.0;
+                return nearCorner + (farCorner - nearCorner) * t;
+            };
+            slice[i] = at(viewNear);
+            slice[i + 4] = at(viewFar);
+        }
+        osg::Vec3d centre;
+        for (const osg::Vec3d& corner : slice)
+            centre += corner;
+        centre /= 8.0;
+        double radius = 0.0;
+        for (const osg::Vec3d& corner : slice)
+            radius = osg::maximum(radius, (corner - centre).length());
+        if (radius <= 0.0)
+            return false;
+        // the near and far distances follow the scene a little: the size only in steps of 1/16 (as good as fixed)
+        radius = std::exp2(std::ceil(std::log2(radius) * 16.0) / 16.0);
+
+        // in the light's view space; snapped relative to where the world's origin is in it, as the light's view
+        // follows the camera
+        const osg::Vec3d centreLight = centre * light_v;
+        const osg::Vec3d originLight = osg::Vec3d(0.0, 0.0, 0.0) * light_v;
+        const double texel = 2.0 * radius / getShadowedScene()->getShadowSettings()->getTextureSize().x();
+        const double cx = originLight.x() + std::floor((centreLight.x() - originLight.x()) / texel) * texel;
+        const double cy = originLight.y() + std::floor((centreLight.y() - originLight.y()) / texel) * texel;
+
+        // depth as before: the slice's depth range in the light's clip space
+        osg::Matrixd zFit;
+        zFit.makeTranslate(osg::Vec3d(0.0, 0.0, -0.5 * (zMax + zMin)));
+        zFit.postMultScale(osg::Vec3d(1.0, 1.0, 2.0 / (zMax - zMin)));
+        osg::Matrixd projection = oldLightP * zFit;
+        // x and y straight from the light's view space: (v - c) / radius
+        projection(0, 0) = 1.0 / radius;
+        projection(1, 0) = 0.0;
+        projection(2, 0) = 0.0;
+        projection(3, 0) = -cx / radius;
+        projection(0, 1) = 0.0;
+        projection(1, 1) = 1.0 / radius;
+        projection(2, 1) = 0.0;
+        projection(3, 1) = -cy / radius;
+        camera->setProjectionMatrix(projection);
+
+        convexHull.transform(osg::Matrixd::inverse(oldLightP));
+        const double hullZMin = convexHull.min(2);
+        planeList.emplace_back(0.0, -1.0, 0.0, cy + radius);
+        planeList.emplace_back(0.0, 1.0, 0.0, -(cy - radius));
+        planeList.emplace_back(-1.0, 0.0, 0.0, cx + radius);
+        planeList.emplace_back(1.0, 0.0, 0.0, -(cx - radius));
+        planeList.emplace_back(0.0, 0.0, 1.0, -hullZMin);
+        return true;
+    }
 
     // Inflate shadow frustum slightly to provide margin for temporal reuse.
     // On skip frames, the camera moves but the shadow map is frozen, this

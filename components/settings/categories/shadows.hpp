@@ -59,6 +59,9 @@ namespace Settings
             makeClampSanitizerFloat(0.0f, 0.15f) };
         SettingValue<float> mShadowFrustumExpansionPerSkip{ mIndex, "Shadows", "shadow frustum expansion per skip",
             makeClampSanitizerFloat(0.0f, 0.15f) };
+        SettingValue<bool> mStableShadows{ mIndex, "Shadows", "stable shadows" };
+        SettingValue<float> mShadowSunDirectionStep{ mIndex, "Shadows", "shadow sun direction step",
+            makeClampSanitizerFloat(0.0f, 5.0f) };
     };
 }
 
