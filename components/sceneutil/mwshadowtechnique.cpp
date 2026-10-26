@@ -1621,7 +1621,12 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             osg::Matrixd invertModelView;
             invertModelView.invert(camera->getViewMatrix());
 
-            osg::Polytope local_polytope(polytope);
+            // OpenMGE XE [Shadows] cascade update interval: a cascade that may be kept for later frames gets every
+            // caster over its whole square, not only those that shadow what is in view now; once the camera turns,
+            // the part of the kept map that comes into view has its shadows too. (Its square bounds it below.)
+            const bool keepable = _stableShadows && _cascadeUpdateInterval > 1 && sm_i > 0 && stableSplits
+                && numShadowMapsPerLight > 1 && settings->getMultipleShadowMapHint() == ShadowSettings::CASCADED;
+            osg::Polytope local_polytope(keepable ? osg::Polytope() : polytope);
             local_polytope.transformProvidingInverse(invertModelView);
 
             double cascaseNear = reducedNear;
