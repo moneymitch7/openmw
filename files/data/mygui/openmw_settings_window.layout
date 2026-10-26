@@ -81,7 +81,7 @@
                         <Property key="Caption" value="#{OMWEngine:ActorsProcessingRange}"/>
                     </Widget>
                     <Widget type="ScrollBar" skin="MW_HScroll" position="0 20 352 14" align="Left Top HStretch">
-                        <Property key="Range" value="3584"/>
+                        <Property key="Range" value="3585"/>
                         <Property key="Page" value="300"/>
                         <Property key="WheelPage" value="300"/>
                         <UserString key="SettingType" value="Slider"/>
@@ -1802,6 +1802,27 @@
                                     <Property key="AddItem" value="2"/>
                                     <Property key="AddItem" value="3"/>
                                     <Property key="AddItem" value="4"/>
+                                </Widget>
+                                <Widget type="Spacer" />
+                            </Widget>
+
+                            <Widget type="Widget" position="0 0 0 18" align="Top Left HStretch">
+                                <UserString key="HStretch" value="true"/>
+                                <Widget type="AutoSizedTextBox" skin="NormalText" name="ShadowPlanesComputationMethodLabel">
+                                    <Property key="Caption" value="#{OMWEngine:ShadowPlanesComputationMethod}"/>
+                                    <UserString key="ToolTipType" value="Layout"/>
+                                    <UserString key="ToolTipLayout" value="TextToolTip"/>
+                                    <UserString key="Caption_Text" value="#{OMWEngine:ShadowPlanesComputationMethodTooltip}"/>
+                                </Widget>
+                                <Widget type="Spacer" />
+                            </Widget>
+                            <Widget type="HBox" align="Stretch">
+                                <UserString key="HStretch" value="true"/>
+                                <UserString key="VStretch" value="false"/>
+                                <Widget type="ComboBox" skin="MW_ComboBox" position="0 0 200 24" align="Left Top" name="ShadowPlanesComputationMethod">
+                                    <Property key="AddItem" value="#{OMWEngine:ShadowPlanesComputationMethodBounds}"/>
+                                    <Property key="AddItem" value="#{OMWEngine:ShadowPlanesComputationMethodPrimitives}"/>
+                                    <Property key="AddItem" value="#{OMWEngine:ShadowPlanesComputationMethodNone}"/>
                                 </Widget>
                                 <Widget type="Spacer" />
                             </Widget>

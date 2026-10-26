@@ -82,10 +82,12 @@
 
 #include "actorspaths.hpp"
 #include "camera.hpp"
+#include "characterpreview.hpp"
 #include "effectmanager.hpp"
 #include "fogmanager.hpp"
 #include "groundcover.hpp"
 #include "mgeweatherpass.hpp"
+#include "localmap.hpp"
 #include "navmesh.hpp"
 #include "npcanimation.hpp"
 #include "objectpaging.hpp"
@@ -667,6 +669,21 @@ namespace MWRender
     Resource::ResourceSystem* RenderingManager::getResourceSystem()
     {
         return mResourceSystem;
+    }
+
+    std::unique_ptr<InventoryPreview> RenderingManager::createInventoryPreview(const MWWorld::Ptr& character)
+    {
+        return std::make_unique<InventoryPreview>(mRootNode, mResourceSystem, character);
+    }
+
+    std::unique_ptr<RaceSelectionPreview> RenderingManager::createRaceSelectionPreview()
+    {
+        return std::make_unique<RaceSelectionPreview>(mRootNode, mResourceSystem);
+    }
+
+    std::unique_ptr<LocalMap> RenderingManager::createLocalMap()
+    {
+        return std::make_unique<LocalMap>(mRootNode);
     }
 
     const std::shared_ptr<SceneUtil::WorkQueue>& RenderingManager::getWorkQueue() const
@@ -1313,6 +1330,17 @@ namespace MWRender
 
         const std::string data = ostream.str();
         return std::vector<char>(data.begin(), data.end());
+    }
+
+    osg::BoundingBox RenderingManager::getObjectBounds(const MWWorld::Ptr& ptr, unsigned int ignoreMask) const
+    {
+        SceneUtil::PositionAttitudeTransform* baseNode = ptr.getRefData().getBaseNode();
+        if (baseNode == nullptr)
+            return {};
+        osg::ComputeBoundsVisitor computeBounds;
+        computeBounds.setTraversalMask(~ignoreMask);
+        baseNode->accept(computeBounds);
+        return computeBounds.getBoundingBox();
     }
 
     osg::Vec2f RenderingManager::getScreenCoords(const osg::BoundingBox& bb)

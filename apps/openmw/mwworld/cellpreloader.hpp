@@ -14,10 +14,9 @@
 #include <span>
 #include <vector>
 
-namespace osg
+namespace Misc
 {
-    class Object;
-    class Stats;
+    class FrameStats;
 }
 
 namespace Resource
@@ -90,7 +89,7 @@ namespace MWWorld
         bool isTerrainLoaded(const PositionCellGrid& position, double referenceTime) const;
         void setTerrain(Terrain::World* terrain);
 
-        void reportStats(unsigned int frameNumber, osg::Stats& stats) const;
+        void reportStats(unsigned int frameNumber, Misc::FrameStats& stats) const;
 
         /// What loadModelsNow loaded, kept in the caches while this lives.
         struct LoadedModels

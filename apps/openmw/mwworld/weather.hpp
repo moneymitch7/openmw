@@ -288,8 +288,8 @@ namespace MWWorld
     private:
         struct CycleDay
         {
-            float mRiseHour;
-            float mHandoverHour;
+            float mRiseHour{};
+            float mHandoverHour{};
         };
 
         // Time constant for Morrowind parity.
@@ -400,8 +400,6 @@ namespace MWWorld
         /// Are we in an ash or blight storm?
         bool isInStorm() const;
 
-        osg::Vec3f getStormDirection() const;
-
         void advanceTime(double hours, bool incremental);
 
         const Weather* getWeather() { return mWeatherStore->search(mCurrentWeather); }
@@ -452,7 +450,6 @@ namespace MWWorld
         float mNextWindSpeed;
         bool mIsStorm;
         bool mPrecipitation;
-        osg::Vec3f mStormDirection;
 
         ESM::RefId mCurrentRegion;
         float mTimePassed;
