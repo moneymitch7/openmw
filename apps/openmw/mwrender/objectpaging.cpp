@@ -1043,6 +1043,7 @@ namespace MWRender
             const float minSizeMerged = minSizeMergeFactor2 > 0 ? mMinSize * minSizeMergeFactor2 : mMinSize;
 
             unsigned int numinstances = 0;
+            unsigned int numDrawnAsIs = 0; // not merged through the distant texture set
             for (const PagedCellRef* refPtr : pair.second.mInstances)
             {
                 const PagedCellRef& ref = *refPtr;
@@ -1190,6 +1191,7 @@ namespace MWRender
                 }
                 attachTo->addChild(trans);
                 ++numinstances;
+                ++numDrawnAsIs;
             }
             if (numinstances > 0)
             {
@@ -1197,7 +1199,8 @@ namespace MWRender
                 // in addition, we hint to the cache that it's still being used and should be kept in cache
                 templateRefs.emplace_back(cnode);
 
-                if (pair.second.mNeedCompile)
+                // a model drawn only through the distant texture set: its own textures needn't be on the card
+                if (pair.second.mNeedCompile && numDrawnAsIs > 0)
                 {
                     int mode = osgUtil::GLObjectsVisitor::COMPILE_STATE_ATTRIBUTES;
                     if (!merge)

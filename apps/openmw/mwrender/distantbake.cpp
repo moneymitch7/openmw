@@ -23,6 +23,7 @@
 #include <osg/TexMat>
 #include <osg/Texture2D>
 #include <osg/TriangleIndexFunctor>
+#include <osg/observer_ptr>
 
 #include <algorithm>
 #include <bit>
@@ -413,8 +414,11 @@ namespace MWRender
             }
         };
 
+        // The analysed models, watched rather than held: a model the resource cache lets go of (with its textures)
+        // drops out here too.
         std::mutex sCacheMutex;
-        std::unordered_map<const osg::Node*, std::pair<osg::ref_ptr<const osg::Node>, std::shared_ptr<const ModelBake>>>
+        std::unordered_map<const osg::Node*,
+            std::pair<osg::observer_ptr<const osg::Node>, std::shared_ptr<const ModelBake>>>
             sCache;
 
         std::shared_ptr<const ModelBake> analyse(const DistantTextureSet& set, const osg::Node& model)
@@ -423,7 +427,12 @@ namespace MWRender
                 const std::lock_guard lock(sCacheMutex);
                 const auto it = sCache.find(&model);
                 if (it != sCache.end())
-                    return it->second.second;
+                {
+                    osg::ref_ptr<const osg::Node> alive;
+                    if (it->second.first.lock(alive) && alive.get() == &model)
+                        return it->second.second;
+                    sCache.erase(it); // an earlier model at the same address
+                }
             }
             Analyser analyser(set);
             const_cast<osg::Node&>(model).accept(analyser);
@@ -432,10 +441,17 @@ namespace MWRender
             if (bake->mUsable)
                 bake->mParts = std::move(analyser.mParts);
             const std::lock_guard lock(sCacheMutex);
-            // the models of a few cells' worth of distant chunks; forgotten all at once when there are many
             if (sCache.size() > 8192)
-                sCache.clear();
-            sCache.emplace(&model, std::make_pair(osg::ref_ptr<const osg::Node>(&model), bake));
+            {
+                for (auto it = sCache.begin(); it != sCache.end();)
+                {
+                    osg::ref_ptr<const osg::Node> alive;
+                    it = it->second.first.lock(alive) ? std::next(it) : sCache.erase(it);
+                }
+                if (sCache.size() > 8192)
+                    sCache.clear();
+            }
+            sCache.insert_or_assign(&model, std::make_pair(osg::observer_ptr<const osg::Node>(&model), bake));
             return bake;
         }
     }
