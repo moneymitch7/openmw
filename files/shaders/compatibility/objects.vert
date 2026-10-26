@@ -11,6 +11,7 @@ uniform mat4 texMat@diffuseMapUV;
 
 #if @diffuseMapArray
 varying vec3 diffuseMapArrayUV;
+varying float diffuseMapArrayAlphaScale;
 #endif
 
 #if @darkMap
@@ -143,6 +144,7 @@ void main(void)
 
 #if @diffuseMapArray
     diffuseMapArrayUV = vec3(gl_MultiTexCoord0.xy, gl_MultiTexCoord1.x);
+    diffuseMapArrayAlphaScale = gl_MultiTexCoord1.y;
 #endif
 
 #if @darkMap

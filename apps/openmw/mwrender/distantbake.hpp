@@ -5,6 +5,7 @@
 #include <osg/Node>
 #include <osg/StateSet>
 #include <osg/Texture2DArray>
+#include <osg/Vec2f>
 #include <osg/ref_ptr>
 
 #include <array>
@@ -92,7 +93,7 @@ namespace MWRender
             std::vector<osg::Vec3f> mNormals;
             std::vector<std::uint32_t> mColors; // RGBA8
             std::vector<osg::Vec2f> mTexCoords;
-            std::vector<float> mLayers;
+            std::vector<osg::Vec2f> mLayers; // layer, alpha scale
             std::vector<std::uint32_t> mIndices;
         };
         DistantTextureSet& mSet;

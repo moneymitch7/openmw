@@ -101,6 +101,8 @@ namespace MWRender
             std::vector<std::uint32_t> mColors;
             std::vector<osg::Vec2f> mTexCoords;
             float mLayer;
+            // the shape's own alpha test threshold, as a scale of its alpha to the merged shapes' 0.5
+            float mAlphaScale = 1.f;
             std::vector<std::uint32_t> mIndices;
         };
 
@@ -306,10 +308,24 @@ namespace MWRender
                     colorMode = material->getVertexColorMode();
                 }
                 int kind = DistantTextureSet::Solid;
+                float alphaScale = 1.f;
                 if (const osg::AlphaFunc* alpha
                     = dynamic_cast<const osg::AlphaFunc*>(stateset.getAttribute(osg::StateAttribute::ALPHAFUNC)))
                     if (alpha->getFunction() != osg::AlphaFunc::ALWAYS)
+                    {
+                        if (alpha->getFunction() != osg::AlphaFunc::GREATER
+                            && alpha->getFunction() != osg::AlphaFunc::GEQUAL)
+                        {
+                            mUsable = false;
+                            return;
+                        }
                         kind |= DistantTextureSet::AlphaTested;
+                        // Many models test with a low threshold (often "greater than 0") on textures whose alpha
+                        // is mostly low (a gloss mask, not a cut-out): the merged shapes test at 0.5, so their alpha
+                        // is scaled to keep the model's own threshold.
+                        const float ref = std::max(alpha->getReferenceValue(), 1.f / 512.f);
+                        alphaScale = std::clamp(0.5f / ref, 0.25f, 256.f);
+                    }
                 const osg::StateAttribute::GLModeValue cull = stateset.getMode(GL_CULL_FACE);
                 if (cull != osg::StateAttribute::INHERIT && (cull & osg::StateAttribute::ON) == 0)
                     kind |= DistantTextureSet::TwoSided;
@@ -343,6 +359,7 @@ namespace MWRender
                 part.mArray = entry->mArray;
                 part.mKind = kind;
                 part.mLayer = static_cast<float>(entry->mLayer);
+                part.mAlphaScale = alphaScale;
                 osg::TriangleIndexFunctor<TriangleCollector> functor;
                 functor.mIndices = &part.mIndices;
                 geometry.accept(functor);
@@ -537,7 +554,7 @@ namespace MWRender
         standIn->setNormalArray(new osg::Vec3Array(1), osg::Array::BIND_PER_VERTEX);
         standIn->setColorArray(new osg::Vec4ubArray(1), osg::Array::BIND_PER_VERTEX);
         standIn->setTexCoordArray(0, new osg::Vec2Array(1), osg::Array::BIND_PER_VERTEX);
-        standIn->setTexCoordArray(1, new osg::FloatArray(1), osg::Array::BIND_PER_VERTEX);
+        standIn->setTexCoordArray(1, new osg::Vec2Array(1), osg::Array::BIND_PER_VERTEX);
         standIn->setStateSet(stateset);
         osg::ref_ptr<osg::Group> holder = new osg::Group;
         holder->addChild(standIn);
@@ -572,7 +589,8 @@ namespace MWRender
             }
             buffer.mColors.insert(buffer.mColors.end(), part.mColors.begin(), part.mColors.end());
             buffer.mTexCoords.insert(buffer.mTexCoords.end(), part.mTexCoords.begin(), part.mTexCoords.end());
-            buffer.mLayers.insert(buffer.mLayers.end(), part.mPositions.size(), part.mLayer);
+            buffer.mLayers.insert(
+                buffer.mLayers.end(), part.mPositions.size(), osg::Vec2f(part.mLayer, part.mAlphaScale));
             for (std::uint32_t index : part.mIndices)
                 buffer.mIndices.push_back(base + index);
         }
@@ -598,7 +616,7 @@ namespace MWRender
             geometry->setTexCoordArray(
                 0, new osg::Vec2Array(buffer.mTexCoords.begin(), buffer.mTexCoords.end()), osg::Array::BIND_PER_VERTEX);
             geometry->setTexCoordArray(
-                1, new osg::FloatArray(buffer.mLayers.begin(), buffer.mLayers.end()), osg::Array::BIND_PER_VERTEX);
+                1, new osg::Vec2Array(buffer.mLayers.begin(), buffer.mLayers.end()), osg::Array::BIND_PER_VERTEX);
             geometry->addPrimitiveSet(
                 new osg::DrawElementsUInt(GL_TRIANGLES, buffer.mIndices.begin(), buffer.mIndices.end()));
             geometry->setUseDisplayList(false);

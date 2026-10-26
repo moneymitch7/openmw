@@ -19,6 +19,8 @@ varying vec2 diffuseMapUV;
 // distant land: merged distant shapes, their base textures in one array (layer in z)
 uniform sampler2DArray diffuseMapArray;
 varying vec3 diffuseMapArrayUV;
+// the merged shape's own alpha test threshold, as a scale to the merged shapes' alphaRef
+varying float diffuseMapArrayAlphaScale;
 #endif
 
 #if @darkMap
@@ -167,6 +169,7 @@ vec2 screenCoords = gl_FragCoord.xy / screenRes;
 #elif @diffuseMapArray
     // the set's smaller levels already keep the alpha tested coverage
     gl_FragData[0] = texture2DArray(diffuseMapArray, diffuseMapArrayUV);
+    gl_FragData[0].a *= diffuseMapArrayAlphaScale;
 #else
     gl_FragData[0] = vec4(1.0);
 #endif
