@@ -14,6 +14,7 @@
 #include "apps/openmw/mwmechanics/actorutil.hpp"
 #include "apps/openmw/mwmechanics/creaturestats.hpp"
 #include "apps/openmw/mwmechanics/drawstate.hpp"
+#include "apps/openmw/mwmechanics/spellcasting.hpp"
 #include "apps/openmw/mwworld/class.hpp"
 #include "apps/openmw/mwworld/inventorystore.hpp"
 #include "apps/openmw/mwworld/worldmodel.hpp"
@@ -283,6 +284,43 @@ namespace MWLua
             context.mLuaManager->addAction(
                 [obj = Object(ptr), ei = std::move(ei)] { setSelectedEnchantedItem(obj.ptr(), ei); },
                 "setSelectedEnchantedItemAction");
+        };
+
+        // OpenMGE XE: cast the selected spell straight away, whatever the stance (for quick-cast mods, which play
+        // their own animation): the same magicka cost, power check, casting effects and cast as a normal cast.
+        // Spells only; returns at once, the cast happens with the other queued changes.
+        actor["quickCast"] = [context](const SelfObject& self) {
+            if (!self.ptr().getClass().isActor())
+                throw std::runtime_error("Actor expected");
+            context.mLuaManager->addAction(
+                [obj = Object(self.ptr())] {
+                    const MWWorld::Ptr& ptr = obj.ptr();
+                    if (ptr.isEmpty() || !ptr.getClass().isActor())
+                        return;
+                    MWMechanics::CreatureStats& stats = ptr.getClass().getCreatureStats(ptr);
+                    if (stats.isDead() || stats.getKnockedDown() || stats.isParalyzed())
+                        return;
+                    MWBase::World* world = MWBase::Environment::get().getWorld();
+                    // the player picks spells in the UI; the stats take it over when a cast starts
+                    if (ptr == world->getPlayerPtr())
+                        stats.getSpells().setSelectedSpell(
+                            MWBase::Environment::get().getWindowManager()->getSelectedSpell());
+                    const ESM::RefId spellId = stats.getSpells().getSelectedSpell();
+                    if (spellId.empty())
+                        return;
+                    const ESM::Spell* spell = world->getStore().get<ESM::Spell>().search(spellId);
+                    if (!spell)
+                        return;
+                    const MWWorld::SpellCastState result = world->startSpellCast(ptr);
+                    if (result == MWWorld::SpellCastState::PowerAlreadyUsed)
+                        return;
+                    world->breakInvisibility(ptr);
+                    MWMechanics::CastSpell cast(ptr, {}, false, false);
+                    cast.playSpellCastingEffects(spell);
+                    if (result == MWWorld::SpellCastState::Success)
+                        world->castSpell(ptr);
+                },
+                "quickCastAction");
         };
 
         actor["canMove"] = [](const Object& o) {

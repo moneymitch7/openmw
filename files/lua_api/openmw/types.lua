@@ -157,6 +157,14 @@
 -- @param #number stance
 
 ---
+-- OpenMGE XE: casts the actor's selected spell straight away, whatever its stance, as a normal cast would: the same
+-- magicka cost, power check, casting effects, target and projectile. For quick-cast mods, which play their own
+-- animation. Spells only (not enchanted items). The cast happens with the other queued changes, after this returns.
+-- Can be used only in local scripts on self.
+-- @function [parent=#Actor] quickCast
+-- @param openmw.core#GameObject actor
+
+---
 -- Sets whether the actor is knocked down.
 -- Available in global and local scripts. Can only be used on self in local scripts.
 -- @function [parent=#Actor] setKnockedDown
