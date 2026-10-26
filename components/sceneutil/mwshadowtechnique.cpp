@@ -1340,6 +1340,10 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 
     unsigned int numShadowMapsPerLight = settings->getNumShadowMapsPerLight();
 
+    // OpenMGE XE [Shadows] cascade update interval
+    const unsigned int cascadeFrame = vdd->_cascadeFrame++;
+    const double cascadeTime = cv.getFrameStamp() ? cv.getFrameStamp()->getReferenceTime() : 0.0;
+
     LightDataList& pll = vdd->getLightDataList();
     for(LightDataList::iterator itr = pll.begin();
         itr != pll.end();
@@ -1510,6 +1514,37 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             }
 
             osg::ref_ptr<osg::Camera> camera = sd->_camera;
+
+            // OpenMGE XE [Shadows] cascade update interval: a farther cascade's map drawn only every few updates. In
+            // between it is kept as it was: with stable shadows it doesn't turn or change size with the camera, so it
+            // still lines up (only where it is is worked out again). Drawn anyway when the sun's direction changed,
+            // the camera moved a twentieth of the cascade's size, or it is a quarter of a second old.
+            if (_stableShadows && _cascadeUpdateInterval > 1 && sm_i > 0 && sd->_rendered && !debug
+                && sd->_sm_i == sm_i && camera->getProjectionMatrix()(0, 0) > 0.0)
+            {
+                unsigned int period = 1;
+                for (unsigned int i = 0; i < sm_i && period < 16; ++i)
+                    period *= _cascadeUpdateInterval;
+                const double radius = 1.0 / camera->getProjectionMatrix()(0, 0);
+                const bool due = (cascadeFrame + sm_i) % period == 0;
+                const bool moved = (frustum.eye - sd->_renderEye).length() > 0.05 * radius;
+                const bool sunMoved = (pl.lightDir - sd->_renderLightDir).length2() > 1e-12;
+                const bool old = cascadeTime - sd->_renderTime > 0.25;
+                if (!due && !moved && !sunMoved && !old)
+                {
+                    assignShadowStateSettings(cv, camera, sm_i, vddUniforms);
+                    pl.textureUnits.push_back(textureUnit);
+                    sd->_textureUnit = textureUnit;
+                    sdl.push_back(sd);
+                    ++textureUnit;
+                    ++numValidShadows;
+                    continue;
+                }
+            }
+            sd->_rendered = true;
+            sd->_renderTime = cascadeTime;
+            sd->_renderEye = frustum.eye;
+            sd->_renderLightDir = pl.lightDir;
 
             camera->setProjectionMatrix(projectionMatrix);
             camera->setViewMatrix(viewMatrix);

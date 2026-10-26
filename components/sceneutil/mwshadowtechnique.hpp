@@ -215,6 +215,12 @@ namespace SceneUtil {
             unsigned int                        _sm_i;
             osg::ref_ptr<osg::Texture2D>        _texture;
             osg::ref_ptr<osg::Camera>           _camera;
+
+            // OpenMGE XE cascade update interval: when, from where and with which sun the map was last drawn
+            bool                                _rendered = false;
+            double                              _renderTime = 0.0;
+            osg::Vec3d                          _renderEye;
+            osg::Vec3d                          _renderLightDir;
         };
 
         typedef std::list< osg::ref_ptr<ShadowData> > ShadowDataList;
@@ -254,6 +260,7 @@ namespace SceneUtil {
             unsigned int _numValidShadows;
             unsigned int _framesSinceLastShadowCull = 0;
             double _lastShadowCullReferenceTime = 0.0;
+            unsigned int _cascadeFrame = 0; // OpenMGE XE cascade update interval: shadow culls done
         };
 
         virtual ViewDependentData* createViewDependentData(osgUtil::CullVisitor* cv);
@@ -299,6 +306,9 @@ namespace SceneUtil {
         void setStableShadows(bool stable) { _stableShadows = stable; }
         /// OpenMGE XE: the sun's direction for shadows in steps of this many radians (0 = smooth).
         void setSunDirectionStep(double radians) { _sunDirectionStep = radians; }
+        /// OpenMGE XE: with stable shadows, cascade i (from 0, the nearest) is drawn every interval^i shadow updates,
+        /// in between kept as it was (still lined up, the stable maps not turning with the camera). 1 = all every time.
+        void setCascadeUpdateInterval(unsigned int interval) { _cascadeUpdateInterval = interval; }
 
         osg::ref_ptr<osg::StateSet> getOrCreateShadowsBinStateSet();
 
@@ -346,6 +356,7 @@ namespace SceneUtil {
 
         bool                                    _stableShadows = false;
         double                                  _sunDirectionStep = 0.0;
+        unsigned int                            _cascadeUpdateInterval = 1;
 
         class DebugHUD final : public osg::Referenced
         {
