@@ -1557,7 +1557,9 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                 const double radius = 1.0 / camera->getProjectionMatrix()(0, 0);
                 const bool due = (cascadeFrame + sm_i) % period == 0;
                 const bool moved = (frustum.eye - sd->_renderEye).length() > 0.05 * radius;
-                const bool sunMoved = (pl.lightDir - sd->_renderLightDir).length2() > 1e-12;
+                // the step changed, or the sun itself moved more than a hundredth of a degree (glide)
+                const bool sunMoved = (pl.lightDir - sd->_renderLightDir).length2() > 1e-12
+                    || (_sunDirectionGlide && (pl.trueLightDir - sd->_renderTrueLightDir).length2() > 3e-8);
                 const bool old = cascadeTime - sd->_renderTime > 0.25;
                 // this cascade's slice of the view, as the splits below place it, against the map drawn before
                 bool uncovered = false;
@@ -1599,6 +1601,7 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             sd->_renderTime = cascadeTime;
             sd->_renderEye = frustum.eye;
             sd->_renderLightDir = pl.lightDir;
+            sd->_renderTrueLightDir = pl.trueLightDir;
 
             camera->setProjectionMatrix(projectionMatrix);
             camera->setViewMatrix(viewMatrix);
@@ -1848,6 +1851,7 @@ bool MWShadowTechnique::selectActiveLights(osgUtil::CullVisitor* cv, ViewDepende
     if (lightManagerFinder.mLightManager && lightManagerFinder.mLightManager->getSunlight()) {
         LightData* ld = new LightData(vdd);
         ld->setLightData(lightManagerFinder.mLocalToWorld, lightManagerFinder.mLightManager->getSunlight(), modelViewMatrix);
+        ld->trueLightDir = ld->lightDir;
         // OpenMGE XE [Shadows] shadow sun direction step: the shadows follow the sun in steps
         if (_sunDirectionStep > 0.0 && ld->directionalLight)
         {
@@ -2217,6 +2221,22 @@ bool MWShadowTechnique::computeShadowCameraSettings(Frustum& frustum, LightData&
         {
             projectionMatrix.makeOrtho(xMin,xMax, yMin, yMax,0.0,zMax-zMin);
             viewMatrix.makeLookAt(frustum.center+positionedLight.lightDir*zMin, frustum.center+positionedLight.lightDir*zMax, lightUp);
+
+            // OpenMGE XE [Shadows] shadow sun direction glide: the shadow map keeps the stepped direction's axes (its
+            // pixel grid stays put), but is slanted so that everything is cast along the sun's own direction: the
+            // shadows glide with the sun instead of jumping a step at a time.
+            if (_sunDirectionGlide && positionedLight.trueLightDir != positionedLight.lightDir)
+            {
+                const osg::Vec3d dir = osg::Matrixd::transform3x3(positionedLight.trueLightDir, viewMatrix);
+                if (dir.z() < -0.5)
+                {
+                    // x' = x + a z and y' = y + b z, the same for every point along the sun's direction
+                    osg::Matrixd shear;
+                    shear(2, 0) = -dir.x() / dir.z();
+                    shear(2, 1) = -dir.y() / dir.z();
+                    viewMatrix.postMult(shear);
+                }
+            }
         }
     }
     else

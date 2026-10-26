@@ -62,6 +62,7 @@ namespace Settings
         SettingValue<bool> mStableShadows{ mIndex, "Shadows", "stable shadows" };
         SettingValue<float> mShadowSunDirectionStep{ mIndex, "Shadows", "shadow sun direction step",
             makeClampSanitizerFloat(0.0f, 5.0f) };
+        SettingValue<bool> mShadowSunDirectionGlide{ mIndex, "Shadows", "shadow sun direction glide" };
         SettingValue<int> mCascadeUpdateInterval{ mIndex, "Shadows", "cascade update interval",
             makeClampSanitizerInt(1, 4) };
     };

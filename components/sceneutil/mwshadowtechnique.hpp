@@ -193,6 +193,8 @@ namespace SceneUtil {
             osg::Vec4d                          lightPos;
             osg::Vec3d                          lightPos3;
             osg::Vec3d                          lightDir;
+            // OpenMGE XE: the sun's own direction, where lightDir is held to a step (shadow sun direction step)
+            osg::Vec3d                          trueLightDir;
             bool                                directionalLight;
 
             typedef std::vector<unsigned int> ActiveTextureUnits;
@@ -221,6 +223,7 @@ namespace SceneUtil {
             double                              _renderTime = 0.0;
             osg::Vec3d                          _renderEye;
             osg::Vec3d                          _renderLightDir;
+            osg::Vec3d                          _renderTrueLightDir;
         };
 
         typedef std::list< osg::ref_ptr<ShadowData> > ShadowDataList;
@@ -306,6 +309,7 @@ namespace SceneUtil {
         void setStableShadows(bool stable) { _stableShadows = stable; }
         /// OpenMGE XE: the sun's direction for shadows in steps of this many radians (0 = smooth).
         void setSunDirectionStep(double radians) { _sunDirectionStep = radians; }
+        void setSunDirectionGlide(bool glide) { _sunDirectionGlide = glide; }
         /// OpenMGE XE: with stable shadows, cascade i (from 0, the nearest) is drawn every interval^i shadow updates,
         /// in between kept as it was (still lined up, the stable maps not turning with the camera). 1 = all every time.
         void setCascadeUpdateInterval(unsigned int interval) { _cascadeUpdateInterval = interval; }
@@ -356,6 +360,7 @@ namespace SceneUtil {
 
         bool                                    _stableShadows = false;
         double                                  _sunDirectionStep = 0.0;
+        bool                                    _sunDirectionGlide = false;
         unsigned int                            _cascadeUpdateInterval = 1;
 
         class DebugHUD final : public osg::Referenced

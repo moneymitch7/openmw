@@ -226,6 +226,16 @@ Shadows Settings
    steps instead of creeping a pixel at a time as the sun moves. 0 follows the sun smoothly.
 
 .. omw-setting::
+   :title: shadow sun direction glide
+   :type: boolean
+   :range: true, false
+   :default: true
+
+   With a :ref:`shadow sun direction step`: the shadows glide with the sun between steps instead of jumping a step at
+   a time. The shadow map's pixel grid keeps to the stepped direction (so edges don't crawl as the camera moves); only
+   where the shadows fall follows the sun's own direction.
+
+.. omw-setting::
    :title: cascade update interval
    :type: int
    :range: 1 to 4

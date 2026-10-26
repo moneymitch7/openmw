@@ -91,6 +91,7 @@ namespace SceneUtil
                 : osgShadow::ShadowSettings::PERSPECTIVE_SHADOW_MAP);
         mShadowTechnique->setStableShadows(settings.mStableShadows);
         mShadowTechnique->setSunDirectionStep(osg::DegreesToRadians(settings.mShadowSunDirectionStep.get()));
+        mShadowTechnique->setSunDirectionGlide(settings.mShadowSunDirectionGlide);
         mShadowTechnique->setCascadeUpdateInterval(static_cast<unsigned int>(settings.mCascadeUpdateInterval.get()));
 
         if (mEnableShadows && settings.mEnableDebugHud)
