@@ -234,6 +234,8 @@ namespace MWMechanics
             weaponSkill = weapon.getClass().getEquipmentSkill(weapon);
 
         float damage = 0.f;
+        // OpenMGE XE [Game] always hit: the hit chance this shot would have had, below 100 when it lands anyway
+        float sureHitChance = 100.f;
         if (validVictim)
         {
             if (attacker == getPlayer())
@@ -241,7 +243,10 @@ namespace MWMechanics
 
             int skillValue = static_cast<int>(attacker.getClass().getSkill(attacker, weaponSkill));
 
-            if (Misc::Rng::roll0to99(world->getPrng()) >= getHitChance(attacker, victim, skillValue))
+            const float hitChance = getHitChance(attacker, victim, skillValue);
+            if (attacksAlwaysHit(attacker))
+                sureHitChance = std::min(hitChance, 100.f);
+            else if (Misc::Rng::roll0to99(world->getPrng()) >= hitChance)
             {
                 MWBase::Environment::get().getLuaManager()->onHit(attacker, victim, weapon, projectile, 0,
                     attackStrength, attackWindUp, damage, false, hitPosition, false,
@@ -289,8 +294,10 @@ namespace MWMechanics
             }
         }
 
-        // Apply "On hit" effect of the projectile
-        bool appliedEnchantment = applyOnStrikeEnchantment(attacker, victim, projectile, hitPosition, true);
+        // Apply "On hit" effect of the projectile (an always-hit shot only when its roll succeeds)
+        const bool sureHitEffects = !validVictim || rollAlwaysHitEffects(sureHitChance);
+        bool appliedEnchantment
+            = sureHitEffects && applyOnStrikeEnchantment(attacker, victim, projectile, hitPosition, true);
 
         if (validVictim)
         {
@@ -309,8 +316,28 @@ namespace MWMechanics
             }
 
             MWBase::Environment::get().getLuaManager()->onHit(attacker, victim, weapon, projectile, 0, attackStrength,
-                attackWindUp, damage, true, hitPosition, true, MWMechanics::DamageSourceType::Ranged);
+                attackWindUp, damage, true, hitPosition, true, MWMechanics::DamageSourceType::Ranged,
+                sureHitChance < 100.f ? alwaysHitDamageScale(sureHitChance) : 1.f, !sureHitEffects);
         }
+    }
+
+    bool attacksAlwaysHit(const MWWorld::Ptr& attacker)
+    {
+        if (attacker.isEmpty() || !attacker.getClass().isActor())
+            return false;
+        return attacker == getPlayer() ? Settings::game().mAlwaysHit.get() : Settings::game().mAlwaysHitNpcs.get();
+    }
+
+    float alwaysHitDamageScale(float hitChance)
+    {
+        return std::clamp(std::max(hitChance, Settings::game().mSureChanceMinimum.get()) / 100.f, 0.f, 1.f);
+    }
+
+    bool rollAlwaysHitEffects(float hitChance)
+    {
+        if (!Settings::game().mAlwaysHitEffectsByChance || hitChance >= 100.f)
+            return true;
+        return Misc::Rng::roll0to99(MWBase::Environment::get().getWorld()->getPrng()) < hitChance;
     }
 
     float getHitChance(const MWWorld::Ptr& attacker, const MWWorld::Ptr& victim, int skillValue)

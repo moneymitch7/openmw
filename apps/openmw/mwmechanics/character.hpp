@@ -178,6 +178,8 @@ namespace MWMechanics
         MWWorld::Ptr mAttackVictim;
         osg::Vec3f mAttackHitPos;
         bool mAttackSuccess{ false };
+        // OpenMGE XE [Game] always hit: the chance the landed attack would have had (100: an ordinary hit)
+        float mAttackHitChance{ 100.f };
 
         bool mSkipAnim{ false };
 

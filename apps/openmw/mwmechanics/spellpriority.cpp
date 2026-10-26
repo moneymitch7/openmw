@@ -104,7 +104,7 @@ namespace
         {
             if (spell->mData.mType != ESM::Spell::ST_Spell)
                 continue;
-            int cost = MWMechanics::calcSpellCost(*spell);
+            int cost = MWMechanics::calcEffectiveSpellCost(*spell, actor);
             if (cost > current.getCurrent() && cost < current.getModified())
                 return 2.f;
         }

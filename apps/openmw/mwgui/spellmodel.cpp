@@ -94,7 +94,8 @@ namespace MWGui
             if (spell->mData.mType == ESM::Spell::ST_Spell)
             {
                 newSpell.mType = Spell::Type_Spell;
-                std::string cost = std::to_string(MWMechanics::calcSpellCost(*spell));
+                // OpenMGE XE: what the cast costs (more with [Game] never fail spells), and its true chance
+                std::string cost = std::to_string(MWMechanics::calcEffectiveSpellCost(*spell, mActor));
                 std::string chance = std::to_string(int(MWMechanics::getSpellSuccessChance(spell, mActor)));
                 newSpell.mCostColumn = cost + "/" + chance;
             }

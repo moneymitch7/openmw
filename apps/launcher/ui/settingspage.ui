@@ -103,6 +103,46 @@
            </property>
           </widget>
          </item>
+         <item row="13" column="1">
+          <widget class="QCheckBox" name="alwaysHitCheckBox">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Your melee, hand-to-hand and ranged attacks always land. Each deals the share of its damage (after armor) that the hit chance it would have had gives: a 60% swing deals 60% of the damage.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>Your Attacks Always Hit</string>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="0">
+          <widget class="QCheckBox" name="alwaysHitNpcsCheckBox">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The attacks of NPCs and creatures always land, on anyone including you, with their damage scaled by the hit chance they would have had.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>NPC Attacks Always Hit</string>
+           </property>
+          </widget>
+         </item>
+         <item row="14" column="1">
+          <widget class="QCheckBox" name="neverFailSpellsCheckBox">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Your spells never fail. Each costs its magicka times 100 / the chance it would have had: a 50% spell costs twice as much. Silence and too little magicka still stop a cast.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>Your Spells Never Fail</string>
+           </property>
+          </widget>
+         </item>
+         <item row="15" column="0">
+          <widget class="QCheckBox" name="neverFailSpellsNpcsCheckBox">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The spells of NPCs and creatures never fail, costing more the lower their chance would have been.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>NPC Spells Never Fail</string>
+           </property>
+          </widget>
+         </item>
          <item row="9" column="0">
           <widget class="QCheckBox" name="followersAttackOnSightCheckBox">
            <property name="toolTip">

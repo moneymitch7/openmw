@@ -278,6 +278,65 @@ Game Settings
    This makes the movement speed behavior more fair between different races.
 
 .. omw-setting::
+   :title: always hit
+   :type: boolean
+   :range: true, false
+   :default: false
+   :location: :bdg-success:`Launcher > Settings > Gameplay`
+
+   OpenMGE XE. The player's melee, hand-to-hand and ranged attacks always land. Each deals the share of its damage
+   (after armor, before difficulty) that the hit chance it would have had gives: a swing with a 60% chance deals 60%
+   of the damage it would have dealt.
+
+.. omw-setting::
+   :title: always hit npcs
+   :type: boolean
+   :range: true, false
+   :default: false
+   :location: :bdg-success:`Launcher > Settings > Gameplay`
+
+   OpenMGE XE. The same as :ref:`always hit` for the attacks of NPCs and creatures, on anyone, the player included.
+
+.. omw-setting::
+   :title: never fail spells
+   :type: boolean
+   :range: true, false
+   :default: false
+   :location: :bdg-success:`Launcher > Settings > Gameplay`
+
+   OpenMGE XE. The player's spells never fail. Each costs its magicka times 100 divided by the chance the cast would
+   have had: a spell with a 50% chance costs twice as much. Silence and too little magicka still stop a cast. The magic
+   window shows the cost and the chance the cast would have had.
+
+.. omw-setting::
+   :title: never fail spells npcs
+   :type: boolean
+   :range: true, false
+   :default: false
+   :location: :bdg-success:`Launcher > Settings > Gameplay`
+
+   OpenMGE XE. The same as :ref:`never fail spells` for the spells of NPCs and creatures.
+
+.. omw-setting::
+   :title: sure chance minimum
+   :type: float32
+   :range: 1 to 100
+   :default: 5
+
+   OpenMGE XE. The lowest chance (percent) :ref:`always hit` damage and :ref:`never fail spells` costs are worked out
+   with: an attack deals at least this share of its damage, and a spell costs at most 100 divided by this times its
+   magicka.
+
+.. omw-setting::
+   :title: always hit effects by chance
+   :type: boolean
+   :range: true, false
+   :default: true
+
+   OpenMGE XE. With :ref:`always hit`, an attack that would have missed still lands and deals its share of damage, but
+   staggers the target and casts its weapon's on-strike enchantment only when a roll against its hit chance succeeds.
+
+.. omw-setting::
    :title: projectiles enchant multiplier
    :type: float32
    :range: [0, 1]

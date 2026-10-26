@@ -50,6 +50,13 @@ namespace Settings
             "only appropriate ammunition bypasses resistance" };
         SettingValue<bool> mUseMagicItemAnimations{ mIndex, "Game", "use magic item animations" };
         SettingValue<bool> mNormaliseRaceSpeed{ mIndex, "Game", "normalise race speed" };
+        SettingValue<bool> mAlwaysHit{ mIndex, "Game", "always hit" };
+        SettingValue<bool> mAlwaysHitNpcs{ mIndex, "Game", "always hit npcs" };
+        SettingValue<bool> mNeverFailSpells{ mIndex, "Game", "never fail spells" };
+        SettingValue<bool> mNeverFailSpellsNpcs{ mIndex, "Game", "never fail spells npcs" };
+        SettingValue<float> mSureChanceMinimum{ mIndex, "Game", "sure chance minimum",
+            makeClampSanitizerFloat(1, 100) };
+        SettingValue<bool> mAlwaysHitEffectsByChance{ mIndex, "Game", "always hit effects by chance" };
         SettingValue<float> mProjectilesEnchantMultiplier{ mIndex, "Game", "projectiles enchant multiplier",
             makeClampSanitizerFloat(0, 1) };
         SettingValue<bool> mUncappedDamageFatigue{ mIndex, "Game", "uncapped damage fatigue" };

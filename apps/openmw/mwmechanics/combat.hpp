@@ -39,6 +39,18 @@ namespace MWMechanics
     /// Get the chance (in percent) for \a attacker to successfully hit \a victim with a given weapon skill value
     float getHitChance(const MWWorld::Ptr& attacker, const MWWorld::Ptr& victim, int skillValue);
 
+    /// OpenMGE XE [Game] always hit (npcs): whether \a attacker's attacks always land, their damage then scaled by
+    /// the hit chance they would have had
+    bool attacksAlwaysHit(const MWWorld::Ptr& attacker);
+
+    /// OpenMGE XE: the share (0 to 1) of an always-hit attack's damage that lands, from the hit chance it would have
+    /// had (percent), held to [Game] sure chance minimum
+    float alwaysHitDamageScale(float hitChance);
+
+    /// OpenMGE XE [Game] always hit effects by chance: whether an always-hit attack staggers and casts its weapon's
+    /// on-strike enchantment, by one roll against the hit chance it would have had (percent)
+    bool rollAlwaysHitEffects(float hitChance);
+
     /// Applies damage to attacker based on the victim's elemental shields.
     void applyElementalShields(const MWWorld::Ptr& attacker, const MWWorld::Ptr& victim);
 

@@ -837,7 +837,8 @@ namespace MWLua
 
     void LuaManager::onHit(const MWWorld::Ptr& attacker, const MWWorld::Ptr& victim, const MWWorld::Ptr& weapon,
         const MWWorld::Ptr& ammo, int attackType, float attackStrength, float attackWindUp, float damage, bool isHealth,
-        const osg::Vec3f& hitPos, bool successful, MWMechanics::DamageSourceType sourceType)
+        const osg::Vec3f& hitPos, bool successful, MWMechanics::DamageSourceType sourceType, float hitChanceScale,
+        bool ignoreStagger)
     {
         mLua.protectedCall([&](LuaUtil::LuaView& view) {
             sol::table damageTable = view.newTable();
@@ -859,6 +860,12 @@ namespace MWLua
             data["damage"] = damageTable;
             data["hitPos"] = hitPos;
             data["successful"] = successful;
+            // OpenMGE XE [Game] always hit: the share of the damage that lands after armor (the hit chance the attack
+            // would have had), and an attack whose roll for stagger failed
+            if (hitChanceScale < 1.f)
+                data["hitChanceScale"] = hitChanceScale;
+            if (ignoreStagger)
+                data["ignoreStagger"] = true;
             switch (sourceType)
             {
                 case MWMechanics::DamageSourceType::Unspecified:

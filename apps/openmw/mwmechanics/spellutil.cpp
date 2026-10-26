@@ -1,11 +1,14 @@
 #include "spellutil.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 
 #include <components/esm3/loadalch.hpp>
 #include <components/esm3/loadench.hpp>
 #include <components/esm3/loadingr.hpp>
 #include <components/esm3/loadmgef.hpp>
+#include <components/settings/values.hpp>
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/world.hpp"
@@ -91,6 +94,31 @@ namespace MWMechanics
         float cost = getTotalCost(spell.mEffects);
 
         return static_cast<int>(std::round(cost));
+    }
+
+    bool spellsNeverFail(const MWWorld::Ptr& caster)
+    {
+        if (caster.isEmpty() || !caster.getClass().isActor())
+            return false;
+        return caster == getPlayer() ? Settings::game().mNeverFailSpells.get()
+                                     : Settings::game().mNeverFailSpellsNpcs.get();
+    }
+
+    int calcEffectiveSpellCost(const ESM::Spell& spell, const MWWorld::Ptr& caster)
+    {
+        const int cost = calcSpellCost(spell);
+        if (cost <= 0 || spell.mData.mType != ESM::Spell::ST_Spell || (spell.mData.mFlags & ESM::Spell::F_Always)
+            || !spellsNeverFail(caster))
+            return cost;
+        const CreatureStats& stats = caster.getClass().getCreatureStats(caster);
+        // silenced: the cast fails anyway, as before
+        if (stats.getMagicEffects().getOrDefault(ESM::MagicEffect::Silence).getMagnitude() > 0.f)
+            return cost;
+        const float chance = getSpellSuccessChance(&spell, caster, nullptr, true, false);
+        if (chance >= 100.f)
+            return cost;
+        const float minimum = Settings::game().mSureChanceMinimum.get();
+        return static_cast<int>(std::round(cost * 100.f / std::max(chance, minimum)));
     }
 
     int getEffectiveEnchantmentCastCost(float castCost, const MWWorld::Ptr& actor)
@@ -291,7 +319,8 @@ namespace MWMechanics
         if (spell->mData.mType != ESM::Spell::ST_Spell)
             return 100.f;
 
-        if (checkMagicka && calcSpellCost(*spell) > 0 && stats.getMagicka().getCurrent() < calcSpellCost(*spell))
+        if (checkMagicka && calcSpellCost(*spell) > 0
+            && stats.getMagicka().getCurrent() < calcEffectiveSpellCost(*spell, actor))
             return 0.f;
 
         if (spell->mData.mFlags & ESM::Spell::F_Always)
