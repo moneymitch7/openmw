@@ -77,3 +77,24 @@ Lua Settings
    state; this setting only controls whether collection happens at all
    (0 disables it). Without a separate thread, it is the amount of garbage
    collection performed each frame.
+
+.. omw-setting::
+   :title: jit max traces
+   :type: int
+   :range: 100 to 65000
+   :default: 1000
+
+   LuaJIT's limit on how many pieces of compiled script code ("traces") may exist at once. When it is reached,
+   LuaJIT throws away all compiled code and starts over, and every script runs slower until its hot code is
+   compiled again. The default is LuaJIT's own, sized for one program rather than a load order with a hundred or
+   more scripts. With :ref:`lua profiler` on, ``lua-profile.txt`` counts these resets; if there are any, raise this
+   and :ref:`jit max machine code` (8000 and 16384 leave plenty of room). Needs a restart.
+
+.. omw-setting::
+   :title: jit max machine code
+   :type: int
+   :range: 128 to 65536
+   :default: 512
+
+   LuaJIT's limit, in KB, on the memory the machine code of compiled script code may use. Reaching it resets the
+   compiled code as :ref:`jit max traces` does. Only the code actually compiled takes memory. Needs a restart.

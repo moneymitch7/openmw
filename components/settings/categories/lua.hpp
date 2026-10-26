@@ -31,6 +31,9 @@ namespace Settings
             makeClampSanitizerInt(1, 8) };
         SettingValue<float> mDistantUpdateDistance{ mIndex, "Lua", "distant update distance",
             makeMaxSanitizerFloat(0) };
+        SettingValue<int> mJitMaxTraces{ mIndex, "Lua", "jit max traces", makeClampSanitizerInt(100, 65000) };
+        SettingValue<int> mJitMaxMachineCode{ mIndex, "Lua", "jit max machine code",
+            makeClampSanitizerInt(128, 65536) };
     };
 }
 

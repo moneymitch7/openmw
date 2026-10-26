@@ -121,6 +121,7 @@ namespace MWLua
     {
         Log(Debug::Info) << "Lua version: " << LuaUtil::getLuaVersion();
         mLua.addInternalLibSearchPath(libsDir);
+        setUpJit();
 
         mGlobalSerializer = createUserdataSerializer(false);
         mLocalSerializer = createUserdataSerializer(true);
@@ -1162,6 +1163,73 @@ namespace MWLua
         mPhaseAvgMs[phase] += (ms - mPhaseAvgMs[phase]) * profileAvgCoef;
     }
 
+    void LuaManager::setUpJit()
+    {
+        mLua.protectedCall([&](LuaUtil::LuaView& view) {
+            sol::state_view& lua = view.sol();
+            const sol::object jitObject = lua["jit"];
+            if (jitObject.get_type() != sol::type::table)
+                return; // plain Lua
+            const sol::table jit = jitObject.as<sol::table>();
+            mJitAvailable = true;
+
+            const int maxTraces = Settings::lua().mJitMaxTraces;
+            const int maxMachineCode = Settings::lua().mJitMaxMachineCode;
+            const sol::object opt = jit["opt"];
+            if ((maxTraces != 1000 || maxMachineCode != 512) && opt.get_type() == sol::type::table)
+            {
+                const sol::protected_function start = opt.as<sol::table>()["start"];
+                const sol::protected_function_result result
+                    = start("maxtrace=" + std::to_string(maxTraces), "maxmcode=" + std::to_string(maxMachineCode));
+                if (result.valid())
+                    Log(Debug::Info) << "LuaJIT: up to " << maxTraces << " traces and " << maxMachineCode
+                                     << " KB of machine code";
+                else
+                    Log(Debug::Warning) << "LuaJIT: could not set the compiled code limits: "
+                                        << result.get<sol::error>().what();
+            }
+
+            // LuaJIT reports the traces it compiles, aborts and throws away ("flush": all of them at once, when a
+            // limit is reached) to a handler attached for "trace" events.
+            const sol::object attachObject = jit["attach"];
+            if (attachObject.get_type() != sol::type::function)
+                return;
+            std::shared_ptr<JitStats> stats = mJitStats;
+            const sol::protected_function attach = attachObject;
+            const sol::protected_function_result result
+                = attach(sol::as_function([stats](const std::string& what, sol::variadic_args) {
+                      if (what == "stop")
+                      {
+                          ++stats->mCompiled;
+                          ++stats->mCompiledTotal;
+                      }
+                      else if (what == "abort")
+                          ++stats->mAborted;
+                      else if (what == "flush")
+                      {
+                          const unsigned flushes = ++stats->mFlushes;
+                          const unsigned compiled = stats->mCompiled.exchange(0);
+                          const std::int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now().time_since_epoch())
+                                                       .count();
+                          stats->mLastFlushMs = now;
+                          // at most one line every 30 s
+                          if (now - stats->mLastFlushLogMs.load() >= 30000)
+                          {
+                              stats->mLastFlushLogMs = now;
+                              Log(Debug::Info)
+                                  << "LuaJIT threw away its compiled code (reset " << flushes << ", " << compiled
+                                  << " traces); if this repeats, raise [Lua] jit max traces and jit max "
+                                     "machine code";
+                          }
+                      }
+                  }),
+                    "trace");
+            if (!result.valid())
+                Log(Debug::Warning) << "LuaJIT: could not count trace events: " << result.get<sol::error>().what();
+        });
+    }
+
     void LuaManager::writeProfileReport() const
     {
         using Stats = LuaUtil::ScriptsContainer::ScriptStats;
@@ -1213,7 +1281,23 @@ namespace MWLua
             out << "\nPlayer in " << mPlayer.getCell()->getCell()->getDescription();
         out << "\n"
             << containers << " objects with local scripts in the scene, Lua memory "
-            << (mLua.getTotalMemoryUsage() / (1024 * 1024)) << " MB\n\n";
+            << (mLua.getTotalMemoryUsage() / (1024 * 1024)) << " MB\n";
+        if (mJitAvailable)
+        {
+            const JitStats& jit = *mJitStats;
+            out << "LuaJIT compiled code: " << jit.mFlushes.load() << " resets this session";
+            if (jit.mFlushes.load() > 0)
+            {
+                const std::int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch())
+                                             .count();
+                out << " (the last " << (now - jit.mLastFlushMs.load()) / 1000 << " s ago)";
+            }
+            out << ", " << jit.mCompiled.load() << " traces since the last (limit "
+                << Settings::lua().mJitMaxTraces.get() << ", " << Settings::lua().mJitMaxMachineCode.get() << " KB), "
+                << jit.mCompiledTotal.load() << " compiled and " << jit.mAborted.load() << " given up in all\n";
+        }
+        out << "\n";
 
         const auto& p = mPhaseAvgMs;
         out << "Main thread, at the start of every frame (adds directly to the frame time):\n";

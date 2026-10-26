@@ -2,9 +2,11 @@
 #define MWLUA_LUAMANAGERIMP_H
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <set>
 
 #include <osg/Stats>
@@ -198,6 +200,9 @@ namespace MWLua
         /// next to openmw.log every few seconds, so the heaviest scripts in a busy area can be read off afterwards.
         void writeProfileReport() const;
 
+        /// LuaJIT's limits on compiled code ([Lua] jit max traces, jit max machine code), and counting its resets.
+        void setUpJit();
+
         LuaUtil::InputAction::Registry& inputActions() { return mInputActions; }
         LuaUtil::InputTrigger::Registry& inputTriggers() { return mInputTriggers; }
 
@@ -237,6 +242,19 @@ namespace MWLua
             Phase_Count
         };
         std::array<float, Phase_Count> mPhaseAvgMs{};
+
+        // OpenMGE XE: LuaJIT's trace events (counted from its own callback, on whichever thread runs Lua)
+        struct JitStats
+        {
+            std::atomic<unsigned> mFlushes{ 0 };
+            std::atomic<unsigned> mCompiled{ 0 }; // traces compiled since the last reset
+            std::atomic<unsigned> mCompiledTotal{ 0 };
+            std::atomic<unsigned> mAborted{ 0 };
+            std::atomic<std::int64_t> mLastFlushMs{ 0 }; // steady clock
+            std::atomic<std::int64_t> mLastFlushLogMs{ -100000 };
+        };
+        std::shared_ptr<JitStats> mJitStats = std::make_shared<JitStats>();
+        bool mJitAvailable = false;
         struct QueuedChangeStats
         {
             float mAvgCount = 0; // per frame
