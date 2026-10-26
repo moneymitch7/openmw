@@ -177,6 +177,10 @@ namespace LuaUtil
         {
             return id < mMemoryUsage.size() ? mMemoryUsage[id] : 0;
         }
+        /// OpenMGE XE: bytes allocated (every allocation, however small, and growth) while a script ran, since the
+        /// start: the garbage a script makes shows here even though it is freed again soon after.
+        uint64_t getAllocatedByScriptIndex(unsigned id) const { return id < mAllocated.size() ? mAllocated[id] : 0; }
+        uint64_t getTotalAllocated() const { return mTotalAllocated; }
 
         const LuaStateSettings& getSettings() const { return mSettings; }
 
@@ -223,6 +227,8 @@ namespace LuaUtil
         uint64_t mTotalMemoryUsage = 0;
         uint64_t mSmallAllocMemoryUsage = 0;
         std::vector<int64_t> mMemoryUsage;
+        std::vector<uint64_t> mAllocated;
+        uint64_t mTotalAllocated = 0;
 
         // Must be declared before mSol and all sol-related objects. Then on exit it will be destructed the last.
         LuaStatePtr mLuaState;

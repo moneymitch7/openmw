@@ -138,6 +138,23 @@ namespace LuaUtil
         self->mTotalMemoryUsage += smallAllocDelta + bigAllocDelta;
         self->mSmallAllocMemoryUsage += smallAllocDelta;
 
+        // OpenMGE XE: what each script allocates (the garbage it makes), small allocations included
+        if (nsize > osize)
+        {
+            const uint64_t grown = nsize - osize;
+            self->mTotalAllocated += grown;
+            if (!self->mActiveScriptIdStack.empty())
+            {
+                const int index = self->mActiveScriptIdStack.back().mIndex;
+                if (index >= 0)
+                {
+                    if (static_cast<std::size_t>(index) >= self->mAllocated.size())
+                        self->mAllocated.resize(index + 1);
+                    self->mAllocated[index] += grown;
+                }
+            }
+        }
+
         if (bigAllocDelta != 0)
         {
             auto it = osize > smallAllocSize ? self->mBigAllocOwners.find(ptr) : self->mBigAllocOwners.end();

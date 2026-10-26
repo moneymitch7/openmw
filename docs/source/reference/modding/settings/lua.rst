@@ -98,3 +98,14 @@ Lua Settings
 
    LuaJIT's limit, in KB, on the memory the machine code of compiled script code may use. Reaching it resets the
    compiled code as :ref:`jit max traces` does. Only the code actually compiled takes memory. Needs a restart.
+
+.. omw-setting::
+   :title: gc while drawing
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   With a separate Lua thread (:ref:`lua num threads` 1), collect Lua's garbage from the moment the scripts' work for
+   the frame is done, while the frame is still being drawn, rather than only in the short gap after it. The garbage
+   collector gets far more time each frame, so the last step of a collection cycle, which cannot be split up and
+   grows with Lua's memory, seldom falls just before a frame needs Lua, when that frame has to wait for it.

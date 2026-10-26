@@ -157,6 +157,11 @@ namespace MWLua
             }
 
             mUpdateRequest.reset();
+            // OpenMGE XE [Lua] gc while drawing: the scripts are done for this frame and the main thread doesn't use
+            // Lua until the frame is drawn (it ran alongside the drawing): collect from now on, not only once the
+            // frame is drawn. The next frame's start stops it as before (finishGc).
+            if (Settings::lua().mGcWhileDrawing && Settings::lua().mGcStepsPerFrame > 0)
+                mGcRequest = true;
             lk.unlock();
             mCV.notify_one();
         }

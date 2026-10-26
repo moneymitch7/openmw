@@ -1387,6 +1387,47 @@ namespace MWLua
                 << mConfiguration[memory[n].second].mScriptPath.value() << "\n";
         out << std::setw(10) << static_cast<double>(attributed) / (1024 * 1024) << " MB  counted per script, "
             << static_cast<double>(mLua.getSmallAllocMemoryUsage()) / (1024 * 1024) << " MB in smaller allocations\n";
+
+        // OpenMGE XE: who makes the garbage. Every allocation a script makes (freed again soon or not) since the last
+        // report; the garbage collector has to clean up about this much, and the more there is the more often its
+        // cycles (and their last, unsplittable step) come round.
+        const auto now = std::chrono::steady_clock::now();
+        const double seconds = mLastAllocationReport.time_since_epoch().count() == 0
+            ? 0.0
+            : std::chrono::duration<double>(now - mLastAllocationReport).count();
+        const uint64_t totalAllocated = mLua.getTotalAllocated();
+        std::vector<std::pair<double, std::size_t>> rates;
+        if (seconds > 0.5)
+        {
+            for (std::size_t i = 0; i < mConfiguration.size(); ++i)
+            {
+                const uint64_t now_ = mLua.getAllocatedByScriptIndex(static_cast<unsigned>(i));
+                const uint64_t before = i < mAllocatedAtLastReport.size() ? mAllocatedAtLastReport[i] : 0;
+                const double rate = static_cast<double>(now_ - std::min(now_, before)) / seconds / (1024 * 1024);
+                if (rate >= 0.01)
+                    rates.emplace_back(rate, i);
+            }
+            std::sort(rates.begin(), rates.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+            const double totalRate
+                = static_cast<double>(totalAllocated - std::min(totalAllocated, mTotalAllocatedAtLastReport)) / seconds
+                / (1024 * 1024);
+            double scriptsRate = 0.0;
+            for (const auto& [rate, i] : rates)
+                scriptsRate += rate;
+            out << "\nLua allocations by script, largest first (MB per second over the last " << std::setprecision(1)
+                << seconds << " s, small ones included: the garbage the collector has to clean up):\n"
+                << std::setprecision(2);
+            for (std::size_t n = 0; n < rates.size() && n < 30; ++n)
+                out << std::setw(10) << rates[n].first << " MB/s  "
+                    << mConfiguration[rates[n].second].mScriptPath.value() << "\n";
+            out << std::setw(10) << totalRate << " MB/s  in all, " << std::max(0.0, totalRate - scriptsRate)
+                << " MB/s of it outside scripts (the engine, loading)\n";
+        }
+        mAllocatedAtLastReport.resize(mConfiguration.size());
+        for (std::size_t i = 0; i < mConfiguration.size(); ++i)
+            mAllocatedAtLastReport[i] = mLua.getAllocatedByScriptIndex(static_cast<unsigned>(i));
+        mTotalAllocatedAtLastReport = totalAllocated;
+        mLastAllocationReport = now;
     }
 
     std::string LuaManager::formatResourceUsageStats() const

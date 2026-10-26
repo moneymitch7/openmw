@@ -255,6 +255,11 @@ namespace MWLua
         };
         std::shared_ptr<JitStats> mJitStats = std::make_shared<JitStats>();
         bool mJitAvailable = false;
+
+        // OpenMGE XE: what each script had allocated at the last profile report, and when (allocation rates)
+        mutable std::vector<uint64_t> mAllocatedAtLastReport;
+        mutable uint64_t mTotalAllocatedAtLastReport = 0;
+        mutable std::chrono::steady_clock::time_point mLastAllocationReport{};
         struct QueuedChangeStats
         {
             float mAvgCount = 0; // per frame
