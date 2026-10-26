@@ -259,6 +259,10 @@ namespace MWLua
         std::shared_ptr<JitStats> mJitStats = std::make_shared<JitStats>();
         bool mJitAvailable = false;
 
+        // OpenMGE XE [Lua] gc cycle growth: after a full collection, no new one until Lua's memory reaches this (KB)
+        bool mGcWaitingForGrowth = false;
+        int mGcNextCycleKb = 0;
+
         // OpenMGE XE: what each script had allocated at the last profile report, and when (allocation rates)
         mutable std::vector<uint64_t> mAllocatedAtLastReport;
         mutable uint64_t mTotalAllocatedAtLastReport = 0;

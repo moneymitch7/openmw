@@ -107,5 +107,17 @@ Lua Settings
 
    With a separate Lua thread (:ref:`lua num threads` 1), collect Lua's garbage from the moment the scripts' work for
    the frame is done, while the frame is still being drawn, rather than only in the short gap after it. The garbage
-   collector gets far more time each frame, so the last step of a collection cycle, which cannot be split up and
-   grows with Lua's memory, seldom falls just before a frame needs Lua, when that frame has to wait for it.
+   collector gets far more time each frame, so collections finish sooner. Use it with :ref:`gc cycle growth`, or
+   collections also come round more often.
+
+.. omw-setting::
+   :title: gc cycle growth
+   :type: int
+   :range: 0 to 1000
+   :default: 0
+
+   After a full garbage collection, how much Lua's memory (in percent) must grow before the next collection starts.
+   Every collection ends in a step that cannot be split up and grows with Lua's memory, which the next frame often has
+   to wait for. With 0 the next collection starts straight away, so collections come round every second or so however
+   little garbage scripts make; 25 makes them as rare as the garbage allows, at the cost of up to a quarter more Lua
+   memory.

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <climits>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -366,6 +367,19 @@ namespace MWLua
 
     bool LuaManager::gcStep(int steps)
     {
+        // OpenMGE XE [Lua] gc cycle growth: stepping the collector by hand starts the next cycle as soon as one ends,
+        // so cycles (each ending in a step that can't be split and grows with Lua's memory) came round every second
+        // or so however little garbage the scripts made. Wait until the memory has grown by this much first.
+        const int growth = Settings::lua().mGcCycleGrowth;
+        if (growth <= 0)
+            mGcWaitingForGrowth = false;
+        else if (mGcWaitingForGrowth)
+        {
+            if (lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0) < mGcNextCycleKb)
+                return true; // nothing to collect yet
+            mGcWaitingForGrowth = false;
+        }
+
         // OpenMGE XE: a step that runs long (LuaJIT's atomic phase cannot be split, and grows with the heap) holds
         // up the next frame's Lua update; name it so such hitches are not blamed on scripts.
         const auto start = std::chrono::steady_clock::now();
@@ -374,6 +388,12 @@ namespace MWLua
         if (ms >= 20.0)
             Log(Debug::Info) << "Slow Lua garbage collection step: " << static_cast<int>(ms) << " ms (Lua memory "
                              << lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0) / 1024 << " MB)";
+        if (finished && growth > 0)
+        {
+            const long long kb = lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0);
+            mGcNextCycleKb = static_cast<int>(std::min<long long>(kb + kb * growth / 100, INT_MAX));
+            mGcWaitingForGrowth = true;
+        }
         return finished;
     }
 
