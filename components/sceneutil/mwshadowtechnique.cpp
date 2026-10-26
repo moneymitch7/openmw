@@ -1090,6 +1090,33 @@ void MWShadowTechnique::update(osg::NodeVisitor& nv)
     _shadowedScene->osg::Group::traverse(nv);
 }
 
+namespace
+{
+    // OpenMGE XE: the slice of the view frustum from viewNear to viewFar, by its eight corners (on the frustum's four
+    // side edges: near plane corners 0, 1, 5, 4 to far plane corners 3, 2, 6, 7)
+    std::array<osg::Vec3d, 8> frustumSlice(const MWShadowTechnique::Frustum& frustum, double viewNear, double viewFar)
+    {
+        constexpr std::array<std::pair<int, int>, 4> edges{ { { 0, 3 }, { 1, 2 }, { 5, 6 }, { 4, 7 } } };
+        std::array<osg::Vec3d, 8> slice;
+        const osg::Vec3d& line = frustum.frustumCenterLine;
+        for (int i = 0; i < 4; ++i)
+        {
+            const osg::Vec3d& nearCorner = frustum.corners[edges[i].first];
+            const osg::Vec3d& farCorner = frustum.corners[edges[i].second];
+            const double nearDepth = (nearCorner - frustum.eye) * line;
+            const double farDepth = (farCorner - frustum.eye) * line;
+            const double span = farDepth - nearDepth;
+            const auto at = [&](double depth) {
+                const double t = span > 1e-6 ? (depth - nearDepth) / span : 0.0;
+                return nearCorner + (farCorner - nearCorner) * t;
+            };
+            slice[i] = at(viewNear);
+            slice[i + 4] = at(viewFar);
+        }
+        return slice;
+    }
+}
+
 void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 {
 
@@ -1518,9 +1545,11 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             // OpenMGE XE [Shadows] cascade update interval: a farther cascade's map drawn only every few updates. In
             // between it is kept as it was: with stable shadows it doesn't turn or change size with the camera, so it
             // still lines up (only where it is is worked out again). Drawn anyway when the sun's direction changed,
-            // the camera moved a twentieth of the cascade's size, or it is a quarter of a second old.
+            // the camera moved a twentieth of the cascade's size, it is a quarter of a second old, or the part of the
+            // view it is for no longer lies inside the map (the camera turned).
             if (_stableShadows && _cascadeUpdateInterval > 1 && sm_i > 0 && sd->_rendered && !debug
-                && sd->_sm_i == sm_i && camera->getProjectionMatrix()(0, 0) > 0.0)
+                && sd->_sm_i == sm_i && camera->getProjectionMatrix()(0, 0) > 0.0 && stableSplits
+                && frustum.corners.size() == 8 && numShadowMapsPerLight > 1)
             {
                 unsigned int period = 1;
                 for (unsigned int i = 0; i < sm_i && period < 16; ++i)
@@ -1530,7 +1559,32 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                 const bool moved = (frustum.eye - sd->_renderEye).length() > 0.05 * radius;
                 const bool sunMoved = (pl.lightDir - sd->_renderLightDir).length2() > 1e-12;
                 const bool old = cascadeTime - sd->_renderTime > 0.25;
+                // this cascade's slice of the view, as the splits below place it, against the map drawn before
+                bool uncovered = false;
                 if (!due && !moved && !sunMoved && !old)
+                {
+                    const auto split = [&](unsigned int k) {
+                        if (k >= numShadowMapsPerLight)
+                            return reducedFar;
+                        const double n = reducedNear;
+                        const double f = reducedFar;
+                        const double ratio = double(k) / double(numShadowMapsPerLight);
+                        return _splitPointUniformLogRatio * (n * pow(f / n, ratio))
+                            + (1.0 - _splitPointUniformLogRatio) * (n + (f - n) * ratio) + _splitPointDeltaBias;
+                    };
+                    const osg::Matrixd oldViewProjection = camera->getViewMatrix() * camera->getProjectionMatrix();
+                    for (const osg::Vec3d& corner : frustumSlice(frustum, split(sm_i), split(sm_i + 1)))
+                    {
+                        const osg::Vec3d p = corner * oldViewProjection;
+                        // the map's depth range was fitted to the slice exactly: a little leeway there
+                        if (std::abs(p.x()) > 1.0 || std::abs(p.y()) > 1.0 || std::abs(p.z()) > 1.02)
+                        {
+                            uncovered = true;
+                            break;
+                        }
+                    }
+                }
+                if (!due && !moved && !sunMoved && !old && !uncovered)
                 {
                     assignShadowStateSettings(cv, camera, sm_i, vddUniforms);
                     pl.textureUnits.push_back(textureUnit);
@@ -2875,25 +2929,7 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
     // so the shadow map's pixels stay put on the ground while the camera turns and moves (no shimmering edges).
     if (_stableShadows && frustum.corners.size() == 8)
     {
-        // the slice of the view frustum from viewNear to viewFar, by its eight corners (on the frustum's four side
-        // edges: near plane corners 0, 1, 5, 4 to far plane corners 3, 2, 6, 7)
-        constexpr std::array<std::pair<int, int>, 4> edges{ { { 0, 3 }, { 1, 2 }, { 5, 6 }, { 4, 7 } } };
-        std::array<osg::Vec3d, 8> slice;
-        const osg::Vec3d& line = frustum.frustumCenterLine;
-        for (int i = 0; i < 4; ++i)
-        {
-            const osg::Vec3d& nearCorner = frustum.corners[edges[i].first];
-            const osg::Vec3d& farCorner = frustum.corners[edges[i].second];
-            const double nearDepth = (nearCorner - frustum.eye) * line;
-            const double farDepth = (farCorner - frustum.eye) * line;
-            const double span = farDepth - nearDepth;
-            const auto at = [&](double depth) {
-                const double t = span > 1e-6 ? (depth - nearDepth) / span : 0.0;
-                return nearCorner + (farCorner - nearCorner) * t;
-            };
-            slice[i] = at(viewNear);
-            slice[i + 4] = at(viewFar);
-        }
+        const std::array<osg::Vec3d, 8> slice = frustumSlice(frustum, viewNear, viewFar);
         osg::Vec3d centre;
         for (const osg::Vec3d& corner : slice)
             centre += corner;
