@@ -1621,12 +1621,15 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             osg::Matrixd invertModelView;
             invertModelView.invert(camera->getViewMatrix());
 
-            // OpenMGE XE [Shadows] cascade update interval: a cascade that may be kept for later frames gets every
-            // caster over its whole square, not only those that shadow what is in view now; once the camera turns,
-            // the part of the kept map that comes into view has its shadows too. (Its square bounds it below.)
-            const bool keepable = _stableShadows && _cascadeUpdateInterval > 1 && sm_i > 0 && stableSplits
-                && numShadowMapsPerLight > 1 && settings->getMultipleShadowMapHint() == ShadowSettings::CASCADED;
-            osg::Polytope local_polytope(keepable ? osg::Polytope() : polytope);
+            // OpenMGE XE [Shadows] stable shadows: every cascade gets every caster over its whole square (bounded by
+            // the square's planes below), not only those the light volume of the view (the view swept towards the sun)
+            // keeps. That volume follows the camera's computed near and far planes and the way it faces; a slight turn
+            // could drop a cliff or hill that shades the ground in view from the nearer cascades but not the farther
+            // ones, leaving a lit patch that follows the player through shade, or a shadow blinking in and out. A
+            // kept cascade (cascade update interval) needs the whole square anyway, for the view it is reused in.
+            const bool squareCulled = _stableShadows && stableSplits && numShadowMapsPerLight > 1
+                && settings->getMultipleShadowMapHint() == ShadowSettings::CASCADED && frustum.corners.size() == 8;
+            osg::Polytope local_polytope(squareCulled ? osg::Polytope() : polytope);
             local_polytope.transformProvidingInverse(invertModelView);
 
             double cascaseNear = reducedNear;
