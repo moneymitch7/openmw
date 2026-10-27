@@ -547,6 +547,17 @@ namespace MWLua
             else
                 return spellStore->find(spellId);
         };
+        // OpenMGE XE: the magicka a cast of the spell costs this actor now (more than the spell's cost with [Game]
+        // never fail spells: times 100 / the chance the cast would have had), for mods that show or charge spell costs
+        actor["getSpellCost"] = [spellStore](const Object& o, const sol::object& spellOrId) -> int {
+            const MWWorld::Ptr& ptr = o.ptr();
+            if (!ptr.getClass().isActor())
+                throw std::runtime_error("Actor expected");
+            const ESM::Spell* spell = spellStore->find(toSpellId(spellOrId));
+            return MWMechanics::calcEffectiveSpellCost(*spell, ptr);
+        };
+        // OpenMGE XE: whether this actor's spells never fail ([Game] never fail spells / never fail spells npcs)
+        actor["spellsNeverFail"] = [](const Object& o) -> bool { return MWMechanics::spellsNeverFail(o.ptr()); };
         actor["setSelectedSpell"] = [context, spellStore](const SelfObject& o, const sol::object& spellOrId) {
             const MWWorld::Ptr& ptr = o.ptr();
             const MWWorld::Class& cls = ptr.getClass();
