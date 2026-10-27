@@ -650,6 +650,8 @@ namespace MWWorld
         /// Return physical or rendering half extents of the given actor.
         osg::Vec3f getHalfExtents(const MWWorld::ConstPtr& actor, bool rendering = false) const override;
 
+        bool projectToScreen(const osg::Vec3f& worldPos, osg::Vec2f& screen, float& distance) const override;
+
         /// Export scene graph to a file and return the filename.
         /// \param ptr object to export scene graph for (if empty, export entire scene graph)
         std::filesystem::path exportSceneGraph(const MWWorld::Ptr& ptr) override;

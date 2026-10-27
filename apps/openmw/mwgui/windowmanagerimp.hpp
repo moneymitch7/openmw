@@ -91,6 +91,7 @@ namespace Gui
 
 namespace MWGui
 {
+    class SpeechCaptions;
     class HUD;
     class MapWindow;
     class MainMenu;
@@ -272,6 +273,7 @@ namespace MWGui
             enum MWGui::ShowInDialogueMode showInDialogueMode = MWGui::ShowInDialogueMode_IfPossible) override;
         void scheduleMessageBox(std::string message,
             enum MWGui::ShowInDialogueMode showInDialogueMode = MWGui::ShowInDialogueMode_IfPossible) override;
+        void speechSubtitle(const MWWorld::Ptr& actor, std::string_view text) override;
         void staticMessageBox(std::string_view message) override;
         void removeStaticMessageBox() override;
         void interactiveMessageBox(std::string_view message, const std::vector<std::string>& buttons = {},
@@ -453,6 +455,7 @@ namespace MWGui
         MapWindow* mMap;
         std::unique_ptr<MWRender::LocalMap> mLocalMapRender;
         std::unique_ptr<ToolTips> mToolTips;
+        std::unique_ptr<SpeechCaptions> mSpeechCaptions;
         StatsWindow* mStatsWindow;
         std::unique_ptr<MessageBoxManager> mMessageBoxManager;
         Console* mConsole;

@@ -253,6 +253,10 @@ namespace MWBase
         virtual void messageBox(std::string_view message,
             enum MWGui::ShowInDialogueMode showInDialogueMode = MWGui::ShowInDialogueMode_IfPossible)
             = 0;
+        /// OpenMGE XE: the subtitle of a voiced line spoken by \a actor: above the speaker with [GUI] subtitles above
+        /// speakers, otherwise a message box. Only call with [GUI] subtitles on.
+        virtual void speechSubtitle(const MWWorld::Ptr& actor, std::string_view text) = 0;
+
         /// Puts message into a queue to show on the next update. Thread safe alternative for messageBox.
         virtual void scheduleMessageBox(std::string message,
             enum MWGui::ShowInDialogueMode showInDialogueMode = MWGui::ShowInDialogueMode_IfPossible)

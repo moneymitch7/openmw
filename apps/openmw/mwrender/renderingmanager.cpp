@@ -35,9 +35,9 @@
 
 #include <components/settings/values.hpp>
 
-#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/heldlightshadow.hpp>
 #include <components/sceneutil/lampshadows.hpp>
 #include <components/sceneutil/lightmanager.hpp>
@@ -86,8 +86,8 @@
 #include "effectmanager.hpp"
 #include "fogmanager.hpp"
 #include "groundcover.hpp"
-#include "mgeweatherpass.hpp"
 #include "localmap.hpp"
+#include "mgeweatherpass.hpp"
 #include "navmesh.hpp"
 #include "npcanimation.hpp"
 #include "objectpaging.hpp"
@@ -578,11 +578,10 @@ namespace MWRender
             Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
             const int unit = shaderManager.reserveGlobalTextureUnits(
                 Shader::ShaderManager::Slot::HeldLightShadow, SceneUtil::HeldLightShadow::sMaxLights);
-            mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(
-                shaderManager, unit, Mask_Static | Mask_Object | Mask_Actor,
-                Settings::shaders().mHeldLightShadowResolution, Settings::shaders().mHeldLightShadowMinCasterSize,
-                Settings::shaders().mHeldLightShadowCacheDistance, Mask_Actor,
-                Settings::shaders().mHeldLightShadowDistance);
+            mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(shaderManager, unit,
+                Mask_Static | Mask_Object | Mask_Actor, Settings::shaders().mHeldLightShadowResolution,
+                Settings::shaders().mHeldLightShadowMinCasterSize, Settings::shaders().mHeldLightShadowCacheDistance,
+                Mask_Actor, Settings::shaders().mHeldLightShadowDistance);
             mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 
@@ -591,10 +590,9 @@ namespace MWRender
         if (Settings::shaders().mLampShadows && sceneRoot->getClusteredLighting())
         {
             Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
-            const int unit
-                = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::LampShadows, 2);
-            mLampShadows = std::make_unique<SceneUtil::LampShadows>(shaderManager, unit, Mask_Static,
-                Mask_Actor | Mask_Player, Settings::shaders().mLampShadowResolution);
+            const int unit = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::LampShadows, 2);
+            mLampShadows = std::make_unique<SceneUtil::LampShadows>(
+                shaderManager, unit, Mask_Static, Mask_Actor | Mask_Player, Settings::shaders().mLampShadowResolution);
             mLampShadows->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 
@@ -1090,8 +1088,7 @@ namespace MWRender
         updateCarriedLights();
 
         if (mLampShadows != nullptr && mPlayerAnimation != nullptr)
-            mLampShadows->setFocus(
-                mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
+            mLampShadows->setFocus(mPlayerAnimation->getPtr().getRefData().getPosition().asVec3(), !mSky->isEnabled());
 
         if (mHeldLightShadow != nullptr && mPlayerAnimation != nullptr)
         {
@@ -1226,9 +1223,9 @@ namespace MWRender
     // OpenMGE XE: a mod moves a worn lantern's stand-in light to the player's hip from a script, which sees where the
     // player was the frame before and whose move lands a frame later: the light trails the player by a frame, and a
     // light a hand's width from the body throws the player's own shadow about whenever they turn. Where the mod put it
-    // in the player's frame, as the player stood when the script ran (the end of the last frame), is kept, and the light
-    // is drawn there from where the player stands now, every frame (updateCarriedLights). Only how it is drawn; where
-    // the game has it is the mod's.
+    // in the player's frame, as the player stood when the script ran (the end of the last frame), is kept, and the
+    // light is drawn there from where the player stands now, every frame (updateCarriedLights). Only how it is drawn;
+    // where the game has it is the mod's.
     void RenderingManager::followCarriedLight(const MWWorld::Ptr& ptr, const osg::Vec3f& pos)
     {
         SceneUtil::PositionAttitudeTransform* node = ptr.getRefData().getBaseNode();
@@ -1341,6 +1338,19 @@ namespace MWRender
         computeBounds.setTraversalMask(~ignoreMask);
         baseNode->accept(computeBounds);
         return computeBounds.getBoundingBox();
+    }
+
+    bool RenderingManager::projectToScreen(const osg::Vec3f& worldPos, osg::Vec2f& screen, float& distance) const
+    {
+        const osg::Camera* camera = mViewer->getCamera();
+        const osg::Vec4f clip = osg::Vec4f(worldPos, 1.0f) * (camera->getViewMatrix() * camera->getProjectionMatrix());
+        if (clip.w() <= 0.f)
+            return false;
+        screen.set((clip.x() / clip.w() + 1.f) * 0.5f, (clip.y() / clip.w() - 1.f) * -0.5f);
+        osg::Vec3d eye, center, up;
+        camera->getViewMatrixAsLookAt(eye, center, up);
+        distance = (worldPos - osg::Vec3f(eye)).length();
+        return true;
     }
 
     osg::Vec2f RenderingManager::getScreenCoords(const osg::BoundingBox& bb)

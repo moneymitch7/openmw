@@ -5,6 +5,7 @@
 
 #include "../mwbase/environment.hpp"
 #include "../mwbase/soundmanager.hpp"
+#include "../mwbase/windowmanager.hpp"
 #include "../mwbase/world.hpp"
 
 #include "../mwworld/esmstore.hpp"
@@ -267,7 +268,18 @@ namespace MWLua
             MWWorld::Ptr ptr = getMutablePtrOrThrow(ObjectVariant(object));
             MWBase::Environment::get().getSoundManager()->say(ptr, VFS::Path::Normalized(fileName));
             if (text && Settings::gui().mSubtitles)
-                luaManager->addUIMessage(*text);
+            {
+                // OpenMGE XE: above the speaker (see [GUI] subtitles above speakers), with the other queued changes
+                if (Settings::gui().mSubtitlesAboveSpeakers)
+                    luaManager->addAction(
+                        [obj = MWLua::Object(ptr), line = std::string(*text)] {
+                            if (!obj.ptrOrEmpty().isEmpty())
+                                MWBase::Environment::get().getWindowManager()->speechSubtitle(obj.ptr(), line);
+                        },
+                        "speechSubtitleAction");
+                else
+                    luaManager->addUIMessage(*text);
+            }
         };
         api["stopSay"] = [](const sol::object& object) {
             MWWorld::Ptr ptr = getMutablePtrOrThrow(ObjectVariant(object));

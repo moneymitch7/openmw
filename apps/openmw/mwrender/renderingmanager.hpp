@@ -220,6 +220,10 @@ namespace MWRender
         /// Get normalized screen coordinates of the bounding box's summit, where (0,0) is the top left corner
         osg::Vec2f getScreenCoords(const osg::BoundingBox& bb);
 
+        /// OpenMGE XE: where \a worldPos is on the screen (0 to 1, from the top left) and how far from the camera;
+        /// false when it is behind the camera
+        bool projectToScreen(const osg::Vec3f& worldPos, osg::Vec2f& screen, float& distance) const;
+
         /// Get the bounding box of the object's scene graph, leaving out nodes in ignoreMask. Invalid if the object
         /// is not in the scene.
         osg::BoundingBox getObjectBounds(const MWWorld::Ptr& ptr, unsigned int ignoreMask) const;

@@ -119,6 +119,7 @@
 #include "screenfader.hpp"
 #include "scrollwindow.hpp"
 #include "settingswindow.hpp"
+#include "speechcaptions.hpp"
 #include "spellbuyingwindow.hpp"
 #include "spellview.hpp"
 #include "spellwindow.hpp"
@@ -1051,6 +1052,9 @@ namespace MWGui
 
         mToolTips->onFrame(frameDuration);
 
+        if (mSpeechCaptions)
+            mSpeechCaptions->update(frameDuration, isGuiMode() || !mHudEnabled);
+
         if (mLocalMapRender)
             mLocalMapRender->cleanupCameras();
 
@@ -1188,6 +1192,18 @@ namespace MWGui
             bool owned = mToolTips->checkOwned();
             mHud->setCrosshairOwned(owned);
         }
+    }
+
+    void WindowManager::speechSubtitle(const MWWorld::Ptr& actor, std::string_view text)
+    {
+        if (!Settings::gui().mSubtitlesAboveSpeakers || actor.isEmpty())
+        {
+            messageBox(text);
+            return;
+        }
+        if (!mSpeechCaptions)
+            mSpeechCaptions = std::make_unique<SpeechCaptions>();
+        mSpeechCaptions->say(actor, text);
     }
 
     void WindowManager::setFocusObjectScreenCoords(float x, float y)
@@ -2071,6 +2087,9 @@ namespace MWGui
         mMessageBoxManager->clear();
 
         mToolTips->clear();
+
+        if (mSpeechCaptions)
+            mSpeechCaptions->clear();
 
         mSelectedSpell = ESM::RefId();
         mCustomMarkers.clear();

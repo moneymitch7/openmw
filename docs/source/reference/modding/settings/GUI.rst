@@ -125,6 +125,16 @@ GUI Settings
    Toggleable in game with Subtitles button in Prefs panel.
 
 .. omw-setting::
+   :title: subtitles above speakers
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   OpenMGE XE. With :ref:`subtitles` on, a voiced line's text shows above its speaker's head for as long as the line
+   plays (light text with a shadow, sized by distance), instead of in a message box. When the speaker can't be seen
+   (the player, off-screen, far away) it shows low on the screen under the speaker's name.
+
+.. omw-setting::
    :title: hit fader
    :type: boolean
    :range: true, false

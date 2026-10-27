@@ -584,6 +584,10 @@ namespace MWBase
         /// Return physical or rendering half extents of the given actor.
         virtual osg::Vec3f getHalfExtents(const MWWorld::ConstPtr& actor, bool rendering = false) const = 0;
 
+        /// OpenMGE XE: where \a worldPos is on the screen (0 to 1, from the top left) and how far from the camera;
+        /// false when it is behind the camera
+        virtual bool projectToScreen(const osg::Vec3f& worldPos, osg::Vec2f& screen, float& distance) const = 0;
+
         /// Export scene graph to a file and return the filename.
         /// \param ptr object to export scene graph for (if empty, export entire scene graph)
         virtual std::filesystem::path exportSceneGraph(const MWWorld::Ptr& ptr) = 0;
@@ -594,7 +598,8 @@ namespace MWBase
         virtual DetourNavigator::Navigator* getNavigator() const = 0;
 
         virtual void updateActorPath(const MWWorld::ConstPtr& actor, const std::deque<osg::Vec3f>& path,
-            const DetourNavigator::AgentBounds& agentBounds, const osg::Vec3f& start, const osg::Vec3f& end) const = 0;
+            const DetourNavigator::AgentBounds& agentBounds, const osg::Vec3f& start, const osg::Vec3f& end) const
+            = 0;
 
         virtual void removeActorPath(const MWWorld::ConstPtr& actor) const = 0;
 
@@ -603,7 +608,8 @@ namespace MWBase
         virtual DetourNavigator::AgentBounds getPathfindingAgentBounds(const MWWorld::ConstPtr& actor) const = 0;
 
         virtual bool hasCollisionWithDoor(
-            const MWWorld::ConstPtr& door, const osg::Vec3f& position, const osg::Vec3f& destination) const = 0;
+            const MWWorld::ConstPtr& door, const osg::Vec3f& position, const osg::Vec3f& destination) const
+            = 0;
 
         virtual bool isAreaOccupiedByOtherActor(const MWWorld::ConstPtr& actor, const osg::Vec3f& position) const = 0;
 

@@ -30,6 +30,7 @@ namespace Settings
             makeClampSanitizerInt(0, 32766) };
         SettingValue<bool> mControllerTooltips{ mIndex, "GUI", "controller tooltips" };
         SettingValue<bool> mSubtitles{ mIndex, "GUI", "subtitles" };
+        SettingValue<bool> mSubtitlesAboveSpeakers{ mIndex, "GUI", "subtitles above speakers" };
         SettingValue<bool> mHitFader{ mIndex, "GUI", "hit fader" };
         SettingValue<bool> mWerewolfOverlay{ mIndex, "GUI", "werewolf overlay" };
         SettingValue<MyGUI::Colour> mColorBackgroundOwned{ mIndex, "GUI", "color background owned" };

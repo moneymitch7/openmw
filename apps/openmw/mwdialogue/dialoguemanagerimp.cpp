@@ -78,8 +78,8 @@ namespace MWDialogue
             const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - mStart).count();
             if (seconds < threshold || mActor.isEmpty())
                 return;
-            Log(Debug::Info) << "Slow dialogue: " << mStep << " with " << mActor.getCellRef().getRefId()
-                             << " took " << std::fixed << std::setprecision(1) << seconds * 1000.0
+            Log(Debug::Info) << "Slow dialogue: " << mStep << " with " << mActor.getCellRef().getRefId() << " took "
+                             << std::fixed << std::setprecision(1) << seconds * 1000.0
                              << " ms (finding answers on topics "
                              << (mManager.mTopicCheckSeconds - mTopicSeconds) * 1000.0 << " ms for "
                              << mManager.mTopicsChecked - mTopics << " topics, result scripts "
@@ -728,10 +728,10 @@ namespace MWDialogue
         if (info != nullptr)
         {
             MWBase::WindowManager* winMgr = MWBase::Environment::get().getWindowManager();
-            if (Settings::gui().mSubtitles)
-                winMgr->messageBox(info->mResponse);
             if (!info->mSound.empty())
                 sndMgr->say(actor, Misc::ResourceHelpers::correctSoundPath(VFS::Path::Normalized(info->mSound)));
+            if (Settings::gui().mSubtitles)
+                winMgr->speechSubtitle(actor, info->mResponse);
             if (!info->mResultScript.empty())
                 executeScript(info->mResultScript, actor);
             MWBase::Environment::get().getLuaManager()->onDialogueResponse(actor, *info, *dial);
