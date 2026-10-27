@@ -118,9 +118,14 @@ float unshadowedLightRatio(float distance)
     if (fade == 1.0)
         return shadowing;
 #endif
-    bool doneShadows = false;
+    // Each cascade covers a square of the light's view; the first that holds the point shadows it. Across the outer
+    // band of a cascade's square its shadow fades into the next cascade's, so the change of resolution and filter width
+    // between them is a gradient rather than a line on the ground that walks along with the camera.
+    float remaining = 1.0; // the share of the shadowing still to come from later cascades
+    float lastShadowing = 1.0;
+    float blended = 0.0;
     @foreach shadow_texture_unit_index @shadow_texture_unit_list
-        if (!doneShadows)
+        if (remaining > 0.0)
         {
             vec3 shadowXYZ = shadowSpaceCoords@shadow_texture_unit_index.xyz / shadowSpaceCoords@shadow_texture_unit_index.w;
 #if @perspectiveShadowMaps
@@ -129,19 +134,29 @@ float unshadowedLightRatio(float distance)
             if (all(lessThan(shadowXYZ.xy, vec2(1.0, 1.0))) && all(greaterThan(shadowXYZ.xy, vec2(0.0, 0.0))))
             {
 #if @softShadows
-                shadowing = min(getFilteredShadowing(shadowTexture@shadow_texture_unit_index,
-                    softUvz@shadow_texture_unit_index, softSlope@shadow_texture_unit_index), shadowing);
+                float cascadeShadowing = getFilteredShadowing(shadowTexture@shadow_texture_unit_index,
+                    softUvz@shadow_texture_unit_index, softSlope@shadow_texture_unit_index);
 #else
-                shadowing = min(shadow2DProj(shadowTexture@shadow_texture_unit_index, shadowSpaceCoords@shadow_texture_unit_index).r, shadowing);
+                float cascadeShadowing = shadow2DProj(shadowTexture@shadow_texture_unit_index, shadowSpaceCoords@shadow_texture_unit_index).r;
 #endif
-
-                doneShadows = all(lessThan(shadowXYZ, vec3(0.95, 0.95, 1.0))) && all(greaterThan(shadowXYZ, vec3(0.05, 0.05, 0.0)));
+                // 0 inside, rising to 1 by 5% from the square's edge (the filter's taps stay within the map)
+                vec2 edge = abs(shadowXYZ.xy * 2.0 - 1.0);
+                float handOver = smoothstep(0.78, 0.9, max(edge.x, edge.y));
+                if (shadowXYZ.z >= 1.0 || shadowXYZ.z <= 0.0)
+                    handOver = 1.0; // beyond this cascade's depth range: its sample means nothing
+                else
+                    lastShadowing = cascadeShadowing;
 #if @perspectiveShadowMaps
-                doneShadows = doneShadows && all(lessThan(shadowRegionXYZ, vec3(1.0, 1.0, 1.0))) && all(greaterThan(shadowRegionXYZ.xy, vec2(-1.0, -1.0)));
+                if (!(all(lessThan(shadowRegionXYZ, vec3(1.0, 1.0, 1.0))) && all(greaterThan(shadowRegionXYZ.xy, vec2(-1.0, -1.0)))))
+                    handOver = 1.0;
 #endif
+                blended += remaining * (1.0 - handOver) * cascadeShadowing;
+                remaining *= handOver;
             }
         }
     @endforeach
+    // past the last cascade's band: its own shadowing, as before
+    shadowing = blended + remaining * lastShadowing;
 #if @limitShadowMapDistance
     shadowing = mix(shadowing, 1.0, fade);
 #endif
