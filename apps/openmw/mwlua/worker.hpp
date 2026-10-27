@@ -27,7 +27,8 @@ namespace MWLua
         // steps until finishGc() is called or a full collection cycle completes.
         // Without a Lua thread, does the configured amount of GC synchronously
         // instead.
-        void gc();
+        // relaxed: the game is paused (a menu is open); see LuaManager::gcStep
+        void gc(bool relaxed = false);
 
         // Stops garbage collection, waiting only for the step in flight. Must be
         // called before the main thread touches the Lua state again.
@@ -53,6 +54,7 @@ namespace MWLua
         std::optional<UpdateRequest> mUpdateRequest;
         bool mGcRequest = false;
         bool mGcInProgress = false;
+        bool mGcRelaxed = false;
         bool mJoinRequest = false;
         std::optional<std::thread> mThread;
     };

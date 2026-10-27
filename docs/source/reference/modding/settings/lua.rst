@@ -120,4 +120,6 @@ Lua Settings
    Every collection ends in a step that cannot be split up and grows with Lua's memory, which the next frame often has
    to wait for. With 0 the next collection starts straight away, so collections come round every second or so however
    little garbage scripts make; 25 makes them as rare as the garbage allows, at the cost of up to a quarter more Lua
-   memory.
+   memory. While the game is paused (a menu is open) a quarter of this growth is enough to start one, so collections
+   tend to end in menus rather than during play; after a loading screen (a door, fast travel, a teleport) a full
+   collection runs while the screen still shows, if the memory has grown a tenth of this since the last.

@@ -71,7 +71,13 @@ namespace MWLua
         //
         // Returns true if the step finished a collection cycle. Touches the Lua state:
         // never run concurrently with anything else that does.
-        bool gcStep(int steps);
+        // relaxed: the game is paused (a menu is open), so a collection can start after less growth (gc cycle growth)
+        bool gcStep(int steps, bool relaxed = false);
+
+        // OpenMGE XE: a full collection now, on the main thread while the Lua thread is idle, if Lua's memory has
+        // grown enough since the last one. For a moment that already has a pause (a loading screen), so that fewer
+        // collections end during play, where their last step can hold a frame up for a few hundred ms.
+        void collectGarbageNow(std::string_view reason);
 
         // \brief Executes latency-critical and scene graph related Lua logic.
         //
@@ -262,6 +268,7 @@ namespace MWLua
         // OpenMGE XE [Lua] gc cycle growth: after a full collection, no new one until Lua's memory reaches this (KB)
         bool mGcWaitingForGrowth = false;
         int mGcNextCycleKb = 0;
+        int mGcCycleEndKb = 0; // Lua memory when the last collection ended
 
         // OpenMGE XE: what each script had allocated at the last profile report, and when (allocation rates)
         mutable std::vector<uint64_t> mAllocatedAtLastReport;

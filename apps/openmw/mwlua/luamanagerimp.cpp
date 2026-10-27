@@ -365,17 +365,21 @@ namespace MWLua
         });
     }
 
-    bool LuaManager::gcStep(int steps)
+    bool LuaManager::gcStep(int steps, bool relaxed)
     {
         // OpenMGE XE [Lua] gc cycle growth: stepping the collector by hand starts the next cycle as soon as one ends,
         // so cycles (each ending in a step that can't be split and grows with Lua's memory) came round every second
-        // or so however little garbage the scripts made. Wait until the memory has grown by this much first.
+        // or so however little garbage the scripts made. Wait until the memory has grown by this much first. While
+        // the game is paused (a menu open) a quarter of it is enough: a cycle ending in a menu holds up a menu frame
+        // rather than one of play, and pushes the next in-play cycle back.
         const int growth = Settings::lua().mGcCycleGrowth;
         if (growth <= 0)
             mGcWaitingForGrowth = false;
         else if (mGcWaitingForGrowth)
         {
-            if (lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0) < mGcNextCycleKb)
+            const long long kb = lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0);
+            const long long relaxedTarget = static_cast<long long>(mGcCycleEndKb) * (100 + growth / 4) / 100;
+            if (kb < mGcNextCycleKb && !(relaxed && kb >= relaxedTarget))
                 return true; // nothing to collect yet
             mGcWaitingForGrowth = false;
         }
@@ -387,14 +391,37 @@ namespace MWLua
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
         if (ms >= 20.0)
             Log(Debug::Info) << "Slow Lua garbage collection step: " << static_cast<int>(ms) << " ms (Lua memory "
-                             << lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0) / 1024 << " MB)";
+                             << lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0) / 1024 << " MB"
+                             << (relaxed ? ", game paused)" : ")");
         if (finished && growth > 0)
         {
             const long long kb = lua_gc(mLua.unsafeState(), LUA_GCCOUNT, 0);
+            mGcCycleEndKb = static_cast<int>(std::min<long long>(kb, INT_MAX));
             mGcNextCycleKb = static_cast<int>(std::min<long long>(kb + kb * growth / 100, INT_MAX));
             mGcWaitingForGrowth = true;
         }
         return finished;
+    }
+
+    void LuaManager::collectGarbageNow(std::string_view reason)
+    {
+        const int growth = Settings::lua().mGcCycleGrowth;
+        lua_State* L = mLua.unsafeState();
+        const long long before = lua_gc(L, LUA_GCCOUNT, 0);
+        // not worth a full collection unless the memory has grown a little (a tenth of the cycle growth, at least
+        // 2%) since the last one ended; without cycle growth, whenever there is a loading screen
+        if (growth > 0 && mGcCycleEndKb > 0
+            && before < static_cast<long long>(mGcCycleEndKb) * (100 + std::max(2, growth / 10)) / 100)
+            return;
+        const auto start = std::chrono::steady_clock::now();
+        lua_gc(L, LUA_GCCOLLECT, 0);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        const long long after = lua_gc(L, LUA_GCCOUNT, 0);
+        Log(Debug::Info) << "Collected Lua garbage during " << reason << ": " << static_cast<int>(ms) << " ms ("
+                         << before / 1024 << " MB -> " << after / 1024 << " MB)";
+        mGcCycleEndKb = static_cast<int>(std::min<long long>(after, INT_MAX));
+        mGcNextCycleKb = static_cast<int>(std::min<long long>(after + after * std::max(growth, 0) / 100, INT_MAX));
+        mGcWaitingForGrowth = growth > 0;
     }
 
     void LuaManager::objectTeleported(const MWWorld::Ptr& ptr)

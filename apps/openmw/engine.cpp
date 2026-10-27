@@ -788,6 +788,32 @@ bool OMW::Engine::frame(unsigned frameNumber, float frametime)
         mWorld->updateFocusObject();
     }
 
+    // OpenMGE XE: after a loading screen (a door, fast travel, a teleport, a loaded game), collect Lua's garbage in
+    // full while the screen still shows it: a collection that ends during play holds a frame up for a few hundred ms.
+    // Main thread, Lua thread idle: the update below hasn't started and the background collection was stopped.
+    if (mStateManager->getState() == MWBase::StateManager::State_Running)
+    {
+        const MWWorld::Ptr player = mWorld->getPlayerPtr();
+        if (!player.isEmpty() && player.isInCell())
+        {
+            const MWWorld::CellStore* cell = player.getCell();
+            const osg::Vec3f pos = player.getRefData().getPosition().asVec3();
+            if (mGcLastPlayerCell != nullptr && cell != mGcLastPlayerCell)
+            {
+                const bool inOut = cell->isExterior() != mGcLastPlayerExterior;
+                const bool interior = !cell->isExterior();
+                const bool jumped = (pos - mGcLastPlayerPos).length2() > 12288.f * 12288.f;
+                if (inOut || interior || jumped)
+                    mLuaManager->collectGarbageNow("a loading screen");
+            }
+            mGcLastPlayerCell = cell;
+            mGcLastPlayerPos = pos;
+            mGcLastPlayerExterior = cell->isExterior();
+        }
+    }
+    else
+        mGcLastPlayerCell = nullptr;
+
     // if there is a separate Lua thread, it starts the update now
     mLuaWorker->allowUpdate(statsEpoch, frameNumber, frameStats);
 
@@ -802,7 +828,7 @@ bool OMW::Engine::frame(unsigned frameNumber, float frametime)
 
     // The Lua state is unused until the next frame starts: the worker collects
     // garbage through the frame tail and the framerate-limiter sleep.
-    mLuaWorker->gc();
+    mLuaWorker->gc(mWorld->getTimeManager()->isPaused());
 
     return true;
 }

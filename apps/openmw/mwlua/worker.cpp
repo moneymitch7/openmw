@@ -57,19 +57,20 @@ namespace MWLua
             update(statsEpoch, frameNumber, stats);
     }
 
-    void Worker::gc()
+    void Worker::gc(bool relaxed)
     {
         const int steps = Settings::lua().mGcStepsPerFrame;
         if (steps <= 0)
             return;
         if (!mThread)
         {
-            mManager.gcStep(steps);
+            mManager.gcStep(steps, relaxed);
             return;
         }
         {
             std::lock_guard<std::mutex> lk(mMutex);
             mGcRequest = true;
+            mGcRelaxed = relaxed;
         }
         mCV.notify_one();
     }
@@ -123,11 +124,12 @@ namespace MWLua
                 // GC step with the lock dropped: finishGc() can post its stop request
                 // while the step runs. The mutex guards only the flags.
                 mGcInProgress = true;
+                const bool relaxed = mGcRelaxed;
                 lk.unlock();
                 bool cycleFinished = false;
                 try
                 {
-                    cycleFinished = mManager.gcStep(sGcStepSize);
+                    cycleFinished = mManager.gcStep(sGcStepSize, relaxed);
                 }
                 catch (const std::exception& e)
                 {

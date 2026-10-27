@@ -97,6 +97,7 @@ namespace MWSound
 namespace MWWorld
 {
     class World;
+    class CellStore;
 }
 
 namespace MWScript
@@ -146,6 +147,10 @@ namespace OMW
         std::unique_ptr<MWInput::InputManager> mInputManager;
         std::unique_ptr<MWState::StateManager> mStateManager;
         std::unique_ptr<MWLua::LuaManager> mLuaManager;
+        // OpenMGE XE: where the player was last frame, to tell a loading screen (Lua garbage is collected then)
+        const MWWorld::CellStore* mGcLastPlayerCell = nullptr;
+        osg::Vec3f mGcLastPlayerPos;
+        bool mGcLastPlayerExterior = false; // (the cell above is only compared, never read: it may be gone)
         // Outlives mLuaWorker, which reports into it from its own thread
         std::unique_ptr<Misc::FrameStats> mFrameStats;
         std::unique_ptr<MWLua::Worker> mLuaWorker;
