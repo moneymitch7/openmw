@@ -245,4 +245,6 @@ Shadows Settings
    and the one after every this many squared (2: every 2nd and 4th), which cuts most of the cost of a long
    :ref:`maximum shadow map distance`. In between, the farther maps are kept as drawn (stable shadows keep them lined
    up); they are drawn at once when the sun's direction changes, after a quarter of a second, or when the camera
-   has moved a twentieth of the map's size. 1 draws every map every frame.
+   has moved a twentieth of the map's size. A kept map holds things that move (actors, swaying banners) where they
+   were when it was drawn, so beyond the nearest map their shadows lag behind them, which shows as flashing where
+   they shade themselves. 1 draws every map every frame.
