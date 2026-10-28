@@ -93,6 +93,7 @@ namespace SceneUtil
         mShadowTechnique->setSunDirectionStep(osg::DegreesToRadians(settings.mShadowSunDirectionStep.get()));
         mShadowTechnique->setSunDirectionGlide(settings.mShadowSunDirectionGlide);
         mShadowTechnique->setCascadeUpdateInterval(static_cast<unsigned int>(settings.mCascadeUpdateInterval.get()));
+        mShadowTechnique->setDiagnostics(settings.mShadowDiagnostics);
 
         if (mEnableShadows && settings.mEnableDebugHud)
             mShadowTechnique->enableDebugHUD();

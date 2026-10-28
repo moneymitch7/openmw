@@ -248,3 +248,14 @@ Shadows Settings
    has moved a twentieth of the map's size. A kept map holds things that move (actors, swaying banners) where they
    were when it was drawn, so beyond the nearest map their shadows lag behind them, which shows as flashing where
    they shade themselves. 1 draws every map every frame.
+
+.. omw-setting::
+   :title: shadow diagnostics
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   Once a second, writes the main view's shadow setup to openmw.log in a line starting "Shadows:": the camera, the
+   view distances the shadow maps split, the sun's direction, and for each shadow map the part of the view it is for,
+   where it is and how many things were drawn into it. For finding out what goes wrong with shadows in a particular
+   place; leave it off otherwise.

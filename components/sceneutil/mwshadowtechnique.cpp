@@ -33,6 +33,11 @@
 #include <sstream>
 #include <vector>
 
+#include <components/debug/debuglog.hpp>
+
+#include <osgUtil/RenderStage>
+#include <osgUtil/StateGraph>
+
 #include "cullprofile.hpp"
 #include "glextensions.hpp"
 #include "shadowsbin.hpp"
@@ -1092,6 +1097,29 @@ void MWShadowTechnique::update(osg::NodeVisitor& nv)
 
 namespace
 {
+    // OpenMGE XE [Shadows] shadow diagnostics: the things a shadow map's render stage draws
+    void countLeaves(const osgUtil::RenderBin* bin, size_t& count)
+    {
+        count += bin->getRenderLeafList().size();
+        std::vector<const osgUtil::StateGraph*> todo(bin->getStateGraphList().begin(), bin->getStateGraphList().end());
+        while (!todo.empty())
+        {
+            const osgUtil::StateGraph* graph = todo.back();
+            todo.pop_back();
+            count += graph->_leaves.size();
+        }
+        for (const auto& child : bin->getRenderBinList())
+            countLeaves(child.second.get(), count);
+    }
+
+    size_t countRenderLeaves(const osgUtil::RenderStage* stage)
+    {
+        size_t count = 0;
+        if (stage)
+            countLeaves(stage, count);
+        return count;
+    }
+
     // OpenMGE XE: the slice of the view frustum from viewNear to viewFar, by its eight corners (on the frustum's four
     // side edges: near plane corners 0, 1, 5, 4 to far plane corners 3, 2, 6, 7)
     std::array<osg::Vec3d, 8> frustumSlice(const MWShadowTechnique::Frustum& frustum, double viewNear, double viewFar)
@@ -1346,6 +1374,27 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
         reducedFar = maxZFar;
     }
  
+    // OpenMGE XE [Shadows] shadow diagnostics: once a second, the main view's shadow setup in the log
+    std::ostringstream diag;
+    {
+        const double diagTime = cv.getFrameStamp() ? cv.getFrameStamp()->getReferenceTime() : 0.0;
+        const osg::Camera* diagCamera = cv.getCurrentCamera();
+        if (_diagnostics && diagCamera && diagCamera->getName() == "SceneCam" && diagTime - _diagnosticsLastTime >= 1.0)
+        {
+            _diagnosticsLastTime = diagTime;
+            _diagnosticsOut = &diag;
+            diag.setf(std::ios::fixed);
+            diag.precision(1);
+            const osg::Vec3d& dir = frustum.frustumCenterLine;
+            diag << "Shadows: eye (" << frustum.eye.x() << ", " << frustum.eye.y() << ", " << frustum.eye.z()
+                 << ") pitch " << osg::RadiansToDegrees(std::asin(std::clamp(dir.z(), -1.0, 1.0))) << " heading "
+                 << osg::RadiansToDegrees(std::atan2(dir.x(), dir.y())) << "; view computed near/far "
+                 << cv.getCalculatedNearPlane() << "/" << cv.getCalculatedFarPlane() << ", fixed " << minZNear << "/"
+                 << maxZFar << ", used " << reducedNear << "/" << reducedFar << (stableSplits ? " (stable)" : "")
+                 << "; scene radius " << _shadowedScene->getBound().radius();
+        }
+    }
+
     // return compute near far mode back to it's original settings
     cv.setComputeNearFarMode(cachedNearFarMode);
 
@@ -1416,7 +1465,19 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
         if (!computeShadowCameraSettings(frustum, pl, projectionMatrix, viewMatrix))
         {
             OSG_NOTICE<<"No valid Camera settings, no shadow to render"<<std::endl;
+            if (_diagnosticsOut)
+                *_diagnosticsOut << "; no light view";
             continue;
+        }
+        if (_diagnosticsOut)
+        {
+            double l, r, b, t, n, f;
+            projectionMatrix.getOrtho(l, r, b, t, n, f);
+            diag.precision(3);
+            *_diagnosticsOut << "; sun (" << pl.lightDir.x() << ", " << pl.lightDir.y() << ", " << pl.lightDir.z()
+                             << ")";
+            diag.precision(1);
+            *_diagnosticsOut << ", light depth range " << (f - n);
         }
 
         // if we are using multiple shadow maps and CastShadowTraversalMask is being used
@@ -1605,6 +1666,8 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                 }
                 if (!due && !moved && !sunMoved && !old && !uncovered)
                 {
+                    if (_diagnosticsOut)
+                        *_diagnosticsOut << "\n    cascade " << sm_i << ": kept from an earlier frame";
                     assignShadowStateSettings(cv, camera, sm_i, vddUniforms);
                     pl.textureUnits.push_back(textureUnit);
                     sd->_textureUnit = textureUnit;
@@ -1758,7 +1821,11 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             std::vector<osg::Plane> extraPlanes;
             if (settings->getMultipleShadowMapHint() == ShadowSettings::CASCADED)
             {
-                cropShadowCameraToMainFrustum(frustum, camera, cascaseNear, cascadeFar, extraPlanes);
+                if (_diagnosticsOut)
+                    *_diagnosticsOut << "\n    cascade " << sm_i << ": view " << cascaseNear << "-" << cascadeFar;
+                if (!cropShadowCameraToMainFrustum(frustum, camera, cascaseNear, cascadeFar, extraPlanes)
+                    && _diagnosticsOut)
+                    *_diagnosticsOut << ", NOT FITTED (nothing of the view in it)";
                 for (const auto& plane : extraPlanes)
                     local_polytope.getPlaneList().push_back(plane);
                 local_polytope.setupMask();
@@ -1778,6 +1845,8 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                 const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
                 cullShadowCastingScene(&cv, camera.get());
             }
+            if (_diagnosticsOut)
+                *_diagnosticsOut << ", " << countRenderLeaves(vdsmCallback->getRenderStage()) << " things drawn";
 
             cv.popStateSet();
 
@@ -1824,6 +1893,12 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
     if (numValidShadows>0)
     {
         prepareStateSetForRenderingShadow(*vdd, cv.getTraversalNumber());
+    }
+
+    if (_diagnosticsOut)
+    {
+        Log(Debug::Info) << diag.str();
+        _diagnosticsOut = nullptr;
     }
 
     // OSG_NOTICE<<"End of shadow setup Projection matrix "<<*cv.getProjectionMatrix()<<std::endl;
@@ -2225,11 +2300,20 @@ bool MWShadowTechnique::computeShadowCameraSettings(Frustum& frustum, LightData&
         OSG_INFO<<"modelCenterInLight="<<modelCenterInLightCoords<<" radius="<<bs.radius()<<std::endl;
         double radius(bs.radius());
 
+        // OpenMGE XE: how far towards the sun the light's view starts. It used to be the far side of the whole
+        // scene's bounding sphere, and the scene holds the water plane, 150 cells across: the view started some
+        // 850000 units out for a shadow range of a few thousand. Perspective shadow maps (stable shadows off) work
+        // their warp out of that depth range and came out degenerate for many camera angles, every shadow gone at
+        // once ("shadows turn on and off"). Casters between the sun and the view are still drawn (they are culled by
+        // the light's volume, not this), and those nearer to the sun than this are held at the near plane by the
+        // depth clamp, so they keep casting: the view's own size again towards the sun is plenty.
+        const double viewExtent = osg::maximum(osg::maximum(xMax - xMin, yMax - yMin), zMax - zMin);
+        const double cornersZMin = zMin;
         xMin = osg::maximum(xMin, modelCenterInLightCoords.x()-radius);
         xMax = osg::minimum(xMax, modelCenterInLightCoords.x()+radius);
         yMin = osg::maximum(yMin, modelCenterInLightCoords.y()-radius);
         yMax = osg::minimum(yMax, modelCenterInLightCoords.y()+radius);
-        zMin = modelCenterInLightCoords.z()-radius;
+        zMin = osg::maximum(modelCenterInLightCoords.z() - radius, cornersZMin - viewExtent);
         zMax = osg::minimum(zMax, modelCenterInLightCoords.z()+radius);
 
         OSG_INFO<<"after bs xMin="<<xMin<<", xMax="<<xMax<<", yMin="<<yMin<<", yMax="<<yMax<<", zMin="<<zMin<<", zMax="<<zMax<<std::endl;
@@ -2954,6 +3038,7 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
     double yMin = -1.0, yMax = 1.0;
     double zMin = -1.0, zMax = 1.0;
 
+    bool zMinClamped = false, zMaxClamped = false;
     if (convexHull.valid())
     {
         xMin = osg::maximum(-1.0, convexHull.min(0));
@@ -2962,9 +3047,19 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
         yMax = osg::minimum(1.0, convexHull.max(1));
         zMin = osg::maximum(-1.0, convexHull.min(2));
         zMax = osg::minimum(1.0, convexHull.max(2));
+        zMinClamped = convexHull.min(2) < -1.0;
+        zMaxClamped = convexHull.max(2) > 1.0;
     }
     else
         return false;
+
+    if (_diagnosticsOut && !(_stableShadows && frustum.corners.size() == 8))
+    {
+        _diagnosticsOut->precision(3);
+        *_diagnosticsOut << ", light x " << xMin << " to " << xMax << ", y " << yMin << " to " << yMax << ", z "
+                         << zMin << " to " << zMax;
+        _diagnosticsOut->precision(1);
+    }
 
     // OpenMGE XE [Shadows] stable shadows: the cascade covers a fixed-size square around the sphere holding its slice
     // of the view (the same whichever way the camera looks), moved only in whole texels of a grid fixed in the world,
@@ -3010,6 +3105,14 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
 
         convexHull.transform(osg::Matrixd::inverse(oldLightP));
         const double hullZMin = convexHull.min(2);
+        if (_diagnosticsOut)
+        {
+            *_diagnosticsOut << ", square at (" << cx << ", " << cy << ") half-width " << radius << ", depth "
+                             << (convexHull.max(2) - hullZMin);
+            if (zMinClamped || zMaxClamped)
+                *_diagnosticsOut << " (CUT to the light's range" << (zMinClamped ? ", far side" : "")
+                                 << (zMaxClamped ? ", sun side" : "") << ")";
+        }
         planeList.emplace_back(0.0, -1.0, 0.0, cy + radius);
         planeList.emplace_back(0.0, 1.0, 0.0, -(cy - radius));
         planeList.emplace_back(-1.0, 0.0, 0.0, cx + radius);

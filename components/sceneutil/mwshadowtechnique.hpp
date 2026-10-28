@@ -22,6 +22,7 @@
 
 #include <array>
 #include <memory>
+#include <iosfwd>
 #include <mutex>
 #include <string>
 
@@ -313,6 +314,9 @@ namespace SceneUtil {
         /// OpenMGE XE: with stable shadows, cascade i (from 0, the nearest) is drawn every interval^i shadow updates,
         /// in between kept as it was (still lined up, the stable maps not turning with the camera). 1 = all every time.
         void setCascadeUpdateInterval(unsigned int interval) { _cascadeUpdateInterval = interval; }
+        /// OpenMGE XE: once a second, the main view's shadow setup in the log (where each cascade is, what it covers
+        /// and how many things it drew), to find out what is wrong with shadows where it can't be seen otherwise.
+        void setDiagnostics(bool enabled) { _diagnostics = enabled; }
 
         osg::ref_ptr<osg::StateSet> getOrCreateShadowsBinStateSet();
 
@@ -362,6 +366,10 @@ namespace SceneUtil {
         double                                  _sunDirectionStep = 0.0;
         bool                                    _sunDirectionGlide = false;
         unsigned int                            _cascadeUpdateInterval = 1;
+        bool                                    _diagnostics = false;
+        double                                  _diagnosticsLastTime = -1.0;
+        // filled by cropShadowCameraToMainFrustum while a diagnostics line is being put together
+        std::ostringstream*                     _diagnosticsOut = nullptr;
 
         class DebugHUD final : public osg::Referenced
         {

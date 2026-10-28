@@ -65,6 +65,7 @@ namespace Settings
         SettingValue<bool> mShadowSunDirectionGlide{ mIndex, "Shadows", "shadow sun direction glide" };
         SettingValue<int> mCascadeUpdateInterval{ mIndex, "Shadows", "cascade update interval",
             makeClampSanitizerInt(1, 4) };
+        SettingValue<bool> mShadowDiagnostics{ mIndex, "Shadows", "shadow diagnostics" };
     };
 }
 
