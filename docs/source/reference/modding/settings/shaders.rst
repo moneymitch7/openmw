@@ -573,3 +573,25 @@ Shaders Settings
    can stop under roofs too; Wetworld's falling rain reaches about 1150 units, so 2400 covers it. 0 keeps the game's
    own size (600 units for rain, 1024 for snow and ash). Any size above 0 also renders the map at twice the
    resolution, 512 by 512, to keep its detail. Needs :ref:`weather particle occlusion` on.
+
+.. omw-setting::
+   :title: weather particle occlusion update distance
+   :type: float32
+   :range: >= 0
+   :default: 128
+
+   OpenMGE XE: the weather particle occlusion map is drawn again only once the camera has moved this far, in world
+   units on a grid, and at least once a second so objects coming into view are caught. What the map holds (buildings,
+   trees and other objects that don't move) and the map itself (looking straight down) don't depend on where you
+   look, so this costs nothing in looks; the map is made this much wider so it still reaches as far around the
+   camera. 0 draws it every frame, as before.
+
+.. omw-setting::
+   :title: weather particle occlusion skip items and lights
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   OpenMGE XE: leaves items, lights and other loose objects out of the weather particle occlusion map. Statics,
+   activators, doors and containers - roofs, awnings, tents, trees - stay in. Fewer objects to draw each time the map
+   is drawn, in towns especially.

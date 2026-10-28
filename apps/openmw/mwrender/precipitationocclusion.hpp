@@ -4,6 +4,7 @@
 #include <osg/Camera>
 #include <osg/Texture2D>
 
+#include <chrono>
 #include <optional>
 
 namespace MWRender
@@ -28,6 +29,9 @@ namespace MWRender
 
     private:
         bool mEnabled = false;
+        // OpenMGE XE: where (on the update distance grid) and when the map was last drawn
+        std::optional<osg::Vec3f> mDrawnCenter;
+        std::chrono::steady_clock::time_point mDrawnAt;
         osg::Group* mSkyNode;
         osg::Group* mSceneNode;
         osg::Group* mRootNode;

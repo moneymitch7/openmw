@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 
 #include <osgUtil/CullVisitor>
 
@@ -23,8 +24,9 @@ namespace
     class PrecipitationOcclusionUpdater : public SceneUtil::StateSetUpdater
     {
     public:
-        PrecipitationOcclusionUpdater(osg::ref_ptr<osg::Texture2D> depthTexture)
+        PrecipitationOcclusionUpdater(osg::ref_ptr<osg::Texture2D> depthTexture, osg::Camera* depthCamera)
             : mDepthTexture(std::move(depthTexture))
+            , mDepthCamera(depthCamera)
         {
         }
 
@@ -35,14 +37,18 @@ namespace
             stateset->addUniform(new osg::Uniform("orthoDepthMap", 3));
             stateset->addUniform(new osg::Uniform("depthSpaceMatrix", mDepthSpaceMatrix));
         }
-        void apply(osg::StateSet* stateset, osg::NodeVisitor* nv) override
+        void apply(osg::StateSet* stateset, osg::NodeVisitor* /*nv*/) override
         {
-            osg::Camera* camera = nv->asCullVisitor()->getCurrentCamera();
-            stateset->getUniform("depthSpaceMatrix")->set(camera->getViewMatrix() * camera->getProjectionMatrix());
+            // OpenMGE XE: the depth camera's own matrices, not those of whichever camera is culling the sky. The
+            // depth camera culls the sky too (and did so last, so its matrices won), but it now skips frames when it
+            // hasn't moved, and the map it drew before still goes with its matrices.
+            stateset->getUniform("depthSpaceMatrix")
+                ->set(mDepthCamera->getViewMatrix() * mDepthCamera->getProjectionMatrix());
         }
 
         osg::Matrixf mDepthSpaceMatrix;
         osg::ref_ptr<osg::Texture2D> mDepthTexture;
+        osg::ref_ptr<osg::Camera> mDepthCamera;
     };
 
     class DepthCameraUpdater : public SceneUtil::StateSetUpdater
@@ -112,7 +118,10 @@ namespace MWRender
         mCamera->setRenderTargetImplementation(osg::Camera::FRAME_BUFFER_OBJECT);
         mCamera->setReferenceFrame(osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT);
         mCamera->setNodeMask(Mask_RenderToTexture);
-        mCamera->setCullMask(Mask_Scene | Mask_Object | Mask_Static);
+        // OpenMGE XE: optionally without items and lights (Mask_Object); statics, activators, doors and containers stay
+        mCamera->setCullMask(Settings::shaders().mWeatherParticleOcclusionSkipItemsAndLights
+                ? (Mask_Scene | Mask_Static)
+                : (Mask_Scene | Mask_Object | Mask_Static));
         mCamera->setViewport(0, 0, rttSize, rttSize);
         mCamera->attach(osg::Camera::DEPTH_BUFFER, mDepthTexture);
         mCamera->addChild(mSceneNode);
@@ -127,16 +136,37 @@ namespace MWRender
         if (!mRange.has_value())
             return;
 
-        const osg::Vec3 pos = mSceneCamera->getInverseViewMatrix().getTrans();
+        osg::Vec3 pos = mSceneCamera->getInverseViewMatrix().getTrans();
+
+        // OpenMGE XE: draw the map again only once the camera has moved to another square of the update distance
+        // grid, or a second has passed (objects coming into view); otherwise the map drawn before still holds. The
+        // map is one grid step wider, so it still reaches as far round the camera from the square's centre.
+        const float step = Settings::shaders().mWeatherParticleOcclusionUpdateDistance;
+        float extra = 0.f;
+        if (step > 0.f)
+        {
+            pos = osg::Vec3(std::round(pos.x() / step) * step, std::round(pos.y() / step) * step,
+                std::round(pos.z() / step) * step);
+            extra = step;
+            const auto now = std::chrono::steady_clock::now();
+            if (mDrawnCenter && *mDrawnCenter == pos && now - mDrawnAt < std::chrono::seconds(1))
+            {
+                mCamera->setNodeMask(0);
+                return;
+            }
+            mDrawnCenter = pos;
+            mDrawnAt = now;
+        }
+        mCamera->setNodeMask(Mask_RenderToTexture);
 
         const float zmin = pos.z() - mRange->z() - Constants::CellSizeInUnits;
         const float zmax = pos.z() + mRange->z() + Constants::CellSizeInUnits;
         const float near = 0;
         const float far = zmax - zmin;
 
-        const float left = -mRange->x() / 2;
+        const float left = -(mRange->x() + extra) / 2;
         const float right = -left;
-        const float top = mRange->y() / 2;
+        const float top = (mRange->y() + extra) / 2;
         const float bottom = -top;
 
         if (SceneUtil::AutoDepth::isReversed())
@@ -156,7 +186,8 @@ namespace MWRender
     void PrecipitationOccluder::enable()
     {
         mEnabled = true;
-        mSkyCullCallback = new PrecipitationOcclusionUpdater(mDepthTexture);
+        mDrawnCenter = std::nullopt;
+        mSkyCullCallback = new PrecipitationOcclusionUpdater(mDepthTexture, mCamera.get());
         mSkyNode->addCullCallback(mSkyCullCallback);
         mCamera->setCullCallback(new DepthCameraUpdater);
 
@@ -181,10 +212,14 @@ namespace MWRender
         assert(range.y() != 0);
         assert(range.z() != 0);
         const osg::Vec3f margin = { -50, -50, 0 };
-        mRange = range - margin;
+        osg::Vec3f newRange = range - margin;
         // OpenMGE XE: at least [Shaders] weather particle occlusion range wide, for post-processing rain
         const float minRange = Settings::shaders().mWeatherParticleOcclusionRange;
-        mRange->x() = std::max(mRange->x(), minRange);
-        mRange->y() = std::max(mRange->y(), minRange);
+        newRange.x() = std::max(newRange.x(), minRange);
+        newRange.y() = std::max(newRange.y(), minRange);
+        // (this is called every frame while the weather is set; only a new size makes the map be drawn again)
+        if (!mRange || *mRange != newRange)
+            mDrawnCenter = std::nullopt;
+        mRange = newRange;
     }
 }

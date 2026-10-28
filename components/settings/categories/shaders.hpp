@@ -99,6 +99,10 @@ namespace Settings
             "weather particle occlusion small feature culling pixel size" };
         SettingValue<float> mWeatherParticleOcclusionRange{ mIndex, "Shaders", "weather particle occlusion range",
             makeMaxSanitizerFloat(0) };
+        SettingValue<float> mWeatherParticleOcclusionUpdateDistance{ mIndex, "Shaders",
+            "weather particle occlusion update distance", makeMaxSanitizerFloat(0) };
+        SettingValue<bool> mWeatherParticleOcclusionSkipItemsAndLights{ mIndex, "Shaders",
+            "weather particle occlusion skip items and lights" };
     };
 }
 
