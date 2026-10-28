@@ -99,6 +99,9 @@ namespace MWRender
 
         float getBaseWindSpeed() const;
 
+        // OpenMGE XE: the rain/snow occlusion map, for post-processing; null while none is rendered
+        const PrecipitationOccluder* getActivePrecipitationOccluder() const;
+
         void setSunglare(bool enabled);
 
         SceneUtil::RTTNode* getSkyRTT() { return mSkyRTT.get(); }

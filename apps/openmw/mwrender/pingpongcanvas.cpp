@@ -33,6 +33,14 @@ namespace MWRender
 
         mLuminanceCalculator->disable();
 
+        mDummyOcclusion = new osg::Texture2D;
+        mDummyOcclusion->setInternalFormat(GL_RGBA);
+        mDummyOcclusion->setTextureSize(1, 1);
+        mDummyOcclusion->setWrap(osg::Texture::WRAP_S, osg::Texture::CLAMP_TO_EDGE);
+        mDummyOcclusion->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
+        mDummyOcclusion->setFilter(osg::Texture::MIN_FILTER, osg::Texture::NEAREST);
+        mDummyOcclusion->setFilter(osg::Texture::MAG_FILTER, osg::Texture::NEAREST);
+
         Shader::ShaderManager::DefineMap defines;
         Stereo::shaderStereoDefines(defines);
 
@@ -332,6 +340,10 @@ namespace MWRender
 
             if (mTextureBlended)
                 node.mRootStateSet->setTextureAttribute(PostProcessor::TextureUnits::Unit_Blended, mTextureBlended);
+
+            // the rain/snow occlusion map, or a 1x1 stand-in while there is none (omw.precipitationOcclusion is 0)
+            node.mRootStateSet->setTextureAttribute(PostProcessor::TextureUnits::Unit_PrecipitationOcclusion,
+                mTexturePrecipitationOcclusion ? mTexturePrecipitationOcclusion.get() : mDummyOcclusion.get());
 
             state.pushStateSet(node.mRootStateSet);
             state.apply();

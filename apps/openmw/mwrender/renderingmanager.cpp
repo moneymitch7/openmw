@@ -1186,6 +1186,12 @@ namespace MWRender
         stateUpdater->setWindSpeed(world->getWindSpeed());
         stateUpdater->setSkyColor(mSky->getSkyColor());
         mPostProcessor->setUnderwaterFlag(isUnderwater);
+
+        // OpenMGE XE: what is above the area around the camera, for post-processing rain (omw_IsUnderCover)
+        const PrecipitationOccluder* occluder = mSky->getActivePrecipitationOccluder();
+        stateUpdater->setPrecipitationOcclusion(
+            occluder != nullptr, occluder ? occluder->getDepthSpaceMatrix() : osg::Matrixf());
+        mPostProcessor->setPrecipitationOcclusionTexture(occluder ? occluder->getDepthTexture() : nullptr);
     }
 
     void RenderingManager::updatePlayerPtr(const MWWorld::Ptr& ptr)

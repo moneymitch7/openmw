@@ -561,3 +561,15 @@ Shaders Settings
    .. warning::
 
       Experimental and may cause visual oddities.
+
+.. omw-setting::
+   :title: weather particle occlusion range
+   :type: float32
+   :range: >= 0
+   :default: 0
+
+   OpenMGE XE: the smallest width, in world units, of the area around the camera that the weather particle
+   occlusion map covers. The map is also handed to post-processing shaders (``omw_IsUnderCover``), so their own rain
+   can stop under roofs too; Wetworld's falling rain reaches about 1150 units, so 2400 covers it. 0 keeps the game's
+   own size (600 units for rain, 1024 for snow and ash). Any size above 0 also renders the map at twice the
+   resolution, 512 by 512, to keep its detail. Needs :ref:`weather particle occlusion` on.

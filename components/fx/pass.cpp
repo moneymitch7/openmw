@@ -80,6 +80,7 @@ namespace Fx
 #define OMW_BLENDED_COLOR 1
 #define OMW_POINT_LIGHT_RADIUS_MULTIPLIER 1
 #define OMW_MGE_FOG 1
+#define OMW_PRECIPITATION_OCCLUSION 1
 #define omw_In @in
 #define omw_Out @out
 #define omw_Position @position
@@ -99,6 +100,7 @@ uniform @builtinSampler omw_SamplerNormals;
 uniform @builtinSampler omw_SamplerDistortion;
 uniform @builtinSampler omw_SamplerOpaque;
 uniform @builtinSampler omw_SamplerBlended;
+uniform sampler2D omw_SamplerPrecipitationOcclusion;
 
 uniform vec4 omw_PointLights[@pointLightCount];
 uniform int omw_PointLightsCount;
@@ -257,6 +259,26 @@ mat4 omw_InvProjectionMatrix()
         vec4 after = omw_Texture2D(omw_SamplerBlended, uv);
 #endif
         return vec4(omw_Sanitize(after).rgb - omw_GetOpaque(uv).rgb, 0.0);
+    }
+
+    // OpenMGE XE: whether something solid - a roof, an awning, a gazebo, a tree - is above this world position, from
+    // the top-down depth map the engine renders around the camera while rain or snow falls with [Shaders] weather
+    // particle occlusion on ([Shaders] weather particle occlusion range sets how far it reaches). False wherever the
+    // map doesn't reach or isn't rendered (indoors, clear weather, setting off) (OMW_PRECIPITATION_OCCLUSION).
+    bool omw_IsUnderCover(vec3 worldPos)
+    {
+        if (omw.precipitationOcclusion < 0.5)
+            return false;
+        vec4 coord = omw.precipitationOcclusionMatrix * vec4(worldPos, 1.0);
+        vec2 uv = coord.xy * 0.5 + 0.5;
+        if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0)
+            return false;
+        float coverDepth = omw_Texture2D(omw_SamplerPrecipitationOcclusion, uv).r;
+#if OMW_REVERSE_Z
+        return coord.z < coverDepth;
+#else
+        return coord.z * 0.5 + 0.5 > coverDepth;
+#endif
     }
 
     vec3 omw_GetNormals(vec2 uv)

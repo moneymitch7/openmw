@@ -838,6 +838,13 @@ namespace MWRender
         mPrecipitationAlpha = weather.mPrecipitationAlpha;
     }
 
+    const PrecipitationOccluder* SkyManager::getActivePrecipitationOccluder() const
+    {
+        if (!mCreated || !mEnabled || !mPrecipitationOcclusion || !mPrecipitationOccluder->isActive())
+            return nullptr;
+        return mPrecipitationOccluder.get();
+    }
+
     float SkyManager::getBaseWindSpeed() const
     {
         if (!mCreated)

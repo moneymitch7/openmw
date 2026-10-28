@@ -97,6 +97,8 @@ namespace Settings
         SettingValue<bool> mWeatherParticleOcclusion{ mIndex, "Shaders", "weather particle occlusion" };
         SettingValue<float> mWeatherParticleOcclusionSmallFeatureCullingPixelSize{ mIndex, "Shaders",
             "weather particle occlusion small feature culling pixel size" };
+        SettingValue<float> mWeatherParticleOcclusionRange{ mIndex, "Shaders", "weather particle occlusion range",
+            makeMaxSanitizerFloat(0) };
     };
 }
 

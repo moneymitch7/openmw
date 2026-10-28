@@ -21,7 +21,13 @@ namespace MWRender
 
         void updateRange(const osg::Vec3f range);
 
+        // OpenMGE XE: the map handed to post-processing (omw_IsUnderCover)
+        bool isActive() const { return mEnabled && mRange.has_value(); }
+        osg::Texture2D* getDepthTexture() const { return mDepthTexture.get(); }
+        osg::Matrixf getDepthSpaceMatrix() const { return mCamera->getViewMatrix() * mCamera->getProjectionMatrix(); }
+
     private:
+        bool mEnabled = false;
         osg::Group* mSkyNode;
         osg::Group* mSceneNode;
         osg::Group* mRootNode;

@@ -95,6 +95,7 @@ namespace MWRender
             Unit_Distortion,
             Unit_Opaque,
             Unit_Blended,
+            Unit_PrecipitationOcclusion,
             Unit_NextFree
         };
 
@@ -183,6 +184,9 @@ namespace MWRender
 
         void setUnderwaterFlag(bool underwater) { mUnderwater = underwater; }
 
+        // OpenMGE XE: the rain/snow occlusion map for omw_SamplerPrecipitationOcclusion (null while there is none)
+        void setPrecipitationOcclusionTexture(osg::Texture* texture) { mPrecipitationOcclusionTexture = texture; }
+
         void toggleMode();
 
         std::shared_ptr<Fx::Technique> loadTechnique(VFS::Path::NormalizedView path, bool loadNextFrame = false);
@@ -269,6 +273,7 @@ namespace MWRender
         bool mHDR = false;
         bool mNormals = false;
         bool mUnderwater = false;
+        osg::ref_ptr<osg::Texture> mPrecipitationOcclusionTexture;
         bool mPassLights = false;
         bool mPrevNormals = false;
         bool mExteriorFlag = false;

@@ -89,6 +89,13 @@ namespace Fx
 
         void setFov(float fov) { mData.get<Fov>() = fov; }
 
+        // OpenMGE XE: the rain/snow occlusion map's world-to-map matrix, and whether the map is there this frame
+        void setPrecipitationOcclusion(bool active, const osg::Matrixf& matrix)
+        {
+            mData.get<PrecipitationOcclusion>() = active ? 1.f : 0.f;
+            mData.get<PrecipitationOcclusionMatrix>() = matrix;
+        }
+
         void setGameHour(float hour) { mData.get<GameHour>() = hour; }
 
         void setWeatherId(int id) { mData.get<WeatherID>() = id; }
@@ -309,11 +316,25 @@ namespace Fx
             static constexpr std::string_view sName = "mgeFogEnd";
         };
 
+        // The top-down depth map of what is above the area around the camera, rendered while rain or snow falls with
+        // [Shaders] weather particle occlusion on (omw_SamplerPrecipitationOcclusion): world position to the map's
+        // clip space, and 1 while the map is there, 0 otherwise. Shaders use omw_IsUnderCover.
+        struct PrecipitationOcclusionMatrix : Std140::Mat4
+        {
+            static constexpr std::string_view sName = "precipitationOcclusionMatrix";
+        };
+
+        struct PrecipitationOcclusion : Std140::Float
+        {
+            static constexpr std::string_view sName = "precipitationOcclusion";
+        };
+
         using UniformData = Std140::UBO<ProjectionMatrix, InvProjectionMatrix, ViewMatrix, PrevViewMatrix,
             InvViewMatrix, EyePos, EyeVec, FogColor, AmbientColor, SkyColor, SunColor, SunPos, SunVec, Resolution,
             RcpResolution, FogNear, FogFar, Near, Far, Fov, GameHour, SunVis, WaterHeight, IsWaterEnabled,
             SimulationTime, DeltaSimulationTime, FrameNumber, WindSpeed, WeatherTransition, WeatherID, NextWeatherID,
-            IsUnderwater, IsInterior, PointLightRadiusMultiplier, MgeFogStart, MgeFogEnd>;
+            IsUnderwater, IsInterior, PointLightRadiusMultiplier, MgeFogStart, MgeFogEnd, PrecipitationOcclusionMatrix,
+            PrecipitationOcclusion>;
 
         UniformData mData;
         bool mUseUBO;

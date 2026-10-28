@@ -58,6 +58,11 @@ namespace MWRender
 
         void setTextureBlended(osg::ref_ptr<osg::Texture> tex) { mTextureBlended = tex; }
 
+        void setTexturePrecipitationOcclusion(osg::ref_ptr<osg::Texture> tex)
+        {
+            mTexturePrecipitationOcclusion = std::move(tex);
+        }
+
         void setCalculateAvgLum(bool enabled) { mAvgLum = enabled; }
 
         void setPostProcessing(bool enabled) { mPostprocessing = enabled; }
@@ -98,6 +103,8 @@ namespace MWRender
         osg::ref_ptr<osg::Texture> mTextureDistortion;
         osg::ref_ptr<osg::Texture> mTextureOpaque;
         osg::ref_ptr<osg::Texture> mTextureBlended;
+        osg::ref_ptr<osg::Texture> mTexturePrecipitationOcclusion;
+        osg::ref_ptr<osg::Texture2D> mDummyOcclusion;
 
         mutable bool mDirty = false;
         mutable std::vector<Fx::Types::RenderTarget> mDirtyAttachments;

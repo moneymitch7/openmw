@@ -1,5 +1,6 @@
 #include "precipitationocclusion.hpp"
 
+#include <algorithm>
 #include <cassert>
 
 #include <osgUtil/CullVisitor>
@@ -90,7 +91,8 @@ namespace MWRender
         , mRootNode(rootNode)
         , mSceneCamera(camera)
     {
-        constexpr int rttSize = 256;
+        // OpenMGE XE: a wider area (weather particle occlusion range) gets twice the resolution
+        const int rttSize = Settings::shaders().mWeatherParticleOcclusionRange > 0.f ? 512 : 256;
 
         mDepthTexture = new osg::Texture2D;
         mDepthTexture->setTextureSize(rttSize, rttSize);
@@ -153,6 +155,7 @@ namespace MWRender
 
     void PrecipitationOccluder::enable()
     {
+        mEnabled = true;
         mSkyCullCallback = new PrecipitationOcclusionUpdater(mDepthTexture);
         mSkyNode->addCullCallback(mSkyCullCallback);
         mCamera->setCullCallback(new DepthCameraUpdater);
@@ -163,6 +166,7 @@ namespace MWRender
 
     void PrecipitationOccluder::disable()
     {
+        mEnabled = false;
         mSkyNode->removeCullCallback(mSkyCullCallback);
         mCamera->setCullCallback(nullptr);
         mSkyCullCallback = nullptr;
@@ -178,5 +182,9 @@ namespace MWRender
         assert(range.z() != 0);
         const osg::Vec3f margin = { -50, -50, 0 };
         mRange = range - margin;
+        // OpenMGE XE: at least [Shaders] weather particle occlusion range wide, for post-processing rain
+        const float minRange = Settings::shaders().mWeatherParticleOcclusionRange;
+        mRange->x() = std::max(mRange->x(), minRange);
+        mRange->y() = std::max(mRange->y(), minRange);
     }
 }

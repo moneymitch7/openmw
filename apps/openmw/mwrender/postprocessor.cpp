@@ -339,6 +339,7 @@ namespace MWRender
         // refraction. Lets a shader that replaces the sky put smoke, rain or glass in front of it back on top.
         mCanvases[frameId]->setTextureOpaque(getTexture(Tex_OpaqueColor, frameId));
         mCanvases[frameId]->setTextureBlended(getTexture(Tex_BlendedColor, frameId));
+        mCanvases[frameId]->setTexturePrecipitationOcclusion(mPrecipitationOcclusionTexture);
 
         mTransparentDepthPostPass->mFbo[frameId] = mFbos[frameId][FBO_Primary];
         mTransparentDepthPostPass->mMsaaFbo[frameId] = mFbos[frameId][FBO_Multisample];
@@ -659,6 +660,8 @@ namespace MWRender
             node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerDistortion", Unit_Distortion));
             node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerOpaque", Unit_Opaque));
             node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerBlended", Unit_Blended));
+            node.mRootStateSet->addUniform(
+                new osg::Uniform("omw_SamplerPrecipitationOcclusion", Unit_PrecipitationOcclusion));
 
             if (mNormals)
                 node.mRootStateSet->addUniform(new osg::Uniform("omw_SamplerNormals", Unit_Normals));
