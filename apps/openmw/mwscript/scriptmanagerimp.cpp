@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <exception>
 #include <sstream>
 
@@ -86,11 +87,29 @@ namespace MWScript
 
     bool ScriptManager::run(const ESM::RefId& name, Interpreter::Context& interpreterContext)
     {
+        // OpenMGE XE: a script (mwscript) that takes long in one run is named in the log, as slow Lua calls are: a
+        // 'script' time in a slow frame is otherwise anonymous. Compiling one the first time it runs counts too.
+        const auto start = std::chrono::steady_clock::now();
+        bool compiled = false;
+        const auto logIfSlow = [&] {
+            const double ms
+                = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            if (ms >= 5.0)
+            {
+                const ESM::RefId target = interpreterContext.getTarget();
+                Log(Debug::Info) << "Slow script: " << name
+                                 << (target.empty() ? std::string(" (global)") : " on " + target.toDebugString())
+                                 << " took " << static_cast<int>(ms) << " ms"
+                                 << (compiled ? ", compiling it first" : "");
+            }
+        };
+
         // compile script
         auto iter = mScripts.find(name);
 
         if (iter == mScripts.end())
         {
+            compiled = true;
             if (!compile(name))
             {
                 // failed -> ignore script from now on.
@@ -110,6 +129,7 @@ namespace MWScript
             try
             {
                 mInterpreter.run(iter->second.mProgram, interpreterContext);
+                logIfSlow();
                 return true;
             }
             catch (const MissingImplicitRefError& e)
