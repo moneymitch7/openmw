@@ -260,12 +260,21 @@ class VDSMCameraCullCallback : public osg::NodeCallback
         osg::RefMatrix* getProjectionMatrix() { return _projectionMatrix.get(); }
         osgUtil::RenderStage* getRenderStage() { return _renderStage.get(); }
 
+        // OpenMGE XE [Shadows] static shadow cache: drawn first, before every caster (the static map's depth)
+        void setPreDraw(osg::Drawable* drawable, osg::StateSet* stateSet)
+        {
+            _preDraw = drawable;
+            _preDrawStateSet = stateSet;
+        }
+
     protected:
 
         MWShadowTechnique*                      _vdsm;
         osg::ref_ptr<osg::RefMatrix>            _projectionMatrix;
         osg::ref_ptr<osgUtil::RenderStage>      _renderStage;
         osg::Polytope                           _polytope;
+        osg::ref_ptr<osg::Drawable>             _preDraw;
+        osg::ref_ptr<osg::StateSet>             _preDrawStateSet;
 };
 
 VDSMCameraCullCallback::VDSMCameraCullCallback(MWShadowTechnique* vdsm, osg::Polytope& polytope):
@@ -292,6 +301,13 @@ void VDSMCameraCullCallback::operator()(osg::Node* node, osg::NodeVisitor* nv)
         cv->pushCullingSet();
     }
 #endif
+    if (_preDraw)
+    {
+        cv->pushStateSet(_preDrawStateSet.get());
+        cv->addDrawable(_preDraw.get(), cv->getModelViewMatrix());
+        cv->popStateSet();
+    }
+
     // bin has to go inside camera cull or the rendertexture stage will override it
     cv->pushStateSet(_vdsm->getOrCreateShadowsBinStateSet());
     if (_vdsm->getShadowedScene())
@@ -658,6 +674,113 @@ void MWShadowTechnique::ShadowData::releaseGLObjects(osg::State* state) const
     OSG_INFO<<"MWShadowTechnique::ShadowData::releaseGLObjects"<<std::endl;
     _texture->releaseGLObjects(state);
     _camera->releaseGLObjects(state);
+    if (_staticCamera)
+    {
+        _staticTexture->releaseGLObjects(state);
+        _staticCamera->releaseGLObjects(state);
+        _staticFbo->releaseGLObjects(state);
+    }
+}
+
+namespace
+{
+#ifndef GL_DRAW_FRAMEBUFFER_BINDING
+#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
+#endif
+
+    // OpenMGE XE [Shadows] static shadow cache: copies the static map's depth into the cascade's map, whose frame
+    // buffer is bound when this draws (first in its stage), before what moves is drawn on top
+    class StaticDepthBlit : public osg::Drawable
+    {
+    public:
+        StaticDepthBlit() = default;
+
+        StaticDepthBlit(osg::FrameBufferObject* fbo, osg::Texture2D* texture)
+            : mFbo(fbo)
+            , mTexture(texture)
+        {
+            setUseDisplayList(false);
+            setUseVertexBufferObjects(false);
+            setCullingActive(false);
+            setDataVariance(osg::Object::DYNAMIC);
+        }
+
+        StaticDepthBlit(const StaticDepthBlit& copy, const osg::CopyOp& copyop = osg::CopyOp::SHALLOW_COPY)
+            : osg::Drawable(copy, copyop)
+            , mFbo(copy.mFbo)
+            , mTexture(copy.mTexture)
+        {
+        }
+
+        META_Object(SceneUtil, StaticDepthBlit)
+
+        osg::BoundingBox computeBoundingBox() const override
+        {
+            return osg::BoundingBox(osg::Vec3(-1.f, -1.f, -1.f), osg::Vec3(1.f, 1.f, 1.f));
+        }
+
+        void drawImplementation(osg::RenderInfo& renderInfo) const override
+        {
+            osg::State& state = *renderInfo.getState();
+            osg::GLExtensions* ext = state.get<osg::GLExtensions>();
+            if (!mFbo || !mTexture || ext == nullptr || !ext->isFrameBufferObjectSupported
+                || ext->glBlitFramebuffer == nullptr)
+                return;
+            GLint drawFbo = 0;
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
+            mFbo->apply(state, osg::FrameBufferObject::READ_FRAMEBUFFER);
+            glReadBuffer(GL_NONE);
+            const int width = mTexture->getTextureWidth();
+            const int height = mTexture->getTextureHeight();
+            ext->glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+            ext->glBindFramebuffer(GL_READ_FRAMEBUFFER_EXT, static_cast<GLuint>(drawFbo));
+        }
+
+    private:
+        osg::ref_ptr<osg::FrameBufferObject> mFbo;
+        osg::ref_ptr<osg::Texture2D> mTexture;
+    };
+}
+
+void MWShadowTechnique::ShadowData::setUpStaticCache()
+{
+    if (_staticCamera)
+        return;
+
+    const osg::Vec2s textureSize(_texture->getTextureWidth(), _texture->getTextureHeight());
+
+    _staticTexture = new osg::Texture2D;
+    _staticTexture->setTextureSize(textureSize.x(), textureSize.y());
+    // the same format as the cascade's own map, which a depth copy needs
+    _staticTexture->setInternalFormat(_texture->getInternalFormat());
+    _staticTexture->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+    _staticTexture->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+    _staticTexture->setWrap(osg::Texture2D::WRAP_S, osg::Texture2D::CLAMP_TO_EDGE);
+    _staticTexture->setWrap(osg::Texture2D::WRAP_T, osg::Texture2D::CLAMP_TO_EDGE);
+
+    _staticCamera = new osg::Camera;
+    // the name the terrain and the casters' callbacks know a shadow camera by
+    _staticCamera->setName("ShadowCamera");
+    _staticCamera->setReferenceFrame(osg::Camera::ABSOLUTE_RF_INHERIT_VIEWPOINT);
+#ifndef __APPLE__
+    _staticCamera->setImplicitBufferAttachmentMask(0, 0);
+#endif
+    _staticCamera->setClearColor(osg::Vec4(0.0f, 0.0f, 0.0f, 0.0f));
+    _staticCamera->setComputeNearFarMode(osg::Camera::DO_NOT_COMPUTE_NEAR_FAR);
+    _staticCamera->setCullingMode(_staticCamera->getCullingMode() & ~osg::CullSettings::SMALL_FEATURE_CULLING);
+    _staticCamera->setViewport(0, 0, textureSize.x(), textureSize.y());
+    _staticCamera->setClearMask(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+    // drawn before the cascade's own camera, which copies it
+    _staticCamera->setRenderOrder(osg::Camera::PRE_RENDER, -1);
+    _staticCamera->setRenderTargetImplementation(osg::Camera::FRAME_BUFFER_OBJECT);
+    _staticCamera->attach(osg::Camera::DEPTH_BUFFER, _staticTexture.get());
+
+    _staticFbo = new osg::FrameBufferObject;
+    _staticFbo->setAttachment(osg::Camera::DEPTH_BUFFER, osg::FrameBufferAttachment(_staticTexture.get()));
+
+    _staticBlit = new StaticDepthBlit(_staticFbo.get(), _staticTexture.get());
+    _cacheValid = false;
+    _staticValid = false;
 }
 
 void MWShadowTechnique::ShadowData::updateTextureSize()
@@ -673,6 +796,19 @@ void MWShadowTechnique::ShadowData::updateTextureSize()
     _camera->dirtyAttachmentMap();
 
     _camera->setViewport(0, 0, textureSize.x(), textureSize.y());
+
+    if (_staticCamera)
+    {
+        _staticTexture->setTextureSize(textureSize.x(), textureSize.y());
+        _staticTexture->dirtyTextureObject();
+        _staticCamera->dirtyAttachmentMap();
+        _staticCamera->setViewport(0, 0, textureSize.x(), textureSize.y());
+        _staticFbo = new osg::FrameBufferObject;
+        _staticFbo->setAttachment(osg::Camera::DEPTH_BUFFER, osg::FrameBufferAttachment(_staticTexture.get()));
+        _staticBlit = new StaticDepthBlit(_staticFbo.get(), _staticTexture.get());
+        _cacheValid = false;
+        _staticValid = false;
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -1597,6 +1733,9 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 #endif
 
         const bool debug = settings->getDebugDraw();
+        // OpenMGE XE [Shadows] static shadow cache
+        const bool staticCache = _staticShadowCache && stableSplits && !debug && _staticCasterMask != 0
+            && settings->getMultipleShadowMapHint() == ShadowSettings::CASCADED;
 
         // 4. For each light/shadow map
         for (unsigned int sm_i=0; sm_i<numShadowMapsPerLight; ++sm_i)
@@ -1625,7 +1764,7 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             // still lines up (only where it is is worked out again). Drawn anyway when the sun's direction changed,
             // the camera moved a twentieth of the cascade's size, it is a quarter of a second old, or the part of the
             // view it is for no longer lies inside the map (the camera turned).
-            if (_stableShadows && _cascadeUpdateInterval > 1 && sm_i > 0 && sd->_rendered && !debug
+            if (_stableShadows && _cascadeUpdateInterval > 1 && !staticCache && sm_i > 0 && sd->_rendered && !debug
                 && sd->_sm_i == sm_i && camera->getProjectionMatrix()(0, 0) > 0.0 && stableSplits
                 && frustum.corners.size() == 8 && numShadowMapsPerLight > 1)
             {
@@ -1704,7 +1843,7 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             // OpenMGE XE [Shadows] cascade update interval: a cascade that may be kept for later frames gets every
             // caster over its whole square, not only those that shadow what is in view now; once the camera turns,
             // the part of the kept map that comes into view has its shadows too. (Its square bounds it below.)
-            const bool keepable = _stableShadows && _cascadeUpdateInterval > 1 && sm_i > 0 && stableSplits
+            const bool keepable = _stableShadows && _cascadeUpdateInterval > 1 && !staticCache && sm_i > 0 && stableSplits
                 && numShadowMapsPerLight > 1 && settings->getMultipleShadowMapHint() == ShadowSettings::CASCADED;
             osg::Polytope local_polytope(keepable ? osg::Polytope() : polytope);
             local_polytope.transformProvidingInverse(invertModelView);
@@ -1823,9 +1962,26 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
             {
                 if (_diagnosticsOut)
                     *_diagnosticsOut << "\n    cascade " << sm_i << ": view " << cascaseNear << "-" << cascadeFar;
-                if (!cropShadowCameraToMainFrustum(frustum, camera, cascaseNear, cascadeFar, extraPlanes)
-                    && _diagnosticsOut)
+                if (staticCache)
+                {
+                    sd->setUpStaticCache();
+                    if (sd->_cacheSmI != sm_i)
+                    {
+                        sd->_cacheValid = false;
+                        sd->_cacheSmI = sm_i;
+                    }
+                    _cropShadowData = sd.get();
+                }
+                const bool fitted = cropShadowCameraToMainFrustum(frustum, camera, cascaseNear, cascadeFar, extraPlanes);
+                _cropShadowData = nullptr;
+                if (!fitted && _diagnosticsOut)
                     *_diagnosticsOut << ", NOT FITTED (nothing of the view in it)";
+                if (staticCache)
+                {
+                    // the camera may have been given the held light view: the light's volume over again in it
+                    local_polytope = polytope;
+                    local_polytope.transformProvidingInverse(osg::Matrixd::inverse(camera->getViewMatrix()));
+                }
                 for (const auto& plane : extraPlanes)
                     local_polytope.getPlaneList().push_back(plane);
                 local_polytope.setupMask();
@@ -1841,12 +1997,56 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 
             cv.pushStateSet(_shadowCastingStateSet.get());
 
+            // OpenMGE XE [Shadows] static shadow cache: terrain and statics into the held map when it has to be
+            // drawn again (the cascade moved or turned, or a second has passed, staggered between the cascades, for
+            // what changed meanwhile: cells loading, doors, animated statics); every caster in the whole square, as
+            // the view will turn over it while it is kept. Then the cascade itself: the held map's depth copied in,
+            // and only what moves (actors, the player, objects) drawn over it.
+            bool staticDrawn = false;
+            if (staticCache && sd->_staticCamera && sd->_cacheValid)
+            {
+                if (!sd->_staticValid || cascadeTime - sd->_staticTime > 1.0 + 0.15 * sm_i)
+                {
+                    osg::Camera* staticCamera = sd->_staticCamera.get();
+                    staticCamera->setViewMatrix(camera->getViewMatrix());
+                    staticCamera->setProjectionMatrix(camera->getProjectionMatrix());
+                    staticCamera->setCullingMode(camera->getCullingMode());
+                    osg::Polytope squarePolytope;
+                    for (const auto& plane : extraPlanes)
+                        squarePolytope.add(plane);
+                    squarePolytope.setupMask();
+                    osg::ref_ptr<VDSMCameraCullCallback> staticCallback
+                        = new VDSMCameraCullCallback(this, squarePolytope);
+                    staticCamera->setCullCallback(staticCallback.get());
+                    {
+                        const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
+                        cullShadowCastingScene(&cv, staticCamera, ~_dynamicCasterMask);
+                    }
+                    sd->_staticValid = true;
+                    sd->_staticTime = cascadeTime;
+                    staticDrawn = true;
+                    if (_diagnosticsOut)
+                        *_diagnosticsOut << ", static map drawn ("
+                                         << countRenderLeaves(staticCallback->getRenderStage()) << " things)";
+                }
+                if (!_staticBlitStateSet)
+                {
+                    _staticBlitStateSet = new osg::StateSet;
+                    _staticBlitStateSet->setRenderBinDetails(-1000, "RenderBin");
+                    _staticBlitStateSet->setMode(GL_SCISSOR_TEST, osg::StateAttribute::OFF);
+                }
+                vdsmCallback->setPreDraw(sd->_staticBlit.get(), _staticBlitStateSet.get());
+                const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
+                cullShadowCastingScene(&cv, camera.get(), ~_staticCasterMask);
+            }
+            else
             {
                 const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
                 cullShadowCastingScene(&cv, camera.get());
             }
             if (_diagnosticsOut)
-                *_diagnosticsOut << ", " << countRenderLeaves(vdsmCallback->getRenderStage()) << " things drawn";
+                *_diagnosticsOut << ", " << countRenderLeaves(vdsmCallback->getRenderStage()) << " things drawn"
+                                 << (staticCache && !staticDrawn ? " over the kept static map" : "");
 
             cv.popStateSet();
 
@@ -3079,6 +3279,63 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
         // the near and far distances follow the scene a little: the size only in steps of 1/16 (as good as fixed)
         radius = std::exp2(std::ceil(std::log2(radius) * 16.0) / 16.0);
 
+        // OpenMGE XE [Shadows] static shadow cache: the cascade is held still, so that the map of what doesn't move
+        // can be kept. Its square is wider than the slice's sphere by half of a step it moves in, a quarter of its
+        // width (texel aligned), and it moves only once the sphere would leave it. The depth range is the square's
+        // own size about a held centre too, not the slice's, which would change with every turn of the camera.
+        // Held while the light's view turns less than about a twelfth of a degree (the sun moves, glides, steps).
+        if (_staticShadowCache && _cropShadowData != nullptr)
+        {
+            ShadowData& sd = *_cropShadowData;
+            const double halfWidth = radius * 8.0 / 7.0;
+            const double step = halfWidth / 4.0;
+            const double margin = halfWidth - radius;
+            bool hold = sd._cacheValid && sd._cacheRadius == radius;
+            if (hold)
+            {
+                for (int row = 0; row < 3 && hold; ++row)
+                    for (int column = 0; column < 3 && hold; ++column)
+                        hold = std::abs(light_v(row, column) - sd._cacheView(row, column)) < 1.5e-3;
+            }
+            if (hold)
+            {
+                const osg::Vec3d held = centre * sd._cacheView;
+                hold = std::abs(held.x() - sd._cacheCentre.x()) <= margin
+                    && std::abs(held.y() - sd._cacheCentre.y()) <= margin
+                    && std::abs(held.z() - sd._cacheCentre.z()) <= margin;
+            }
+            if (!hold)
+            {
+                const osg::Vec3d centreView = centre * light_v;
+                const osg::Vec3d originView = osg::Vec3d(0.0, 0.0, 0.0) * light_v;
+                osg::Vec3d snapped;
+                for (int i = 0; i < 3; ++i)
+                    snapped[i] = originView[i] + std::round((centreView[i] - originView[i]) / step) * step;
+                sd._cacheView = light_v;
+                sd._cacheCentre = snapped;
+                sd._cacheRadius = radius;
+                sd._cacheHalfWidth = halfWidth;
+                sd._cacheProjection.makeOrtho(snapped.x() - halfWidth, snapped.x() + halfWidth,
+                    snapped.y() - halfWidth, snapped.y() + halfWidth, -(snapped.z() + halfWidth),
+                    -(snapped.z() - halfWidth));
+                sd._cacheValid = true;
+                sd._staticValid = false;
+            }
+            camera->setViewMatrix(sd._cacheView);
+            camera->setProjectionMatrix(sd._cacheProjection);
+            const osg::Vec3d& c = sd._cacheCentre;
+            const double h = sd._cacheHalfWidth;
+            if (_diagnosticsOut)
+                *_diagnosticsOut << ", held square at (" << c.x() << ", " << c.y() << ") half-width " << h
+                                 << (hold ? "" : " (moved)");
+            planeList.emplace_back(0.0, -1.0, 0.0, c.y() + h);
+            planeList.emplace_back(0.0, 1.0, 0.0, -(c.y() - h));
+            planeList.emplace_back(-1.0, 0.0, 0.0, c.x() + h);
+            planeList.emplace_back(1.0, 0.0, 0.0, -(c.x() - h));
+            planeList.emplace_back(0.0, 0.0, 1.0, -(c.z() - h));
+            return true;
+        }
+
         // in the light's view space; snapped relative to where the world's origin is in it, as the light's view
         // follows the camera
         const osg::Vec3d centreLight = centre * light_v;
@@ -3660,6 +3917,15 @@ void MWShadowTechnique::cullShadowCastingScene(osgUtil::CullVisitor* cv, osg::Ca
     cv->setTraversalMask( traversalMask );
 
     return;
+}
+
+void MWShadowTechnique::cullShadowCastingScene(osgUtil::CullVisitor* cv, osg::Camera* camera, unsigned int extraMask) const
+{
+    const unsigned int traversalMask = cv->getTraversalMask();
+    cv->setTraversalMask(traversalMask & _shadowedScene->getShadowSettings()->getCastsShadowTraversalMask() & extraMask);
+    if (camera)
+        camera->accept(*cv);
+    cv->setTraversalMask(traversalMask);
 }
 
 osg::StateSet* MWShadowTechnique::prepareStateSetForRenderingShadow(ViewDependentData& vdd, unsigned int traversalNumber) const

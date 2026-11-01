@@ -38,6 +38,8 @@ namespace SceneUtil
         void setupShadowSettings(const Settings::ShadowsCategory& settings, Shader::ShaderManager& shaderManager);
         void setOutdoorShadowCastingMask(unsigned int mask);
         void setIndoorShadowCastingMask(unsigned int mask);
+        /// OpenMGE XE [Shadows] static shadow cache: which casters never move, and which do
+        void setShadowCacheMasks(unsigned int staticMask, unsigned int dynamicMask);
 
         void setupShaders(Shader::ShaderManager& shaderManager) const;
 

@@ -66,6 +66,7 @@ namespace Settings
         SettingValue<int> mCascadeUpdateInterval{ mIndex, "Shadows", "cascade update interval",
             makeClampSanitizerInt(1, 4) };
         SettingValue<bool> mShadowDiagnostics{ mIndex, "Shadows", "shadow diagnostics" };
+        SettingValue<bool> mStaticShadowCache{ mIndex, "Shadows", "static shadow cache" };
     };
 }
 

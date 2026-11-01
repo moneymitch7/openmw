@@ -94,6 +94,7 @@ namespace SceneUtil
         mShadowTechnique->setSunDirectionGlide(settings.mShadowSunDirectionGlide);
         mShadowTechnique->setCascadeUpdateInterval(static_cast<unsigned int>(settings.mCascadeUpdateInterval.get()));
         mShadowTechnique->setDiagnostics(settings.mShadowDiagnostics);
+        mShadowTechnique->setStaticShadowCache(settings.mStaticShadowCache && settings.mStableShadows);
 
         if (mEnableShadows && settings.mEnableDebugHud)
             mShadowTechnique->enableDebugHUD();
@@ -104,6 +105,11 @@ namespace SceneUtil
     void ShadowManager::setOutdoorShadowCastingMask(unsigned int mask)
     {
         mOutdoorShadowCastingMask = mask;
+    }
+
+    void ShadowManager::setShadowCacheMasks(unsigned int staticMask, unsigned int dynamicMask)
+    {
+        mShadowTechnique->setShadowCacheMasks(staticMask, dynamicMask);
     }
 
     void ShadowManager::setIndoorShadowCastingMask(unsigned int mask)

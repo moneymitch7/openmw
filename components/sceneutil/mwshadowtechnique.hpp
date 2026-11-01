@@ -27,6 +27,8 @@
 #include <string>
 
 #include <osg/Camera>
+#include <osg/FrameBufferObject>
+#include <osg/Texture2D>
 #include <osg/MatrixTransform>
 #include <osg/PolygonOffset>
 
@@ -225,6 +227,25 @@ namespace SceneUtil {
             osg::Vec3d                          _renderEye;
             osg::Vec3d                          _renderLightDir;
             osg::Vec3d                          _renderTrueLightDir;
+
+            // OpenMGE XE [Shadows] static shadow cache: what doesn't move (terrain and statics) is drawn into a map
+            // of its own only now and then, with the cascade's matrices held still meanwhile; each frame that map's
+            // depth is copied into the cascade and only what moves is drawn on top.
+            void setUpStaticCache();
+
+            osg::ref_ptr<osg::Texture2D>        _staticTexture;
+            osg::ref_ptr<osg::Camera>           _staticCamera;
+            osg::ref_ptr<osg::FrameBufferObject> _staticFbo;
+            osg::ref_ptr<osg::Drawable>         _staticBlit;
+            bool                                _cacheValid = false; // the matrices below are held
+            bool                                _staticValid = false; // and the static map was drawn with them
+            double                              _staticTime = 0.0;
+            unsigned int                        _cacheSmI = ~0u;
+            osg::Matrixd                        _cacheView;
+            osg::Matrixd                        _cacheProjection;
+            double                              _cacheRadius = 0.0;
+            double                              _cacheHalfWidth = 0.0;
+            osg::Vec3d                          _cacheCentre; // in the held light view
         };
 
         typedef std::list< osg::ref_ptr<ShadowData> > ShadowDataList;
@@ -296,6 +317,8 @@ namespace SceneUtil {
         virtual void cullShadowReceivingScene(osgUtil::CullVisitor* cv) const;
 
         virtual void cullShadowCastingScene(osgUtil::CullVisitor* cv, osg::Camera* camera) const;
+        // OpenMGE XE: with only the casters whose node masks pass this as well
+        void cullShadowCastingScene(osgUtil::CullVisitor* cv, osg::Camera* camera, unsigned int extraMask) const;
 
         virtual osg::StateSet* prepareStateSetForRenderingShadow(ViewDependentData& vdd, unsigned int traversalNumber) const;
 
@@ -317,6 +340,14 @@ namespace SceneUtil {
         /// OpenMGE XE: once a second, the main view's shadow setup in the log (where each cascade is, what it covers
         /// and how many things it drew), to find out what is wrong with shadows where it can't be seen otherwise.
         void setDiagnostics(bool enabled) { _diagnostics = enabled; }
+        /// OpenMGE XE: with stable shadows, terrain and statics (the node masks given) are drawn into each cascade
+        /// only now and then, the cascade held still meanwhile; what moves is drawn every frame.
+        void setStaticShadowCache(bool enabled) { _staticShadowCache = enabled; }
+        void setShadowCacheMasks(unsigned int staticMask, unsigned int dynamicMask)
+        {
+            _staticCasterMask = staticMask;
+            _dynamicCasterMask = dynamicMask;
+        }
 
         osg::ref_ptr<osg::StateSet> getOrCreateShadowsBinStateSet();
 
@@ -370,6 +401,12 @@ namespace SceneUtil {
         double                                  _diagnosticsLastTime = -1.0;
         // filled by cropShadowCameraToMainFrustum while a diagnostics line is being put together
         std::ostringstream*                     _diagnosticsOut = nullptr;
+        bool                                    _staticShadowCache = false;
+        unsigned int                            _staticCasterMask = 0;
+        unsigned int                            _dynamicCasterMask = 0;
+        osg::ref_ptr<osg::StateSet>             _staticBlitStateSet;
+        // the cascade cropShadowCameraToMainFrustum fits, with the static shadow cache
+        ShadowData*                             _cropShadowData = nullptr;
 
         class DebugHUD final : public osg::Referenced
         {

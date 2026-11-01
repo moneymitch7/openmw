@@ -259,3 +259,16 @@ Shadows Settings
    view distances the shadow maps split, the sun's direction, and for each shadow map the part of the view it is for,
    where it is and how many things were drawn into it. For finding out what goes wrong with shadows in a particular
    place; leave it off otherwise.
+
+.. omw-setting::
+   :title: static shadow cache
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   With :ref:`stable shadows` only. Terrain and statics (buildings, rocks, trees) are drawn into each shadow map only
+   now and then: when the map has to move or the sun has turned a little, and once a second for what changed in the
+   scenery meanwhile (a cell loading in, an animated static). The maps are held still in between, and each frame only
+   what moves, people, creatures and objects (doors among them), is drawn over a copy of the kept one. Most of the
+   shadows' work on the CPU and the GPU goes. Each map moves in steps of a quarter of its width and is made a seventh
+   wider to allow for that, so shadows are very slightly softer.
