@@ -82,6 +82,8 @@ namespace Settings
             "actor collision shape type" };
         SettingValue<bool> mPlayerMovementIgnoresAnimation{ mIndex, "Game", "player movement ignores animation" };
         SettingValue<bool> mTerrainObstructsFocus{ mIndex, "Game", "terrain obstructs focus" };
+        SettingValue<int> mFocusUpdateInterval{ mIndex, "Game", "focus update interval",
+            makeClampSanitizerInt(1, 4) };
     };
 }
 

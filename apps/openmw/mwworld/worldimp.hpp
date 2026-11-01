@@ -126,6 +126,9 @@ namespace MWWorld
 
         float mDistanceToFocusObject;
         MWPhysics::RayCastingResult mFocusRay;
+        // OpenMGE XE [Game] focus update interval: the object last found under the crosshair, and frames since
+        ESM::RefNum mFocusRefNum;
+        unsigned int mFocusFramesSinceRay = 0;
 
         bool mTeleportEnabled;
         bool mLevitationEnabled;

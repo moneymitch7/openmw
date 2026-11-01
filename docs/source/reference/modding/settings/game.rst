@@ -570,3 +570,14 @@ Game Settings
 
    If enabled, focused object selection will account for terrain.
    The default behavior matches Morrowind, allowing objects partially or totally submerged in terrain to gain focus.
+
+.. omw-setting::
+   :title: focus update interval
+   :type: int
+   :range: 1 to 4
+   :default: 1
+
+   How often, in frames, the game casts the ray that finds what is under the crosshair for its name and tooltip,
+   about half a millisecond of the main thread each time in a busy place. In between, the object last found keeps
+   its label, which still follows it on screen. 2 or 3 is not noticeable: activating, picking a lock, casting at a
+   target and Lua's own requests always cast a fresh ray. In menus, where the pointer picks, it looks every frame.

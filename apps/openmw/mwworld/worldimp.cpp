@@ -1704,7 +1704,26 @@ namespace MWWorld
             };
 
             // inform the GUI about focused object
-            MWWorld::Ptr object = getFocusObject();
+            // OpenMGE XE [Game] focus update interval: the ray only every few frames outside menus; in between the
+            // object found last time keeps its label (looked up again by its RefNum, so one deleted or unloaded
+            // since drops out rather than dangling)
+            MWWorld::Ptr object;
+            const unsigned int interval = static_cast<unsigned int>(Settings::game().mFocusUpdateInterval.get());
+            const bool castRay = interval <= 1 || ++mFocusFramesSinceRay >= interval
+                || MWBase::Environment::get().getWindowManager()->isGuiMode();
+            if (castRay)
+            {
+                mFocusFramesSinceRay = 0;
+                object = getFocusObject();
+                mFocusRefNum = object.isEmpty() ? ESM::RefNum() : object.getCellRef().getRefNum();
+            }
+            else if (mFocusRefNum.isSet())
+            {
+                object = mWorldModel.getPtr(mFocusRefNum);
+                if (!object.isEmpty()
+                    && (!object.getRefData().isEnabled() || object.mRef->isDeleted() || !object.isInCell()))
+                    object = MWWorld::Ptr();
+            }
             const double rayMs = msSince(start);
 
             // retrieve the object's top point's screen position so we know where to place the floating label
