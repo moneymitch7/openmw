@@ -11,6 +11,9 @@
     @foreach shadow_texture_unit_index @shadow_texture_unit_list
         uniform sampler2DShadow shadowTexture@shadow_texture_unit_index;
         varying vec4 shadowSpaceCoords@shadow_texture_unit_index;
+        // OpenMGE XE: the part of the map this cascade's shadows are taken from: (centre u, centre v, centre depth or
+        // below 0 for none, scale to its edge). (0.5, 0.5, -1, 2) is the whole map.
+        uniform vec4 shadowSelect@shadow_texture_unit_index;
 
 #if @perspectiveShadowMaps
         varying vec4 shadowRegionCoords@shadow_texture_unit_index;
@@ -131,7 +134,12 @@ float unshadowedLightRatio(float distance)
 #if @perspectiveShadowMaps
             vec3 shadowRegionXYZ = shadowRegionCoords@shadow_texture_unit_index.xyz / shadowRegionCoords@shadow_texture_unit_index.w;
 #endif
-            if (all(lessThan(shadowXYZ.xy, vec2(1.0, 1.0))) && all(greaterThan(shadowXYZ.xy, vec2(0.0, 0.0))))
+            vec4 select = shadowSelect@shadow_texture_unit_index;
+            vec3 selected = vec3((shadowXYZ.xy - select.xy) * select.w,
+                select.z < 0.0 ? 0.0 : (shadowXYZ.z - select.z) * select.w);
+            float selectedEdge = max(max(abs(selected.x), abs(selected.y)), abs(selected.z));
+            if (all(lessThan(shadowXYZ.xy, vec2(1.0, 1.0))) && all(greaterThan(shadowXYZ.xy, vec2(0.0, 0.0)))
+                && selectedEdge < 1.0)
             {
 #if @softShadows
                 float cascadeShadowing = getFilteredShadowing(shadowTexture@shadow_texture_unit_index,
@@ -139,9 +147,9 @@ float unshadowedLightRatio(float distance)
 #else
                 float cascadeShadowing = shadow2DProj(shadowTexture@shadow_texture_unit_index, shadowSpaceCoords@shadow_texture_unit_index).r;
 #endif
-                // 0 inside, rising to 1 by 5% from the square's edge (the filter's taps stay within the map)
-                vec2 edge = abs(shadowXYZ.xy * 2.0 - 1.0);
-                float handOver = smoothstep(0.78, 0.9, max(edge.x, edge.y));
+                // 0 inside, rising to 1 by 5% from the edge of the part of the map in use (the filter's taps stay
+                // within the map); with the static shadow cache that part is the slice's sphere, in all three axes
+                float handOver = smoothstep(0.78, 0.9, selectedEdge);
                 if (shadowXYZ.z >= 1.0 || shadowXYZ.z <= 0.0)
                     handOver = 1.0; // beyond this cascade's depth range: its sample means nothing
                 else

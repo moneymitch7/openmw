@@ -268,7 +268,8 @@ Shadows Settings
 
    With :ref:`stable shadows` only. Terrain and statics (buildings, rocks, trees) are drawn into each shadow map only
    now and then: when the map has to move or the sun has turned a little, and once a second for what changed in the
-   scenery meanwhile (a cell loading in, an animated static). The maps are held still in between, and each frame only
-   what moves, people, creatures and objects (doors among them), is drawn over a copy of the kept one. Most of the
+   scenery meanwhile (a cell loading in). The maps are held still in between, and each frame only what moves, people,
+   creatures, objects, doors and animated scenery such as banners, is drawn over a copy of the kept one. Most of the
    shadows' work on the CPU and the GPU goes. Each map moves in steps of a quarter of its width and is made a seventh
-   wider to allow for that, so shadows are very slightly softer.
+   wider to allow for that, so shadows are very slightly softer; where one map hands over to the next is still worked
+   out from the camera every frame, so the change of detail glides along rather than jumping with the map.

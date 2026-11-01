@@ -22,6 +22,7 @@
 #include "shadowcasterfilter.hpp"
 
 #include <osgShadow/ShadowedScene>
+#include <osg/ValueObject>
 #include <osg/CullFace>
 #include <osg/Geometry>
 #include <osg/io_utils>
@@ -2020,6 +2021,7 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                     staticCamera->setCullCallback(staticCallback.get());
                     {
                         const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
+                        const ShadowCasterFilter::StaticCachePassScope staticPass;
                         cullShadowCastingScene(&cv, staticCamera, ~_dynamicCasterMask);
                     }
                     sd->_staticValid = true;
@@ -3215,6 +3217,10 @@ struct RenderLeafBounds
 
 bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Camera* camera, double viewNear, double viewFar, std::vector<osg::Plane>& planeList)
 {
+    // OpenMGE XE: the part of the map this cascade's shadows are taken from, and blended out over the edge of (see
+    // shadowSelect in shadows_fragment.glsl): (centre u, centre v, centre depth or -1 for none, scale to the edge)
+    camera->setUserValue("shadowSelect", osg::Vec4f(0.5f, 0.5f, -1.f, 2.f));
+
     osg::Matrixd light_p = camera->getProjectionMatrix();
     osg::Matrixd light_v = camera->getViewMatrix();
     osg::Matrixd light_vp = light_v * light_p;
@@ -3325,6 +3331,16 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
             camera->setProjectionMatrix(sd._cacheProjection);
             const osg::Vec3d& c = sd._cacheCentre;
             const double h = sd._cacheHalfWidth;
+            // shadows are taken from the slice's own sphere, which glides with the camera inside the held map, not
+            // from the whole map, whose edges move in steps: the blend into the next cascade moves smoothly
+            {
+                const osg::Vec3d sphere = centre * sd._cacheView;
+                camera->setUserValue("shadowSelect",
+                    osg::Vec4f(static_cast<float>((sphere.x() - (c.x() - h)) / (2.0 * h)),
+                        static_cast<float>((sphere.y() - (c.y() - h)) / (2.0 * h)),
+                        static_cast<float>(((c.z() + h) - sphere.z()) / (2.0 * h)),
+                        static_cast<float>(2.0 * h / radius)));
+            }
             if (_diagnosticsOut)
                 *_diagnosticsOut << ", held square at (" << c.x() << ", " << c.y() << ") half-width " << h
                                  << (hold ? "" : " (moved)");
@@ -3860,6 +3876,26 @@ void MWShadowTechnique::assignShadowStateSettings(osgUtil::CullVisitor& cv, osg:
     }
 
     shadowSpaceUniform->set(shadowSpaceMatrix);
+
+    // OpenMGE XE: the part of the map the cascade's shadows are taken from (see cropShadowCameraToMainFrustum)
+    osg::Vec4f select(0.5f, 0.5f, -1.f, 2.f);
+    camera->getUserValue("shadowSelect", select);
+    const std::string selectName = "shadowSelect" + std::to_string(sm_i);
+    osg::ref_ptr<osg::Uniform> selectUniform;
+    for (const auto& uniform : uniforms)
+    {
+        if (uniform->getName() == selectName)
+        {
+            selectUniform = uniform;
+            break;
+        }
+    }
+    if (!selectUniform)
+    {
+        selectUniform = new osg::Uniform(osg::Uniform::FLOAT_VEC4, selectName);
+        uniforms.push_back(selectUniform);
+    }
+    selectUniform->set(select);
 }
 
 void SceneUtil::MWShadowTechnique::assignValidRegionSettings(osgUtil::CullVisitor & cv, osg::Camera* camera, unsigned int sm_i, Uniforms & uniforms)

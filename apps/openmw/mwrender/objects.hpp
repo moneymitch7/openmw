@@ -61,6 +61,11 @@ namespace MWRender
         /// @param allowLight If false, no lights will be created, and particles systems will be removed.
         void insertModel(const MWWorld::Ptr& ptr, const std::string& model, bool allowLight = true);
 
+        /// OpenMGE XE [Shadows] static shadow cache: scenery (statics, activators, doors, containers) that moves, a
+        /// door or anything animated, is drawn into the shadow maps every frame with the actors, not into the kept map.
+        /// Called once the class has given the object its node mask.
+        void markMovingScenery(const MWWorld::Ptr& ptr);
+
         void insertNPC(const MWWorld::Ptr& ptr);
         void insertCreature(const MWWorld::Ptr& ptr, const std::string& model, bool weaponsShields);
 

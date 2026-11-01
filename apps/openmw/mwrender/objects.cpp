@@ -3,6 +3,7 @@
 #include <osg/Group>
 
 #include <components/esm/defs.hpp>
+#include <components/esm3/loaddoor.hpp>
 #include <components/misc/resourcehelpers.hpp>
 #include <components/misc/strings/algorithm.hpp>
 #include <components/sceneutil/lampshadows.hpp>
@@ -81,6 +82,22 @@ namespace MWRender
         insert->setScale(scaleVec);
 
         ptr.getRefData().setBaseNode(std::move(insert));
+    }
+
+    void Objects::markMovingScenery(const MWWorld::Ptr& ptr)
+    {
+        osg::Group* node = ptr.getRefData().getBaseNode();
+        if (node == nullptr || (node->getNodeMask() & Mask_Static) == 0)
+            return;
+        const bool door = ptr.getType() == ESM::Door::sRecordId;
+        if (!door && node->getNumChildrenRequiringUpdateTraversal() == 0 && node->getUpdateCallback() == nullptr)
+            return;
+        // still scenery to everything else (reflections, occlusion); the object bit lets it into the shadow pass
+        // that draws what moves
+        node->setNodeMask(node->getNodeMask() | Mask_Object);
+        static const osg::ref_ptr<SceneUtil::ShadowCasterFilter::MovingSceneryCallback> movingSceneryCallback
+            = new SceneUtil::ShadowCasterFilter::MovingSceneryCallback;
+        node->addCullCallback(movingSceneryCallback);
     }
 
     void Objects::insertModel(const MWWorld::Ptr& ptr, const std::string& mesh, bool allowLight)

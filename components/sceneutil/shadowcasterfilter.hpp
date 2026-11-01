@@ -21,6 +21,9 @@ namespace SceneUtil::ShadowCasterFilter
         osg::Vec3f mEye;
         /// Objects whose bounding radius is below this fraction of their distance from the eye are left out.
         float mMinSizeRatio = 0.f;
+        /// [Shadows] static shadow cache: the kept map of what doesn't move is being culled; scenery that moves
+        /// (animated, or a door) is left out of it, to be drawn every frame with the actors instead.
+        bool mStaticCachePass = false;
     };
 
     namespace Detail
@@ -66,6 +69,29 @@ namespace SceneUtil::ShadowCasterFilter
                         return false;
                 }
             }
+            return traverse(object, data);
+        }
+    };
+
+    /// Marks the static cache pass while the kept map of what doesn't move is culled.
+    class StaticCachePassScope
+    {
+    public:
+        StaticCachePassScope() { Detail::sState.mStaticCachePass = true; }
+        ~StaticCachePassScope() { Detail::sState.mStaticCachePass = false; }
+        StaticCachePassScope(const StaticCachePassScope&) = delete;
+        StaticCachePassScope& operator=(const StaticCachePassScope&) = delete;
+    };
+
+    /// Cull callback for scenery that moves (a banner in the wind, a door): it stays out of the static shadow cache's
+    /// kept map, and its node mask lets it into the pass that draws what moves every frame.
+    class MovingSceneryCallback : public osg::Callback
+    {
+    public:
+        bool run(osg::Object* object, osg::Object* data) override
+        {
+            if (current().mStaticCachePass)
+                return false;
             return traverse(object, data);
         }
     };

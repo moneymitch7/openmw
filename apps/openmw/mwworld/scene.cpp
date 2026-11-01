@@ -206,6 +206,7 @@ namespace
         if (!refnum.hasContentFile() || !std::binary_search(pagedRefs.begin(), pagedRefs.end(), refnum))
         {
             ptr.getClass().insertObjectRendering(ptr, model, rendering);
+            rendering.getObjects().markMovingScenery(ptr);
             labelUnmergedObject(ptr);
         }
         else
@@ -411,6 +412,7 @@ namespace MWWorld
             if (!ptr.getRefData().getBaseNode())
                 return;
             ptr.getClass().insertObjectRendering(ptr, getModel(ptr), mRendering);
+            mRendering.getObjects().markMovingScenery(ptr);
             labelUnmergedObject(ptr, "moved or changed in game");
             setNodeRotation(ptr, mRendering, makeNodeRotation(ptr, RotationOrder::direct));
             reloadTerrain();
