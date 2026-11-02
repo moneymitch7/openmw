@@ -83,6 +83,15 @@ namespace MWRender
         void noteCell(CellOcclusionCallback* callback);
         void noteChunk(osg::Node* chunk);
 
+        /// OpenMGE XE: while another view (the water reflection) culls, the callbacks don't report themselves: the
+        /// lists stay the main view's.
+        void setCollecting(bool collecting) { mCollecting = collecting; }
+
+        /// OpenMGE XE: the water reflection's pre-pass: the main view's most recent sources, nearest-first from the
+        /// reflection's eye, only those whose node mask the reflection draws (traversalMask). Leaves the lists alone.
+        void rasterizeForOtherView(SceneUtil::OcclusionCuller& culler, const osg::Vec3f& eye,
+            const OccluderRules& rules, const osg::Node* sceneRoot, unsigned int traversalMask);
+
         /// Start of the main view's occlusion frame: draw last frame's sources nearest-first, then start collecting
         /// this frame's. Cells no longer attached under sceneRoot (unloaded since) are skipped, and so are cell
         /// objects that were not children of their cell last frame: a removed object never occludes.
@@ -107,6 +116,10 @@ namespace MWRender
         // the sources of the frame being culled, and the previous frame's
         std::vector<osg::observer_ptr<CellOcclusionCallback>> mNextCells;
         std::vector<osg::observer_ptr<osg::Node>> mNextChunks;
+        bool mCollecting = true;
+
+        void rasterizeCandidates(SceneUtil::OcclusionCuller& culler, const osg::Vec3f& eye,
+            const OccluderRules& rules);
     };
 }
 
@@ -142,7 +155,8 @@ namespace MWRender
     public:
         SceneOcclusionCallback(SceneUtil::OcclusionCuller* culler, Terrain::TerrainOccluder* occluder, int radiusCells,
             bool enableTerrainOccluder, bool enableDebugOverlay, bool enableDebugMessages, bool enableInteriors,
-            OccluderRegistry* registry, const OccluderRules& rules, bool enableStaticOccluders);
+            OccluderRegistry* registry, const OccluderRules& rules, bool enableStaticOccluders,
+            bool enableReflections = false);
 
         void operator()(osg::Node* node, osgUtil::CullVisitor* cv);
 
@@ -166,6 +180,12 @@ namespace MWRender
         bool mIsInterior = false;
         bool mIsQuasiExterior = false;
         unsigned int mLastFrameNumber = 0;
+        // OpenMGE XE: occlusion culling in the water reflection too
+        bool mEnableReflections = false;
+        unsigned int mLastReflectionFrameNumber = 0;
+
+        /// The water reflection's occlusion frame, around its traversal of the scene.
+        void cullReflection(osg::Node* node, osgUtil::CullVisitor* cv);
 
         // Scratch buffers reused across frames
         std::vector<osg::Vec3f> mPositions;
@@ -214,8 +234,10 @@ namespace MWRender
 
         void operator()(osg::Group* node, osgUtil::CullVisitor* cv);
 
-        /// The cached occluder meshes of the cell's static occluders, for the nearest-first pre-pass.
-        void collectOccluders(const osg::Vec3f& eye, std::vector<OccluderRegistry::Candidate>& out) const;
+        /// The cached occluder meshes of the cell's static occluders, for the nearest-first pre-pass; only of
+        /// objects whose node mask is in traversalMask.
+        void collectOccluders(const osg::Vec3f& eye, std::vector<OccluderRegistry::Candidate>& out,
+            unsigned int traversalMask = ~0u) const;
 
         /// The cell node this callback last culled.
         osg::Node* getCellNode() const { return mCellNode.get(); }

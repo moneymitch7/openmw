@@ -29,9 +29,11 @@ namespace SceneUtil
             MaskedOcclusionCulling::Destroy(mMOC);
     }
 
-    void OcclusionCuller::beginFrame(const osg::Matrixd& viewMatrix, const osg::Matrixd& projectionMatrix)
+    void OcclusionCuller::beginFrame(
+        const osg::Matrixd& viewMatrix, const osg::Matrixd& projectionMatrix, bool resetStats)
     {
         mFrameActive = false;
+        mClipBelow = false;
         if (!mMOC)
             return;
 
@@ -42,21 +44,100 @@ namespace SceneUtil
         for (int i = 0; i < 16; ++i)
             mVPFloat[i] = static_cast<float>(vpDouble[i]);
 
-        mNumOccluded = 0;
-        mNumTested = 0;
+        if (resetStats)
+        {
+            mNumOccluded = 0;
+            mNumTested = 0;
+            mMeshBuildsThisFrame = 0;
+            mMeshBuildSeconds = 0.0;
+        }
+        // per view: the triangle budget is counted with these
         mNumBuildingOccluders = 0;
         mNumBuildingTris = 0;
         mNumBuildingVerts = 0;
-        mMeshBuildsThisFrame = 0;
-        mMeshBuildSeconds = 0.0;
         mFrameActive = true;
     }
 
-    void OcclusionCuller::rasterizeOccluder(
-        const std::vector<osg::Vec3f>& worldPositions, const std::vector<unsigned int>& indices)
+    namespace
     {
-        if (!mFrameActive || worldPositions.empty() || indices.empty())
+        /// Appends the part of triangle (a, b, c) at or above height z, as 0, 1 or 2 triangles.
+        void clipTriangleBelow(const osg::Vec3f& a, const osg::Vec3f& b, const osg::Vec3f& c, float z,
+            std::vector<osg::Vec3f>& positions, std::vector<unsigned int>& indices)
+        {
+            const osg::Vec3f in[3] = { a, b, c };
+            osg::Vec3f out[4];
+            int numOut = 0;
+            for (int i = 0; i < 3; ++i)
+            {
+                const osg::Vec3f& p = in[i];
+                const osg::Vec3f& q = in[(i + 1) % 3];
+                const bool pAbove = p.z() >= z;
+                const bool qAbove = q.z() >= z;
+                if (pAbove)
+                    out[numOut++] = p;
+                if (pAbove != qAbove)
+                {
+                    const float t = (z - p.z()) / (q.z() - p.z());
+                    out[numOut++] = p + (q - p) * t;
+                }
+            }
+            if (numOut < 3)
+                return;
+            const unsigned int base = static_cast<unsigned int>(positions.size());
+            for (int i = 0; i < numOut; ++i)
+                positions.push_back(out[i]);
+            for (int i = 1; i + 1 < numOut; ++i)
+            {
+                indices.push_back(base);
+                indices.push_back(base + i);
+                indices.push_back(base + i + 1);
+            }
+        }
+    }
+
+    void OcclusionCuller::rasterizeOccluder(
+        const std::vector<osg::Vec3f>& worldPositionsIn, const std::vector<unsigned int>& indicesIn)
+    {
+        if (!mFrameActive || worldPositionsIn.empty() || indicesIn.empty())
             return;
+
+        const std::vector<osg::Vec3f>* positionsPtr = &worldPositionsIn;
+        const std::vector<unsigned int>* indicesPtr = &indicesIn;
+        if (mClipBelow)
+        {
+            // only what is above the clip height occludes (see setOccluderClipBelow)
+            bool anyBelow = false;
+            bool anyAbove = false;
+            for (const auto& v : worldPositionsIn)
+            {
+                if (v.z() < mClipZ)
+                    anyBelow = true;
+                else
+                    anyAbove = true;
+            }
+            if (!anyAbove)
+                return;
+            if (anyBelow)
+            {
+                const unsigned int vertexCount = static_cast<unsigned int>(worldPositionsIn.size());
+                mClippedPositions.clear();
+                mClippedIndices.clear();
+                for (size_t i = 0; i + 2 < indicesIn.size(); i += 3)
+                {
+                    const unsigned int ia = indicesIn[i], ib = indicesIn[i + 1], ic = indicesIn[i + 2];
+                    if (ia >= vertexCount || ib >= vertexCount || ic >= vertexCount)
+                        return;
+                    clipTriangleBelow(worldPositionsIn[ia], worldPositionsIn[ib], worldPositionsIn[ic], mClipZ,
+                        mClippedPositions, mClippedIndices);
+                }
+                if (mClippedIndices.empty())
+                    return;
+                positionsPtr = &mClippedPositions;
+                indicesPtr = &mClippedIndices;
+            }
+        }
+        const std::vector<osg::Vec3f>& worldPositions = *positionsPtr;
+        const std::vector<unsigned int>& indices = *indicesPtr;
 
         const int numTris = static_cast<int>(indices.size()) / 3;
         if (numTris <= 0)
@@ -88,10 +169,17 @@ namespace SceneUtil
             MaskedOcclusionCulling::CLIP_PLANE_ALL, vtxLayout);
     }
 
-    void OcclusionCuller::rasterizeAABBOccluder(const osg::BoundingBox& worldBB)
+    void OcclusionCuller::rasterizeAABBOccluder(const osg::BoundingBox& worldBBIn)
     {
         if (!mFrameActive)
             return;
+        osg::BoundingBox worldBB = worldBBIn;
+        if (mClipBelow)
+        {
+            if (worldBB.zMax() <= mClipZ)
+                return;
+            worldBB.zMin() = std::max(worldBB.zMin(), mClipZ);
+        }
 
         // 8 corners of the AABB
         const osg::Vec3f verts[8] = {

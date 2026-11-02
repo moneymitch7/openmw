@@ -426,7 +426,7 @@ namespace MWRender
                 Settings::camera().mOcclusionTerrainRadius, Settings::camera().mOcclusionCullingTerrain,
                 Settings::camera().mOcclusionDebugOverlay, Settings::camera().mOcclusionDebugMessages,
                 Settings::camera().mOcclusionCullingInteriors, mOccluderRegistry, occluderRules,
-                Settings::camera().mOcclusionCullingStatics);
+                Settings::camera().mOcclusionCullingStatics, Settings::camera().mOcclusionCullingReflections);
             sceneRoot->addCullCallback(mSceneOcclusionCallback);
 
             mObjects->setOcclusionCuller(mOcclusionCuller, Settings::camera().mOcclusionOccluderMinRadius,

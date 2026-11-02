@@ -25,6 +25,7 @@
 #include <components/sceneutil/cullprofile.hpp>
 #include <components/sceneutil/occlusionculling.hpp>
 #include <components/sceneutil/userdata.hpp>
+#include <components/settings/values.hpp>
 #include <components/terrain/terrainoccluder.hpp>
 
 namespace
@@ -278,12 +279,14 @@ namespace MWRender
 
     void OccluderRegistry::noteCell(CellOcclusionCallback* callback)
     {
-        mNextCells.emplace_back(callback);
+        if (mCollecting)
+            mNextCells.emplace_back(callback);
     }
 
     void OccluderRegistry::noteChunk(osg::Node* chunk)
     {
-        mNextChunks.emplace_back(chunk);
+        if (mCollecting)
+            mNextChunks.emplace_back(chunk);
     }
 
     namespace
@@ -334,6 +337,12 @@ namespace MWRender
                         mCandidates.push_back({ &mesh, (mesh.aabb.center() - eye).length2() });
         }
 
+        rasterizeCandidates(culler, eye, rules);
+    }
+
+    void OccluderRegistry::rasterizeCandidates(
+        SceneUtil::OcclusionCuller& culler, const osg::Vec3f& eye, const OccluderRules& rules)
+    {
         std::sort(mCandidates.begin(), mCandidates.end(),
             [](const Candidate& a, const Candidate& b) { return a.mDistanceSq < b.mDistanceSq; });
 
@@ -349,10 +358,37 @@ namespace MWRender
         }
     }
 
+    void OccluderRegistry::rasterizeForOtherView(SceneUtil::OcclusionCuller& culler, const osg::Vec3f& eye,
+        const OccluderRules& rules, const osg::Node* sceneRoot, unsigned int traversalMask)
+    {
+        // The most recent complete list is the one being collected (the main view culled already this frame) or
+        // the one collected last frame (it hasn't yet): either way mNext*. The main view's pre-pass starts with a
+        // fresh mRasterized, so the reflection's can be kept in it meanwhile (the callbacks skip what it drew).
+        mRasterized.clear();
+        mCandidates.clear();
+        for (const auto& weakCell : mNextCells)
+        {
+            osg::ref_ptr<CellOcclusionCallback> cell;
+            if (weakCell.lock(cell) && cell->getCellNode() != nullptr && isUnder(cell->getCellNode(), sceneRoot))
+                cell->collectOccluders(eye, mCandidates, traversalMask);
+        }
+        for (const auto& weakChunk : mNextChunks)
+        {
+            osg::ref_ptr<osg::Node> chunk;
+            if (!weakChunk.lock(chunk) || (chunk->getNodeMask() & traversalMask) == 0)
+                continue;
+            if (const PagedOccluders* pod = SceneUtil::findUserData<PagedOccluders>(*chunk))
+                for (const OccluderMesh& mesh : pod->mOccluderMeshes)
+                    if (!mesh.indices.empty() && mesh.aabb.valid())
+                        mCandidates.push_back({ &mesh, (mesh.aabb.center() - eye).length2() });
+        }
+        rasterizeCandidates(culler, eye, rules);
+    }
+
     SceneOcclusionCallback::SceneOcclusionCallback(SceneUtil::OcclusionCuller* culler,
         Terrain::TerrainOccluder* occluder, int radiusCells, bool enableTerrainOccluder, bool enableDebugOverlay,
         bool enableDebugMessages, bool enableInteriors, OccluderRegistry* registry, const OccluderRules& rules,
-        bool enableStaticOccluders)
+        bool enableStaticOccluders, bool enableReflections)
         : mCuller(culler)
         , mTerrainOccluder(occluder)
         , mRegistry(registry)
@@ -363,6 +399,7 @@ namespace MWRender
         , mEnableDebugOverlay(enableDebugOverlay)
         , mEnableDebugMessages(enableDebugMessages)
         , mEnableInteriors(enableInteriors)
+        , mEnableReflections(enableReflections)
     {
     }
 
@@ -456,6 +493,11 @@ namespace MWRender
         // Only run occlusion for the main scene camera.
         // Skip shadow cameras, water reflection, and any other cameras.
         osg::Camera* cam = cv->getCurrentCamera();
+        if (mEnableReflections && cam->getName() == Constants::ReflectionCamera)
+        {
+            cullReflection(node, cv);
+            return;
+        }
         if (cam->getName() != Constants::SceneCamera)
         {
             traverse(node, cv);
@@ -483,6 +525,7 @@ namespace MWRender
         // Begin occlusion frame with camera matrices
         std::optional<SceneUtil::CullProfile::Scope> profile(std::in_place, SceneUtil::CullProfile::Section::Occluders);
         mCuller->beginFrame(cam->getViewMatrix(), cam->getProjectionMatrix());
+        mCuller->setFrameView(cam->getViewMatrix(), ~0u);
 
         // Build and rasterize terrain occluder mesh (skip for quasi-exteriors and interiors, no real terrain)
         if (mEnableTerrainOccluder && !mIsQuasiExterior && !mIsInterior && mTerrainOccluder->hasTerrainData())
@@ -536,6 +579,60 @@ namespace MWRender
         }
     }
 
+    void SceneOcclusionCallback::cullReflection(osg::Node* node, osgUtil::CullVisitor* cv)
+    {
+        // OpenMGE XE: the water reflection gets an occlusion frame of its own: its mirrored view through the water,
+        // with only what is above the water as occluders (the reflection clips away everything below it) and only
+        // what its detail level draws. Once per frame (it isn't culled at all on frames its update interval skips).
+        osg::Camera* cam = cv->getCurrentCamera();
+        const unsigned int frameNumber = cv->getFrameStamp()->getFrameNumber();
+        const osg::Matrixd& mirror = cam->getViewMatrix(); // scale(1, 1, -1) * translate(0, 0, 2 * water level)
+        const float waterLevel = static_cast<float>(mirror(3, 2) * 0.5);
+        // the scene root's model-view is the mirrored view of the world; its eye is the mirrored eye, below the
+        // water while the real one is above it (an eye under the water is left alone)
+        const osg::Matrixd view = *cv->getModelViewMatrix();
+        const osg::Vec3d mirroredEye = osg::Matrixd::inverse(view).getTrans();
+        if (frameNumber == mLastReflectionFrameNumber || mCuller->isFrameActive() || mirror(2, 2) > -0.5
+            || (mIsInterior && !mEnableInteriors) || mirroredEye.z() > waterLevel)
+        {
+            traverse(node, cv);
+            return;
+        }
+        mLastReflectionFrameNumber = frameNumber;
+
+        std::optional<SceneUtil::CullProfile::Scope> profile(std::in_place, SceneUtil::CullProfile::Section::Occluders);
+        const unsigned int mask = cam->getCullMask();
+        mCuller->beginFrame(view, *cv->getProjectionMatrix(), false);
+        mCuller->setFrameView(view, mask);
+        mCuller->setOccluderClipBelow(waterLevel);
+        const osg::Vec3f eye = mCuller->getFrameEye();
+        // distant statics beyond [Water] reflection statics distance aren't in the reflection: none of them occludes
+        OccluderRules rules = mRules;
+        const float staticsDistance = Settings::water().mReflectionStaticsDistance;
+        if (staticsDistance > 0.f)
+            rules.mMaxDistanceSq = std::min(rules.mMaxDistanceSq, staticsDistance * staticsDistance * 0.81f);
+
+        if (mEnableTerrainOccluder && (mask & Mask_Terrain) != 0 && !mIsQuasiExterior && !mIsInterior
+            && mTerrainOccluder->hasTerrainData())
+        {
+            mPositions.clear();
+            mIndices.clear();
+            mTerrainOccluder->build(eye, mRadiusCells, mPositions, mIndices);
+            if (!mPositions.empty())
+                mCuller->rasterizeOccluder(mPositions, mIndices);
+        }
+        if (mRegistry && mEnableStaticOccluders)
+            mRegistry->rasterizeForOtherView(*mCuller, eye, rules, node, mask);
+        profile.reset();
+
+        if (mRegistry)
+            mRegistry->setCollecting(false);
+        traverse(node, cv);
+        if (mRegistry)
+            mRegistry->setCollecting(true);
+        mCuller->endFrame();
+    }
+
     PagedOccluderCallback::PagedOccluderCallback(SceneUtil::OcclusionCuller* culler, OccluderRegistry* registry,
         const OccluderRules& rules, const osg::BoundingBox& localBounds)
         : mCuller(culler)
@@ -553,9 +650,9 @@ namespace MWRender
             return;
         }
 
-        // The chunk sits under a PAT, so its bounds are in chunk-local space.
-        osg::Matrixd viewInverse;
-        viewInverse.invert(cv->getCurrentCamera()->getViewMatrix());
+        // The chunk sits under a PAT, so its bounds are in chunk-local space. (The frame's view, not the current
+        // camera's: the water reflection's camera holds only the mirroring, on top of the main view.)
+        const osg::Matrixd& viewInverse = mCuller->getFrameViewInverse();
         const osg::Matrixd modelToWorld = *cv->getModelViewMatrix() * viewInverse;
 
         osg::BoundingBox worldBB;
@@ -584,7 +681,9 @@ namespace MWRender
             if (!mCuller->testVisibleAABB(worldBB))
                 return;
 
-            if (const PagedOccluders* pod = SceneUtil::findUserData<PagedOccluders>(*node))
+            if (const PagedOccluders* pod = (node->getNodeMask() & mCuller->getOccluderMask()) != 0
+                    ? SceneUtil::findUserData<PagedOccluders>(*node)
+                    : nullptr)
             {
                 const osg::Vec3f eyeWorld(viewInverse(3, 0), viewInverse(3, 1), viewInverse(3, 2));
                 for (const auto& occMesh : pod->mOccluderMeshes)
@@ -621,7 +720,7 @@ namespace MWRender
     }
 
     void CellOcclusionCallback::collectOccluders(
-        const osg::Vec3f& eye, std::vector<OccluderRegistry::Candidate>& out) const
+        const osg::Vec3f& eye, std::vector<OccluderRegistry::Candidate>& out, unsigned int traversalMask) const
     {
         if (!mEnableStaticOccluders)
             return;
@@ -633,7 +732,7 @@ namespace MWRender
                 || !entry.mMesh.aabb.valid())
                 continue;
             osg::ref_ptr<osg::Node> object;
-            if (!entry.mNode.lock(object) || object.get() != node)
+            if (!entry.mNode.lock(object) || object.get() != node || (object->getNodeMask() & traversalMask) == 0)
                 continue;
             const osg::Node::ParentList& parents = object->getParents();
             if (std::find(parents.begin(), parents.end(), mCellNode.get()) == parents.end())
@@ -712,6 +811,10 @@ namespace MWRender
         if (mRegistry)
             mRegistry->noteCell(this);
         const OccluderRules rules{ mOccluderMaxDistanceSq, mOccluderInsideThreshold, mMaxTriangles };
+        // OpenMGE XE: occluders are measured from the frame's eye and must be drawn by its view (the water
+        // reflection's eye is the mirrored one, and it leaves out what its detail level doesn't show)
+        const osg::Vec3f& occluderEye = mCuller->getFrameEye();
+        const unsigned int occluderMask = mCuller->getOccluderMask();
 
         const unsigned int numChildren = node->getNumChildren();
         mHandledInFirstPass.assign(numChildren, 0);
@@ -734,7 +837,7 @@ namespace MWRender
             if (bs.radius() > mOccluderMaxRadius)
             {
                 // Rasterize sub-object occluder meshes stored at chunk creation time
-                if (mEnableStaticOccluders)
+                if (mEnableStaticOccluders && (child->getNodeMask() & occluderMask) != 0)
                 {
                     if (const PagedOccluders* pod = SceneUtil::findUserData<PagedOccluders>(*child))
                     {
@@ -742,7 +845,7 @@ namespace MWRender
                         {
                             if (mRegistry && mRegistry->isRasterized(&occMesh))
                                 continue;
-                            rasterizeOccluderMesh(*mCuller, occMesh, cv->getEyePoint(), rules);
+                            rasterizeOccluderMesh(*mCuller, occMesh, occluderEye, rules);
                         }
                     }
                 }
@@ -769,8 +872,9 @@ namespace MWRender
             if (mCuller->testVisibleAABB(mesh.aabb))
             {
                 // Rasterize as an occluder unless the nearest-first pre-pass already did
-                if (mEnableStaticOccluders && !(mRegistry && mRegistry->isRasterized(&mesh)))
-                    rasterizeOccluderMesh(*mCuller, mesh, cv->getEyePoint(), rules);
+                if (mEnableStaticOccluders && (child->getNodeMask() & occluderMask) != 0
+                    && !(mRegistry && mRegistry->isRasterized(&mesh)))
+                    rasterizeOccluderMesh(*mCuller, mesh, occluderEye, rules);
 
                 child->accept(*cv);
             }
