@@ -4,6 +4,9 @@
     @foreach shadow_texture_unit_index @shadow_texture_unit_list
         uniform mat4 shadowSpaceMatrix@shadow_texture_unit_index;
         varying vec4 shadowSpaceCoords@shadow_texture_unit_index;
+#if @scaledNormalOffset
+        uniform float shadowNormalOffset@shadow_texture_unit_index;
+#endif
 
 #if @perspectiveShadowMaps
         uniform mat4 validRegionMatrix@shadow_texture_unit_index;
@@ -27,7 +30,11 @@ void setupShadowCoords(vec4 viewPos, vec3 viewNormal)
 #if @disableNormalOffsetShadows
         shadowSpaceCoords@shadow_texture_unit_index = shadowSpaceMatrix@shadow_texture_unit_index * viewPos;
 #else
+#if @scaledNormalOffset
+        shadowOffset = vec4(viewNormal * shadowNormalOffset@shadow_texture_unit_index, 0.0);
+#else
         shadowOffset = vec4(viewNormal * @shadowNormalOffset, 0.0);
+#endif
 
         if (onlyNormalOffsetUV)
         {

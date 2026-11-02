@@ -95,6 +95,7 @@ namespace SceneUtil
         mShadowTechnique->setCascadeUpdateInterval(static_cast<unsigned int>(settings.mCascadeUpdateInterval.get()));
         mShadowTechnique->setDiagnostics(settings.mShadowDiagnostics);
         mShadowTechnique->setStaticShadowCache(settings.mStaticShadowCache && settings.mStableShadows);
+        mShadowTechnique->setNormalOffset(settings.mNormalOffsetDistance, settings.mNormalOffsetTexels);
 
         if (mEnableShadows && settings.mEnableDebugHud)
             mShadowTechnique->enableDebugHUD();
@@ -202,9 +203,13 @@ namespace SceneUtil
         definesWithShadows["perspectiveShadowMaps"]
             = mShadowSettings->getShadowMapProjectionHint() == ShadowSettings::PERSPECTIVE_SHADOW_MAP ? "1" : "0";
 
-        definesWithShadows["disableNormalOffsetShadows"] = settings.mNormalOffsetDistance == 0.0 ? "1" : "0";
+        definesWithShadows["disableNormalOffsetShadows"]
+            = settings.mNormalOffsetDistance == 0.0 && settings.mNormalOffsetTexels == 0.0 ? "1" : "0";
 
         definesWithShadows["shadowNormalOffset"] = std::to_string(settings.mNormalOffsetDistance);
+
+        // OpenMGE XE: the normal offset of each shadow map comes from a uniform, sized to its texels
+        definesWithShadows["scaledNormalOffset"] = settings.mNormalOffsetTexels > 0.0 ? "1" : "0";
 
         definesWithShadows["limitShadowMapDistance"] = settings.mMaximumShadowMapDistance > 0 ? "1" : "0";
 
@@ -229,6 +234,8 @@ namespace SceneUtil
         definesWithoutShadows["disableNormalOffsetShadows"] = "0";
 
         definesWithoutShadows["shadowNormalOffset"] = "0.0";
+
+        definesWithoutShadows["scaledNormalOffset"] = "0";
 
         definesWithoutShadows["limitShadowMapDistance"] = "0";
 

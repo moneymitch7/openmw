@@ -170,6 +170,18 @@ Shadows Settings
    Reduces flicker with less Peter Panning than polygon offset.
 
 .. omw-setting::
+   :title: normal offset texels
+   :type: float32
+   :range: [0, 4]
+   :default: 0.0
+
+   OpenMGE XE: makes the normal offset grow with the size of a shadow map texel where it is used, by this many
+   texels, never less than normal offset distance. 0 keeps the fixed distance.
+   A fixed distance is far smaller than a texel of the farther shadow maps, so on curving ground, along the creases
+   between the flat pieces terrain is made of, the shadow lookup reads its own neighbouring piece and draws thin
+   lines of shadow along the creases. 1 to 1.5 removes them; higher values thin out the shadows of small things.
+
+.. omw-setting::
    :title: use front face culling
    :type: boolean
    :range: true, false

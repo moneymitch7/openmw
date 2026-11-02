@@ -29,6 +29,7 @@
 #include <osg/Depth>
 #include <osg/ClipControl>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <sstream>
@@ -3896,6 +3897,37 @@ void MWShadowTechnique::assignShadowStateSettings(osgUtil::CullVisitor& cv, osg:
         uniforms.push_back(selectUniform);
     }
     selectUniform->set(select);
+
+    // OpenMGE XE: the normal offset sized to this map's texels (see "normal offset texels"); a fixed distance is far
+    // smaller than a texel of the farther maps, which leaves lines of shadow along the creases of curving ground
+    if (_normalOffsetTexels > 0.f)
+    {
+        float offset = _normalOffsetDistance;
+        const osg::Matrixd& proj = camera->getProjectionMatrix();
+        const osg::Viewport* viewport = camera->getViewport();
+        // orthographic maps (stable shadows, or plain orthographic): one size of texel over the whole map
+        if (viewport != nullptr && viewport->width() > 0.0 && proj(2, 3) == 0.0 && proj(0, 0) != 0.0)
+        {
+            const double texel = 2.0 / (std::abs(proj(0, 0)) * viewport->width());
+            offset = std::max(offset, static_cast<float>(texel * _normalOffsetTexels));
+        }
+        const std::string offsetName = "shadowNormalOffset" + std::to_string(sm_i);
+        osg::ref_ptr<osg::Uniform> offsetUniform;
+        for (const auto& uniform : uniforms)
+        {
+            if (uniform->getName() == offsetName)
+            {
+                offsetUniform = uniform;
+                break;
+            }
+        }
+        if (!offsetUniform)
+        {
+            offsetUniform = new osg::Uniform(osg::Uniform::FLOAT, offsetName);
+            uniforms.push_back(offsetUniform);
+        }
+        offsetUniform->set(offset);
+    }
 }
 
 void SceneUtil::MWShadowTechnique::assignValidRegionSettings(osgUtil::CullVisitor & cv, osg::Camera* camera, unsigned int sm_i, Uniforms & uniforms)

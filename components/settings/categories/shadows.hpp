@@ -36,6 +36,8 @@ namespace Settings
         SettingValue<float> mPolygonOffsetFactor{ mIndex, "Shadows", "polygon offset factor" };
         SettingValue<float> mPolygonOffsetUnits{ mIndex, "Shadows", "polygon offset units" };
         SettingValue<float> mNormalOffsetDistance{ mIndex, "Shadows", "normal offset distance" };
+        SettingValue<float> mNormalOffsetTexels{ mIndex, "Shadows", "normal offset texels",
+            makeClampSanitizerFloat(0.0f, 4.0f) };
         SettingValue<bool> mUseFrontFaceCulling{ mIndex, "Shadows", "use front face culling" };
         SettingValue<bool> mActorShadows{ mIndex, "Shadows", "actor shadows" };
         SettingValue<bool> mPlayerShadows{ mIndex, "Shadows", "player shadows" };
