@@ -11,6 +11,7 @@
 #include <components/sceneutil/shadowcasterfilter.hpp>
 #include <components/sceneutil/unrefqueue.hpp>
 #include <components/sceneutil/userdata.hpp>
+#include <components/settings/values.hpp>
 
 #include "../mwworld/class.hpp"
 #include "../mwworld/ptr.hpp"
@@ -86,6 +87,10 @@ namespace MWRender
 
     void Objects::markMovingScenery(const MWWorld::Ptr& ptr)
     {
+        // only the static shadow cache tells moving scenery apart
+        const auto& shadows = Settings::shadows();
+        if (!shadows.mEnableShadows || !shadows.mStableShadows || !shadows.mStaticShadowCache)
+            return;
         osg::Group* node = ptr.getRefData().getBaseNode();
         if (node == nullptr || (node->getNodeMask() & Mask_Static) == 0)
             return;
@@ -95,9 +100,16 @@ namespace MWRender
         // still scenery to everything else (reflections, occlusion); the object bit lets it into the shadow pass
         // that draws what moves
         node->setNodeMask(node->getNodeMask() | Mask_Object);
-        static const osg::ref_ptr<SceneUtil::ShadowCasterFilter::MovingSceneryCallback> movingSceneryCallback
+        osg::Callback* existing = node->getCullCallback();
+        if (dynamic_cast<SceneUtil::ShadowCasterFilter::MovingSceneryCallback*>(existing) != nullptr)
+            return;
+        // A callback of its own, put in front of the node's. addCullCallback would nest it inside the node's
+        // callback, which is the small caster callback every object shares: that changed it for every object and,
+        // from the second piece of moving scenery on, linked the callback to itself, so loading a cell never ended.
+        osg::ref_ptr<SceneUtil::ShadowCasterFilter::MovingSceneryCallback> callback
             = new SceneUtil::ShadowCasterFilter::MovingSceneryCallback;
-        node->addCullCallback(movingSceneryCallback);
+        callback->setNestedCallback(existing);
+        node->setCullCallback(callback);
     }
 
     void Objects::insertModel(const MWWorld::Ptr& ptr, const std::string& mesh, bool allowLight)
