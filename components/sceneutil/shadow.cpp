@@ -96,6 +96,8 @@ namespace SceneUtil
         mShadowTechnique->setDiagnostics(settings.mShadowDiagnostics);
         mShadowTechnique->setStaticShadowCache(settings.mStaticShadowCache && settings.mStableShadows);
         mShadowTechnique->setNormalOffset(settings.mNormalOffsetDistance, settings.mNormalOffsetTexels);
+        mActorShadowMaps = static_cast<unsigned int>(settings.mActorShadowMaps.get());
+        mShadowTechnique->setNearCascadesOnly(mActorMask, mActorShadowMaps);
 
         if (mEnableShadows && settings.mEnableDebugHud)
             mShadowTechnique->enableDebugHUD();
@@ -111,6 +113,12 @@ namespace SceneUtil
     void ShadowManager::setShadowCacheMasks(unsigned int staticMask, unsigned int dynamicMask)
     {
         mShadowTechnique->setShadowCacheMasks(staticMask, dynamicMask);
+    }
+
+    void ShadowManager::setActorMask(unsigned int mask)
+    {
+        mActorMask = mask;
+        mShadowTechnique->setNearCascadesOnly(mActorMask, mActorShadowMaps);
     }
 
     void ShadowManager::setIndoorShadowCastingMask(unsigned int mask)

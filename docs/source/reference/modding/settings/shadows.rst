@@ -285,3 +285,14 @@ Shadows Settings
    shadows' work on the CPU and the GPU goes. Each map moves in steps of a quarter of its width and is made a seventh
    wider to allow for that, so shadows are very slightly softer; where one map hands over to the next is still worked
    out from the camera every frame, so the change of detail glides along rather than jumping with the map.
+
+.. omw-setting::
+   :title: actor shadow maps
+   :type: int
+   :range: [0, 8]
+   :default: 0
+
+   OpenMGE XE: NPCs and creatures cast shadows only into this many of the nearest shadow maps; 0 casts them into all.
+   Each actor is drawn again into every shadow map it is in, every frame, body part by body part, which in a crowded
+   town is most of the shadows' work. Farther away, where the shadow maps are coarse and an actor's shadow is a few
+   pixels, their shadows fade out over the hand-over between maps. The player's shadow is not affected.

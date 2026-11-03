@@ -1999,6 +1999,10 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
 
             cv.pushStateSet(_shadowCastingStateSet.get());
 
+            // OpenMGE XE [Shadows] actor shadow maps: NPCs and creatures only cast into the nearest cascades
+            const unsigned int cascadeMask
+                = (_nearOnlyCascades > 0 && sm_i >= _nearOnlyCascades) ? ~_nearOnlyMask : ~0u;
+
             // OpenMGE XE [Shadows] static shadow cache: terrain and statics into the held map when it has to be
             // drawn again (the cascade moved or turned, or a second has passed, staggered between the cascades, for
             // what changed meanwhile: cells loading, doors, animated statics); every caster in the whole square, as
@@ -2040,12 +2044,12 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                 }
                 vdsmCallback->setPreDraw(sd->_staticBlit.get(), _staticBlitStateSet.get());
                 const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
-                cullShadowCastingScene(&cv, camera.get(), ~_staticCasterMask);
+                cullShadowCastingScene(&cv, camera.get(), ~_staticCasterMask & cascadeMask);
             }
             else
             {
                 const ShadowCasterFilter::Scope casterFilter(frustum.eye, minCasterSizeRatio);
-                cullShadowCastingScene(&cv, camera.get());
+                cullShadowCastingScene(&cv, camera.get(), cascadeMask);
             }
             if (_diagnosticsOut)
                 *_diagnosticsOut << ", " << countRenderLeaves(vdsmCallback->getRenderStage()) << " things drawn"

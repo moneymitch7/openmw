@@ -69,6 +69,7 @@ namespace Settings
             makeClampSanitizerInt(1, 4) };
         SettingValue<bool> mShadowDiagnostics{ mIndex, "Shadows", "shadow diagnostics" };
         SettingValue<bool> mStaticShadowCache{ mIndex, "Shadows", "static shadow cache" };
+        SettingValue<int> mActorShadowMaps{ mIndex, "Shadows", "actor shadow maps", makeClampSanitizerInt(0, 8) };
     };
 }
 

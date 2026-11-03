@@ -325,6 +325,7 @@ namespace MWRender
             getIndoorShadowCastingMask(), Mask_Terrain | Mask_Object | Mask_Static, Settings::shadows(),
             mResourceSystem->getSceneManager()->getShaderManager());
         mShadowManager->setShadowCacheMasks(Mask_Terrain | Mask_Static, Mask_Actor | Mask_Player | Mask_Object);
+        mShadowManager->setActorMask(Mask_Actor);
 
         Shader::ShaderManager::DefineMap globalDefines = Shader::getDefaultDefines();
         mAppliedShadowDefines = mShadowManager->getShadowDefines(Settings::shadows());

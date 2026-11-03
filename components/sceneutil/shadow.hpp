@@ -40,6 +40,8 @@ namespace SceneUtil
         void setIndoorShadowCastingMask(unsigned int mask);
         /// OpenMGE XE [Shadows] static shadow cache: which casters never move, and which do
         void setShadowCacheMasks(unsigned int staticMask, unsigned int dynamicMask);
+        /// OpenMGE XE: the node mask [Shadows] actor shadow maps applies to (NPCs and creatures)
+        void setActorMask(unsigned int mask);
 
         void setupShaders(Shader::ShaderManager& shaderManager) const;
 
@@ -71,6 +73,8 @@ namespace SceneUtil
 
         bool mIndoorMode = false;
         bool mSunShadowsSuppressed = false;
+        unsigned int mActorMask = 0;
+        unsigned int mActorShadowMaps = 0;
     };
 }
 

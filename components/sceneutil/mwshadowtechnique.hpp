@@ -354,6 +354,13 @@ namespace SceneUtil {
             _staticCasterMask = staticMask;
             _dynamicCasterMask = dynamicMask;
         }
+        /// OpenMGE XE: what the node mask nearMask covers (NPCs and creatures) casts shadows only into the first
+        /// count shadow maps (the nearest); 0 = into all of them.
+        void setNearCascadesOnly(unsigned int nearMask, unsigned int count)
+        {
+            _nearOnlyMask = nearMask;
+            _nearOnlyCascades = count;
+        }
 
         osg::ref_ptr<osg::StateSet> getOrCreateShadowsBinStateSet();
 
@@ -411,6 +418,8 @@ namespace SceneUtil {
         float                                   _normalOffsetDistance = 1.f;
         float                                   _normalOffsetTexels = 0.f;
         unsigned int                            _staticCasterMask = 0;
+        unsigned int                            _nearOnlyMask = 0;
+        unsigned int                            _nearOnlyCascades = 0;
         unsigned int                            _dynamicCasterMask = 0;
         osg::ref_ptr<osg::StateSet>             _staticBlitStateSet;
         // the cascade cropShadowCameraToMainFrustum fits, with the static shadow cache
