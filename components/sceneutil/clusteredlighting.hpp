@@ -28,6 +28,9 @@ namespace SceneUtil
         float mLinear;
         float mQuadratic;
         float mRadius;
+        // Lamp and lantern shadows (LampShadows, HeldLightShadow): x a lamp's first still face layer + 1, y its first
+        // live face layer + 1 (0: none), z the far end of its faces; w 1 for a carried light whose shadows are drawn
+        osg::Vec4f mShadow;
     };
 }
 

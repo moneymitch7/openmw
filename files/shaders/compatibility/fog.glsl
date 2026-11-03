@@ -21,7 +21,10 @@ uniform float waterHeight;
 uniform bool waterEnabled;
 uniform bool waterSurface;
 uniform bool isReflection;
+#ifndef OSG_VIEW_MATRIX_INVERSE_DECLARED
+#define OSG_VIEW_MATRIX_INVERSE_DECLARED
 uniform mat4 osg_ViewMatrixInverse;
+#endif
 uniform DirectionalLight sun;
 
 const vec3 WATER_COLOR = vec3(0.090195, 0.115685, 0.12745);

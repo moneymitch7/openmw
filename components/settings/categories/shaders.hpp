@@ -41,6 +41,18 @@ namespace Settings
         SettingValue<int> mMaxLights{ mIndex, "Shaders", "max lights", makeClampSanitizerInt(2, 64) };
         SettingValue<float> mMinimumInteriorBrightness{ mIndex, "Shaders", "minimum interior brightness",
             makeClampSanitizerFloat(0, 1) };
+        SettingValue<bool> mHeldLightShadows{ mIndex, "Shaders", "held light shadows" };
+        SettingValue<int> mHeldLightShadowResolution{ mIndex, "Shaders", "held light shadow resolution",
+            makeClampSanitizerInt(128, 2048) };
+        SettingValue<float> mHeldLightShadowMinCasterSize{ mIndex, "Shaders", "held light shadow min caster size",
+            makeClampSanitizerFloat(0, 64) };
+        SettingValue<float> mHeldLightShadowCacheDistance{ mIndex, "Shaders", "held light shadow cache distance",
+            makeClampSanitizerFloat(0, 32) };
+        SettingValue<float> mHeldLightShadowDistance{ mIndex, "Shaders", "held light shadow distance",
+            makeClampSanitizerFloat(0, 16384) };
+        SettingValue<bool> mLampShadows{ mIndex, "Shaders", "lamp shadows" };
+        SettingValue<int> mLampShadowResolution{ mIndex, "Shaders", "lamp shadow resolution",
+            makeClampSanitizerInt(128, 1024) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };
         SettingValue<bool> mSoftParticles{ mIndex, "Shaders", "soft particles" };

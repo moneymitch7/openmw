@@ -17,6 +17,9 @@ struct PointLight {
     float linear;
     float quadratic;
     float radius;
+    // lamp and lantern shadows: x a lamp's first still face layer + 1, y its first live face layer + 1 (0: none),
+    // z the far end of its faces; w 1 for a carried light whose shadows are drawn (see lib/light/util.glsl)
+    vec4 shadow;
 };
 
 #endif

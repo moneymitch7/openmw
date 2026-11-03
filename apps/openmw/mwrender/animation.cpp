@@ -23,6 +23,7 @@
 
 #include <components/esm3/loadcont.hpp>
 #include <components/esm3/loadcrea.hpp>
+#include <components/esm3/loadligh.hpp>
 #include <components/esm3/loadmgef.hpp>
 #include <components/esm3/loadnpc.hpp>
 #include <components/esm3/loadrace.hpp>
@@ -1684,12 +1685,33 @@ namespace MWRender
         }
     }
 
+    namespace
+    {
+        // A carriable light with no model, placed in the world: what mods that light the player from a belt or hip
+        // lantern (Belt Lanterns / Hip Lanterns and the like) create and move along with the character every frame,
+        // since a worn lantern has no light of its own. It stands in for a light someone carries.
+        bool isCarriedLightProxy(const MWWorld::Ptr& ptr)
+        {
+            if (ptr.getType() != ESM::Light::sRecordId)
+                return false;
+            const ESM::Light& light = *ptr.get<ESM::Light>()->mBase;
+            return light.mModel.empty() && (light.mData.mFlags & ESM::Light::Carry) != 0;
+        }
+    }
+
     void Animation::addExtraLight(osg::ref_ptr<osg::Group> parent, const SceneUtil::LightCommon& esmLight)
     {
         bool exterior = mPtr.isInCell() && mPtr.getCell()->getCell()->isExterior();
 
         mExtraLightSource = SceneUtil::addLight(parent, esmLight, Mask_Lighting, exterior);
         mExtraLightSource->setActorFade(mActorFade);
+
+        // lantern shadows pick the player's own among the lights carried (by actors, or a worn lantern's stand-in);
+        // lamp shadows leave those alone
+        const bool actor = mPtr.getClass().isActor();
+        mExtraLightSource->setCarried(actor || isCarriedLightProxy(mPtr));
+        mExtraLightSource->setCarrier(
+            actor ? dynamic_cast<SceneUtil::PositionAttitudeTransform*>(mInsert.get()) : nullptr);
     }
 
     void Animation::addEffect(std::string_view model, std::string_view effectId, bool loop, std::string_view bonename,

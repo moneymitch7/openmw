@@ -114,6 +114,17 @@ jobs:
         -D OPENMW_LTO_BUILD=ON
         ${{ inputs.package && '-D "VCREDIST64=$env:VCToolsRedistDir/vc_redist.x64.exe"' || '' }}
         -D CMAKE_EXPORT_COMPILE_COMMANDS=ON
+        2>&1 | Tee-Object -FilePath ${{ github.workspace }}/configure.log
+
+    # The job logs can't always be read from where the builds are checked: CMake's errors as an annotation as well
+    - name: Report configure errors
+      if: failure()
+      shell: bash
+      run: |
+        if [ -f configure.log ]; then
+          msg=$(grep -A14 "CMake Error" configure.log | head -60 | sed ':a;N;$!ba;s/\r//g;s/%/%25/g;s/\n/%0A/g')
+          echo "::error title=CMake configure::${msg:-no CMake Error lines; see configure.log}"
+        fi
 
     - name: Build OpenMW
       run: cmake --build ${{ github.workspace }}/build

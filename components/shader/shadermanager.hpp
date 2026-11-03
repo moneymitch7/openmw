@@ -85,6 +85,8 @@ namespace Shader
             OpaqueColorTexture,
             SkyTexture,
             ShadowMaps,
+            HeldLightShadow, // lantern shadows' cube maps
+            LampShadows, // lamp shadows' face arrays
             SLOT_COUNT
         };
 

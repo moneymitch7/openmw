@@ -323,6 +323,15 @@ namespace SceneUtil
                         .mQuadratic = light->getQuadraticAttenuation(),
                         .mRadius = bound.mLightSource->getRadius() * node->getPointLightRadiusMultiplier(),
                     };
+                    // lamp and lantern shadows, see lampShadowLit and heldLightShadowLit in lib/light/util.glsl
+                    if (bound.mLightSource->getLampStillLayer() >= 0)
+                    {
+                        gpuLight.mShadow.x() = static_cast<float>(bound.mLightSource->getLampStillLayer() + 1);
+                        gpuLight.mShadow.y() = static_cast<float>(bound.mLightSource->getLampLiveLayer() + 1);
+                        gpuLight.mShadow.z() = bound.mLightSource->getLampFar();
+                    }
+                    if (bound.mLightSource->getCastsShadows())
+                        gpuLight.mShadow.w() = 1.f;
 
                     cache.mGPULights[frame % 2]->getData().push_back(gpuLight);
                 }

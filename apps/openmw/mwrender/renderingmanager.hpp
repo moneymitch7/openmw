@@ -61,6 +61,8 @@ namespace Fallback
 namespace SceneUtil
 {
     class ShadowManager;
+    class HeldLightShadow;
+    class LampShadows;
     class WorkQueue;
     class LightManager;
     class UnrefQueue;
@@ -352,6 +354,8 @@ namespace MWRender
         std::unique_ptr<ScreenshotManager> mScreenshotManager;
         std::unique_ptr<EffectManager> mEffectManager;
         std::unique_ptr<SceneUtil::ShadowManager> mShadowManager;
+        std::unique_ptr<SceneUtil::HeldLightShadow> mHeldLightShadow;
+        std::unique_ptr<SceneUtil::LampShadows> mLampShadows;
         osg::ref_ptr<PostProcessor> mPostProcessor;
         std::unique_ptr<NpcAnimation> mPlayerAnimation;
         osg::ref_ptr<SceneUtil::PositionAttitudeTransform> mPlayerNode;

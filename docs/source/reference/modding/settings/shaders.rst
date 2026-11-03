@@ -201,6 +201,89 @@ Shaders Settings
    Should be small to avoid unwanted visual changes.
 
 .. omw-setting::
+   :title: held light shadows
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   Indoors, the lights the player carries (a torch, and the stand-in light of a worn lantern; up to two) cast real
+   shadows. Each frame the room around each light is drawn from it into a depth cube map, and the light no longer
+   reaches what it can't see: furniture, pillars and people throw shadows, and walls keep it out of the next room.
+   Only with :ref:`clustered lighting`. Needs a restart.
+
+.. omw-setting::
+   :title: held light shadow resolution
+   :type: int
+   :range: 128 to 2048
+   :default: 512
+
+   Size of each of the six faces of a :ref:`held light shadows` cube map, in pixels. Lower costs the GPU less and
+   makes the shadows softer. Needs a restart.
+
+.. omw-setting::
+   :title: held light shadow min caster size
+   :type: float
+   :range: 0 to 64
+   :default: 0
+
+   Things that would cover fewer pixels than this of a :ref:`held light shadows` face cast no shadow from the
+   player's lights. In a cluttered room most of what those faces draw, six times a frame, is small and far from the
+   light (cups, plates, books across the room), and their shadows are faint and a few pixels across. 0 keeps
+   everything; at 8 a cup is left out once it is a few metres from the light, where it may be seen to start or
+   stop casting as the player walks. Larger things are unaffected. Needs a restart.
+
+.. omw-setting::
+   :title: held light shadow cache distance
+   :type: float
+   :range: 0 to 32
+   :default: 0
+
+   While a light the player carries stays within this many units of where it was (standing still, looking around, a
+   torch swaying in hand), its :ref:`held light shadows` keep what doesn't move: walls, furniture and clutter are drawn
+   once into a second cube map, then one of its six faces a frame (so an opened door or a taken item shows within a few
+   frames), and each frame the faces in view copy it and draw only the people and creatures around the light. The
+   shadows are then cast from where the light was, at most this far from where it is. Moving further draws everything
+   from the light again, as with 0. Needs OpenGL 4.3 (copying between textures) and memory for the second cube map
+   (six faces at :ref:`held light shadow resolution`). 0 draws everything every frame; 4 covers a torch's sway.
+   Needs a restart.
+
+.. omw-setting::
+   :title: held light shadow distance
+   :type: float
+   :range: 0 to 16384
+   :default: 0
+
+   How far from a light the player carries its :ref:`held light shadows` reach, in units. The faces are drawn out to
+   the light's reach (its radius times :ref:`light radius multiplier`), so a large multiplier has them draw much more
+   of the room; with this set lower, they stop here instead, the shadows fading out over the last fifth, and the light
+   shines on unshadowed past it (through walls too). 0 lets the shadows reach as far as the light. Needs a restart.
+
+.. omw-setting::
+   :title: lamp shadows
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   Indoors, the lamps placed in the room (wall sconces, candles, braziers: the 32 nearest the player) cast real
+   shadows too. A lamp doesn't move, so what doesn't move either (walls, floors, furniture, containers) is drawn from
+   it once, into six depth faces, when it comes into the room, and kept; tables and pillars throw shadows and walls
+   keep its light out of the next room, per pixel. The four lamps nearest the player also draw the people and
+   creatures around them every frame, so they throw moving shadows. Only the sides of shapes turned towards a lamp
+   cast: a lamp inside its own fixture (a lantern, a sconce's cage) or set a little into the wall behind it isn't
+   hidden by them, but a single-sided wall seen from behind doesn't stop a lamp either. Lamps that turn out to move
+   (carried along by something) are left without. Doors cast as well, and the lamps around a door draw their shadows
+   again as it opens or shuts; loose items don't cast. Only with :ref:`clustered lighting`. Needs a restart.
+
+.. omw-setting::
+   :title: lamp shadow resolution
+   :type: int
+   :range: 128 to 1024
+   :default: 256
+
+   Size of each of a lamp's six shadow faces, in pixels. 256 is soft and uses about 1.5 MB of video memory per lamp
+   (48 MB for 32 lamps); 512 is sharper at four times the memory. Needs a restart.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

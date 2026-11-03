@@ -17,6 +17,7 @@
 #include <components/resource/resourcesystem.hpp>
 #include <components/sceneutil/clusteredlighting.hpp>
 #include <components/sceneutil/nodecallback.hpp>
+#include <components/sceneutil/positionattitudetransform.hpp>
 
 namespace SceneUtil
 {
@@ -142,6 +143,14 @@ namespace SceneUtil
 
         bool mEmpty = false;
 
+        // Lamp and lantern shadows (LampShadows, HeldLightShadow)
+        bool mCarried = false;
+        osg::observer_ptr<PositionAttitudeTransform> mCarrier;
+        bool mCastsShadows = false;
+        int mLampStillLayer = -1;
+        int mLampLiveLayer = -1;
+        float mLampFar = 0.f;
+
     public:
         META_Node(SceneUtil, LightSource)
 
@@ -161,6 +170,31 @@ namespace SceneUtil
         void setEmpty(bool empty) { mEmpty = empty; }
 
         bool getEmpty() const { return mEmpty; }
+
+        /// A light someone carries (an actor's torch), or the stand-in light of a worn lantern that mods move along
+        /// with the player: lantern shadows pick the player's own among these, lamp shadows leave them alone.
+        void setCarried(bool carried) { mCarried = carried; }
+        bool getCarried() const { return mCarried; }
+
+        /// Who carries the light (their base node), nullptr for none: tells the player's own lights from others'.
+        void setCarrier(PositionAttitudeTransform* carrier) { mCarrier = carrier; }
+        PositionAttitudeTransform* getCarrier() const { return mCarrier.get(); }
+
+        /// Its shadows are drawn (HeldLightShadow), so lamp shadows leave it alone.
+        void setCastsShadows(bool casts) { mCastsShadows = casts; }
+        bool getCastsShadows() const { return mCastsShadows; }
+
+        /// A lamp's shadow faces (LampShadows): the first of its six still layers and of its six live ones (-1: none)
+        /// and the far end of its faces.
+        void setLampShadow(int stillLayer, int liveLayer, float farPlane)
+        {
+            mLampStillLayer = stillLayer;
+            mLampLiveLayer = liveLayer;
+            mLampFar = farPlane;
+        }
+        int getLampStillLayer() const { return mLampStillLayer; }
+        int getLampLiveLayer() const { return mLampLiveLayer; }
+        float getLampFar() const { return mLampFar; }
 
         /// Get the Light safe for modification in the given frame.
         /// @par May be used externally to animate the light's color/attenuation properties,
@@ -263,6 +297,9 @@ namespace SceneUtil
         std::shared_ptr<PPLightBuffer> getPPLightsBuffer() { return mPPLightBuffer; }
 
         float getPointLightRadiusMultiplier() const { return mPointLightRadiusMultiplier; }
+
+        /// The lights in the scene this frame, with their world matrices (filled in the update traversal).
+        const std::vector<LightSourceTransform>& getLightsThisFrame() const { return mLights; }
 
         float getPointLightFadeEnd() const { return mPointLightFadeEnd; }
 

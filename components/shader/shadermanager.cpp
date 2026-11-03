@@ -829,6 +829,12 @@ namespace Shader
             case Slot::ShadowMaps:
                 slotDescr = "shadow maps";
                 break;
+            case Slot::HeldLightShadow:
+                slotDescr = "held light shadow";
+                break;
+            case Slot::LampShadows:
+                slotDescr = "lamp shadows";
+                break;
             default:
                 slotDescr = "UNKNOWN";
         }

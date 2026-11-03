@@ -42,8 +42,14 @@ varying vec3 passViewPos;
 #include "lib/view/depth.glsl"
 
 uniform float osg_SimulationTime;
+#ifndef OSG_VIEW_MATRIX_INVERSE_DECLARED
+#define OSG_VIEW_MATRIX_INVERSE_DECLARED
 uniform mat4 osg_ViewMatrixInverse;
+#endif
+#ifndef OSG_VIEW_MATRIX_DECLARED
+#define OSG_VIEW_MATRIX_DECLARED
 uniform mat4 osg_ViewMatrix;
+#endif
 uniform float windSpeed;
 uniform vec3 playerPos;
 

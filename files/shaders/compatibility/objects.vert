@@ -80,7 +80,10 @@ varying vec4 passTangent;
 varying vec3 orthoDepthMapCoord;
 
 uniform mat4 depthSpaceMatrix;
+#ifndef OSG_VIEW_MATRIX_INVERSE_DECLARED
+#define OSG_VIEW_MATRIX_INVERSE_DECLARED
 uniform mat4 osg_ViewMatrixInverse;
+#endif
 #endif
 
 uniform vec2 screenRes;

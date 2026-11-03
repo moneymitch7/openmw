@@ -2,8 +2,10 @@
 
 #include <osg/Group>
 
+#include <components/esm/defs.hpp>
 #include <components/misc/resourcehelpers.hpp>
 #include <components/misc/strings/algorithm.hpp>
+#include <components/sceneutil/lampshadows.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
 #include <components/sceneutil/unrefqueue.hpp>
 #include <components/sceneutil/userdata.hpp>
@@ -58,6 +60,10 @@ namespace MWRender
         cellnode->addChild(insert);
 
         SceneUtil::addUserData(*insert, ptr);
+
+        // lamps redraw their shadows when a door opens or shuts
+        if (ptr.getType() == ESM::REC_DOOR || ptr.getType() == ESM::REC_DOOR4)
+            SceneUtil::addUserData(*insert, SceneUtil::LampShadowMovable{});
 
         const float* f = ptr.getRefData().getPosition().pos;
 

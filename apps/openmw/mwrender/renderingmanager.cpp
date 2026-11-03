@@ -34,6 +34,8 @@
 
 #include <components/sceneutil/cullsafeboundsvisitor.hpp>
 #include <components/sceneutil/depth.hpp>
+#include <components/sceneutil/heldlightshadow.hpp>
+#include <components/sceneutil/lampshadows.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
@@ -271,6 +273,9 @@ namespace MWRender
         globalDefines["exponentialFog"] = exponentialFog ? "1" : "0";
         globalDefines["skyBlending"] = mSkyBlending ? "1" : "0";
         globalDefines["particlePointLighting"] = Settings::shaders().mParticlePointLighting ? "1" : "0";
+        // lamp shadows (the shaders that read them; clustered lighting only)
+        globalDefines["lampShadows"]
+            = (Settings::shaders().mLampShadows && sceneRoot->getClusteredLighting()) ? "1" : "0";
 
         for (auto itr = lightDefines.begin(); itr != lightDefines.end(); itr++)
             globalDefines[itr->first] = itr->second;
@@ -387,6 +392,31 @@ namespace MWRender
             int skyTextureUnit = mResourceSystem->getSceneManager()->getShaderManager().reserveGlobalTextureUnits(
                 Shader::ShaderManager::Slot::SkyTexture);
             mPerViewUniformStateUpdater->enableSkyRTT(skyTextureUnit, mSky->getSkyRTT());
+        }
+
+        // Lantern shadows: the player's carried lights cast shadows indoors (clustered lighting only, the shaders that
+        // read them).
+        if (Settings::shaders().mHeldLightShadows && sceneRoot->getClusteredLighting())
+        {
+            Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
+            const int unit = shaderManager.reserveGlobalTextureUnits(
+                Shader::ShaderManager::Slot::HeldLightShadow, SceneUtil::HeldLightShadow::sMaxLights);
+            mHeldLightShadow = std::make_unique<SceneUtil::HeldLightShadow>(shaderManager, unit,
+                Mask_Static | Mask_Object | Mask_Actor, Settings::shaders().mHeldLightShadowResolution,
+                Settings::shaders().mHeldLightShadowMinCasterSize, Settings::shaders().mHeldLightShadowCacheDistance,
+                Mask_Actor, Settings::shaders().mHeldLightShadowDistance);
+            mHeldLightShadow->install(sceneRoot, mRootNode->getOrCreateStateSet());
+        }
+
+        // Lamp shadows: the lamps placed indoors cast shadows; walls, floors, furniture and containers (statics) once
+        // per lamp, characters every frame for the nearest lamps.
+        if (Settings::shaders().mLampShadows && sceneRoot->getClusteredLighting())
+        {
+            Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
+            const int unit = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::LampShadows, 2);
+            mLampShadows = std::make_unique<SceneUtil::LampShadows>(
+                shaderManager, unit, Mask_Static, Mask_Actor | Mask_Player, Settings::shaders().mLampShadowResolution);
+            mLampShadows->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 
         osg::Camera::CullingMode cullingMode = osg::Camera::DEFAULT_CULLING | osg::Camera::FAR_PLANE_CULLING;
@@ -753,6 +783,16 @@ namespace MWRender
         mResourceSystem->getSceneManager()->getShaderManager().update(*mViewer);
 
         mWater->setRainIntensity(mSky->getRainRipplesEnabled() ? mSky->getPrecipitationAlpha() : 0.f);
+
+        // lamp and lantern shadows: indoors only (no sky)
+        if (mPlayerAnimation != nullptr && (mLampShadows != nullptr || mHeldLightShadow != nullptr))
+        {
+            const osg::Vec3f playerPosition = mPlayerAnimation->getPtr().getRefData().getPosition().asVec3();
+            if (mLampShadows != nullptr)
+                mLampShadows->setFocus(playerPosition, !mSky->isEnabled());
+            if (mHeldLightShadow != nullptr)
+                mHeldLightShadow->setFocus(playerPosition, !mSky->isEnabled());
+        }
 
         mWater->update(dt, paused);
         if (!paused)
@@ -1472,6 +1512,8 @@ namespace MWRender
                     for (const auto& [name, key] : getLightRoot()->getLightDefines())
                         defines[name] = key;
                     defines["particlePointLighting"] = Settings::shaders().mParticlePointLighting ? "1" : "0";
+                    defines["lampShadows"]
+                        = (Settings::shaders().mLampShadows && getLightRoot()->getClusteredLighting()) ? "1" : "0";
                     mResourceSystem->getSceneManager()->getShaderManager().setGlobalDefines(defines);
 
                     mStateUpdater->reset();
