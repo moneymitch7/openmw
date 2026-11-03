@@ -29,6 +29,8 @@ namespace Settings
         SettingValue<bool> mWobblyShores{ mIndex, "Water", "wobbly shores" };
         SettingValue<int> mReflectionUpdateInterval{ mIndex, "Water", "reflection update interval",
             makeClampSanitizerInt(1, 4) };
+        SettingValue<int> mReflectionUpdateMaxAge{ mIndex, "Water", "reflection update max age",
+            makeClampSanitizerInt(20, 150) };
         SettingValue<float> mReflectionStaticsDistance{ mIndex, "Water", "reflection statics distance",
             makeMaxSanitizerFloat(0) };
         SettingValue<float> mWaveHeight{ mIndex, "Water", "wave height", makeClampSanitizerFloat(0, 150) };

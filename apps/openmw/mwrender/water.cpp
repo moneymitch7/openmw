@@ -266,6 +266,7 @@ namespace MWRender
             setInterior(isInterior);
             setDepthBufferInternalFormat(GL_DEPTH32F_STENCIL8);
             setUpdateInterval(static_cast<unsigned int>(Settings::water().mReflectionUpdateInterval.get()));
+            setUpdateMaxAge(Settings::water().mReflectionUpdateMaxAge.get() / 1000.0);
             setCullProfileSection(SceneUtil::CullProfile::Section::Water);
             mClipCullNode = new ClipCullNode;
         }

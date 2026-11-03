@@ -98,8 +98,10 @@ namespace SceneUtil
         void setDepthBufferInternalFormat(GLint internalFormat);
 
         /// Render only every `interval` frames and reuse the texture in between, unless it would get older than
-        /// 40 ms (low frame rate). 1 = every frame.
+        /// the update max age (40 ms by default; low frame rate). 1 = every frame.
         void setUpdateInterval(unsigned int interval) { mUpdateInterval = interval < 1 ? 1 : interval; }
+        /// OpenMGE XE: the oldest a kept texture may be (seconds) before it is drawn again anyway
+        void setUpdateMaxAge(double seconds) { mUpdateMaxAge = seconds; }
 
         /// Count this camera's cull under a section of the cull profile (F3 profiler). Count = none.
         void setCullProfileSection(CullProfile::Section section) { mCullProfileSection = section; }
@@ -122,6 +124,7 @@ namespace SceneUtil
 
         ViewDependentDataMap mViewDependentDataMap;
         unsigned int mUpdateInterval = 1;
+        double mUpdateMaxAge = 0.040;
         CullProfile::Section mCullProfileSection = CullProfile::Section::Count;
         uint32_t mTextureWidth;
         uint32_t mTextureHeight;

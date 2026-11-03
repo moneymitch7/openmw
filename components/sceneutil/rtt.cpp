@@ -57,7 +57,7 @@ namespace SceneUtil
             // With an update interval, keep a recent frame's texture instead of rendering it again
             const double time = cv->getFrameStamp()->getReferenceTime();
             if (mUpdateInterval > 1 && vdd->mRendered && frameNumber - vdd->mLastRenderFrame < mUpdateInterval
-                && time - vdd->mLastRenderTime < 0.040)
+                && time - vdd->mLastRenderTime < mUpdateMaxAge)
             {
                 vdd->mFrameNumber = frameNumber;
                 return;
