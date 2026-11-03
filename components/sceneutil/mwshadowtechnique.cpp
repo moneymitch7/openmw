@@ -1973,6 +1973,8 @@ void MWShadowTechnique::cull(osgUtil::CullVisitor& cv)
                         sd->_cacheSmI = sm_i;
                     }
                     _cropShadowData = sd.get();
+                    _cropFrame = cascadeFrame;
+                    _cropNumMaps = numShadowMapsPerLight;
                 }
                 const bool fitted = cropShadowCameraToMainFrustum(frustum, camera, cascaseNear, cascadeFar, extraPlanes);
                 _cropShadowData = nullptr;
@@ -3307,6 +3309,15 @@ bool MWShadowTechnique::cropShadowCameraToMainFrustum(Frustum& frustum, osg::Cam
                 for (int row = 0; row < 3 && hold; ++row)
                     for (int column = 0; column < 3 && hold; ++column)
                         hold = std::abs(light_v(row, column) - sd._cacheView(row, column)) < 1.5e-3;
+            }
+            // [Shadows] static shadow cache follows sun: while the sun moves, one cascade a frame (in turn) takes the
+            // light's new view and is drawn again, so what doesn't move glides with the sun too instead of stopping
+            // and jumping a twelfth of a degree at a time
+            if (hold && _staticCacheFollowsSun && _cropNumMaps > 0 && _cropFrame % _cropNumMaps == sd._sm_i)
+            {
+                for (int row = 0; row < 3 && hold; ++row)
+                    for (int column = 0; column < 3 && hold; ++column)
+                        hold = std::abs(light_v(row, column) - sd._cacheView(row, column)) < 1e-6;
             }
             if (hold)
             {

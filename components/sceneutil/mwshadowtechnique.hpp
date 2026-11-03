@@ -343,6 +343,8 @@ namespace SceneUtil {
         /// OpenMGE XE: with stable shadows, terrain and statics (the node masks given) are drawn into each cascade
         /// only now and then, the cascade held still meanwhile; what moves is drawn every frame.
         void setStaticShadowCache(bool enabled) { _staticShadowCache = enabled; }
+        /// OpenMGE XE: with the static shadow cache, the kept maps follow the sun one cascade a frame
+        void setStaticCacheFollowsSun(bool enabled) { _staticCacheFollowsSun = enabled; }
         /// OpenMGE XE: the normal offset, grown to this many texels of each shadow map when texels > 0
         void setNormalOffset(float distance, float texels)
         {
@@ -415,6 +417,9 @@ namespace SceneUtil {
         // filled by cropShadowCameraToMainFrustum while a diagnostics line is being put together
         std::ostringstream*                     _diagnosticsOut = nullptr;
         bool                                    _staticShadowCache = false;
+        bool                                    _staticCacheFollowsSun = true;
+        unsigned int                            _cropFrame = 0;
+        unsigned int                            _cropNumMaps = 0;
         float                                   _normalOffsetDistance = 1.f;
         float                                   _normalOffsetTexels = 0.f;
         unsigned int                            _staticCasterMask = 0;

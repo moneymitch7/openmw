@@ -95,6 +95,7 @@ namespace SceneUtil
         mShadowTechnique->setCascadeUpdateInterval(static_cast<unsigned int>(settings.mCascadeUpdateInterval.get()));
         mShadowTechnique->setDiagnostics(settings.mShadowDiagnostics);
         mShadowTechnique->setStaticShadowCache(settings.mStaticShadowCache && settings.mStableShadows);
+        mShadowTechnique->setStaticCacheFollowsSun(settings.mStaticShadowCacheFollowsSun);
         mShadowTechnique->setNormalOffset(settings.mNormalOffsetDistance, settings.mNormalOffsetTexels);
         mActorShadowMaps = static_cast<unsigned int>(settings.mActorShadowMaps.get());
         mShadowTechnique->setNearCascadesOnly(mActorMask, mActorShadowMaps);
