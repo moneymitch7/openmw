@@ -54,6 +54,15 @@ namespace SceneUtil
         /// Rasterize a world-space AABB as an occluder (12 triangles for 6 faces).
         void rasterizeAABBOccluder(const osg::BoundingBox& worldBB);
 
+        /// OpenMGE XE: whether any pixel of these world-space triangles may be visible (per pixel, unlike the box
+        /// test). True when no frame is active.
+        bool testVisibleTriangles(
+            const std::vector<osg::Vec3f>& worldPositions, const std::vector<unsigned int>& indices) const;
+
+        /// OpenMGE XE: the main view found no water on screen on this frame (the water reflection can be skipped)
+        void setWaterHiddenFrame(unsigned int frame) { mWaterHiddenFrame = frame; }
+        bool isWaterHiddenOnFrame(unsigned int frame) const { return mWaterHiddenFrame == frame; }
+
         /// Test if a world-space AABB is visible (not fully occluded).
         /// Returns true if the box may be visible, false if definitely occluded.
         bool testVisibleAABB(const osg::BoundingBox& worldBB) const;
@@ -108,6 +117,7 @@ namespace SceneUtil
         osg::Matrixd mFrameViewInverse;
         unsigned int mOccluderMask = ~0u;
         bool mClipBelow = false;
+        unsigned int mWaterHiddenFrame = ~0u;
         float mClipZ = 0.f;
         // scratch for clipped occluders
         std::vector<osg::Vec3f> mClippedPositions;

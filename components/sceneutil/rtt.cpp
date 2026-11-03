@@ -52,6 +52,13 @@ namespace SceneUtil
     {
         auto frameNumber = cv->getFrameStamp()->getFrameNumber();
         auto* vdd = getViewDependentData(cv);
+        if (frameNumber > vdd->mFrameNumber && mSkipCheck && mSkipCheck(frameNumber))
+        {
+            // not needed on this frame (OpenMGE XE: no water on screen); the next frame that needs it draws it
+            vdd->mFrameNumber = frameNumber;
+            vdd->mRendered = false;
+            return;
+        }
         if (frameNumber > vdd->mFrameNumber)
         {
             // With an update interval, keep a recent frame's texture instead of rendering it again

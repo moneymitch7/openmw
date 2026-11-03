@@ -547,6 +547,10 @@ namespace MWRender
         // Continue normal cull traversal, CellOcclusionCallbacks will test against the buffer
         traverse(node, cv);
 
+        // OpenMGE XE: the buffer now holds everything that hides things from the main view
+        if (mWaterTest)
+            testWater(cv);
+
         // End the occlusion frame so sub-camera traversals (water reflection/refraction,
         // shadow cameras) that share this scene graph don't incorrectly cull against
         // the main camera's occlusion buffer.
@@ -574,8 +578,42 @@ namespace MWRender
                                  << " bldg tris=" << bldgTris << " bldg verts=" << bldgVerts
                                  << " total tris=" << (terrainTris + bldgTris)
                                  << " total verts=" << (terrainVerts + bldgVerts)
-                                 << " tested=" << mCuller->getNumTested() << " occluded=" << mCuller->getNumOccluded();
+                                 << " tested=" << mCuller->getNumTested() << " occluded=" << mCuller->getNumOccluded()
+                                 << " water hidden=" << mWaterHidden << "/" << mWaterTested << " frames";
+                mWaterHidden = 0;
+                mWaterTested = 0;
             }
+        }
+    }
+
+    void SceneOcclusionCallback::testWater(osgUtil::CullVisitor* cv)
+    {
+        if (!mWaterVisible)
+            return;
+        const osg::Vec3f eye = cv->getEyePoint();
+        // from under the water its surface is seen from below; leave the reflection alone there
+        if (eye.z() < mWaterHeight)
+            return;
+        // the water plane around the eye, as a grid (each square small enough to clip well), tested per pixel
+        constexpr int grid = 16;
+        const float radius = std::max(mWaterRadius, 1024.f);
+        const float step = 2.f * radius / grid;
+        mWaterPositions.clear();
+        mWaterIndices.clear();
+        for (int y = 0; y <= grid; ++y)
+            for (int x = 0; x <= grid; ++x)
+                mWaterPositions.emplace_back(eye.x() - radius + x * step, eye.y() - radius + y * step, mWaterHeight);
+        for (int y = 0; y < grid; ++y)
+            for (int x = 0; x < grid; ++x)
+            {
+                const unsigned int i = static_cast<unsigned int>(y * (grid + 1) + x);
+                mWaterIndices.insert(mWaterIndices.end(), { i, i + 1, i + grid + 2, i, i + grid + 2, i + grid + 1 });
+            }
+        ++mWaterTested;
+        if (!mCuller->testVisibleTriangles(mWaterPositions, mWaterIndices))
+        {
+            ++mWaterHidden;
+            mCuller->setWaterHiddenFrame(cv->getFrameStamp()->getFrameNumber());
         }
     }
 

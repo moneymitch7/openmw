@@ -248,6 +248,22 @@ namespace SceneUtil
         ++mNumBuildingOccluders;
     }
 
+    bool OcclusionCuller::testVisibleTriangles(
+        const std::vector<osg::Vec3f>& worldPositions, const std::vector<unsigned int>& indices) const
+    {
+        if (!mFrameActive || !mMOC || worldPositions.empty() || indices.size() < 3)
+            return true;
+        const unsigned int vertexCount = static_cast<unsigned int>(worldPositions.size());
+        for (const auto idx : indices)
+            if (idx >= vertexCount)
+                return true;
+        MaskedOcclusionCulling::VertexLayout vtxLayout(12, 4, 8);
+        const auto result = mMOC->TestTriangles(reinterpret_cast<const float*>(worldPositions.data()),
+            indices.data(), static_cast<int>(indices.size() / 3), mVPFloat, MaskedOcclusionCulling::BACKFACE_NONE,
+            MaskedOcclusionCulling::CLIP_PLANE_ALL, vtxLayout);
+        return result == MaskedOcclusionCulling::VISIBLE;
+    }
+
     bool OcclusionCuller::testVisibleAABB(const osg::BoundingBox& worldBB) const
     {
         if (!mFrameActive)

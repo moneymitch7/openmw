@@ -472,6 +472,15 @@ namespace MWRender
         mWater = std::make_unique<Water>(
             sceneRoot->getParent(0), sceneRoot, mResourceSystem, mViewer->getIncrementalCompileOperation());
         mWater->setTerrainStorage(mTerrainStorage.get()); // 3D water: shallow-water map
+        if (mSceneOcclusionCallback && Settings::camera().mOcclusionSkipHiddenWater)
+        {
+            // OpenMGE XE: no water reflection on frames the main view's occlusion buffer hides all the water
+            mSceneOcclusionCallback->setWaterTest(true);
+            mSceneOcclusionCallback->setWaterRadius(Settings::camera().mViewingDistance);
+            osg::ref_ptr<SceneUtil::OcclusionCuller> culler = mOcclusionCuller;
+            mWater->setReflectionSkipCheck(
+                [culler](unsigned int frameNumber) { return culler->isWaterHiddenOnFrame(frameNumber); });
+        }
         mPostProcessor->setupTransparentBin(mWater.get());
 
         mCamera = std::make_unique<Camera>(mViewer->getCamera());
@@ -1021,6 +1030,8 @@ namespace MWRender
         {
             const bool enabled = mWater->toggle();
             mStateUpdater->setWaterEnabled(mWater->isVisible());
+            if (mSceneOcclusionCallback)
+                mSceneOcclusionCallback->setWaterVisible(mWater->isVisible());
             return enabled;
         }
         else if (mode == Render_Scene)
@@ -1298,6 +1309,8 @@ namespace MWRender
         mWater->setEnabled(enabled);
         mSky->setWaterEnabled(enabled);
         mStateUpdater->setWaterEnabled(mWater->isVisible());
+        if (mSceneOcclusionCallback)
+            mSceneOcclusionCallback->setWaterVisible(mWater->isVisible());
 
         mPostProcessor->getStateUpdater()->setIsWaterEnabled(enabled);
     }
@@ -1308,6 +1321,8 @@ namespace MWRender
         mWater->setHeight(height);
         mSky->setWaterHeight(height);
         mStateUpdater->setWaterHeight(height);
+        if (mSceneOcclusionCallback)
+            mSceneOcclusionCallback->setWaterHeight(height);
 
         mPostProcessor->getStateUpdater()->setWaterHeight(height);
     }
@@ -2090,6 +2105,8 @@ namespace MWRender
     void RenderingManager::setViewDistance(float distance, bool delay)
     {
         mViewDistance = distance;
+        if (mSceneOcclusionCallback)
+            mSceneOcclusionCallback->setWaterRadius(distance);
         if (mMgeFogRangeUniform)
             mMgeFogRangeUniform->set(getMgeFogRange(mViewDistance));
 

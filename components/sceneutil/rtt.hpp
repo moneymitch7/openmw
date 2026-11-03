@@ -5,6 +5,7 @@
 
 #include "cullprofile.hpp"
 
+#include <functional>
 #include <map>
 #include <memory>
 
@@ -102,6 +103,9 @@ namespace SceneUtil
         void setUpdateInterval(unsigned int interval) { mUpdateInterval = interval < 1 ? 1 : interval; }
         /// OpenMGE XE: the oldest a kept texture may be (seconds) before it is drawn again anyway
         void setUpdateMaxAge(double seconds) { mUpdateMaxAge = seconds; }
+        /// OpenMGE XE: returns true for a frame the texture isn't needed on (it is then not drawn, and the next
+        /// frame that needs it draws it)
+        void setSkipCheck(std::function<bool(unsigned int frameNumber)> check) { mSkipCheck = std::move(check); }
 
         /// Count this camera's cull under a section of the cull profile (F3 profiler). Count = none.
         void setCullProfileSection(CullProfile::Section section) { mCullProfileSection = section; }
@@ -125,6 +129,7 @@ namespace SceneUtil
         ViewDependentDataMap mViewDependentDataMap;
         unsigned int mUpdateInterval = 1;
         double mUpdateMaxAge = 0.040;
+        std::function<bool(unsigned int)> mSkipCheck;
         CullProfile::Section mCullProfileSection = CullProfile::Section::Count;
         uint32_t mTextureWidth;
         uint32_t mTextureHeight;

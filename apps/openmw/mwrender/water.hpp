@@ -1,6 +1,7 @@
 #ifndef OPENMW_MWRENDER_WATER_H
 #define OPENMW_MWRENDER_WATER_H
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -75,6 +76,7 @@ namespace MWRender
         std::unique_ptr<RippleSimulation> mSimulation;
 
         osg::ref_ptr<Reflection> mReflection;
+        std::function<bool(unsigned int)> mReflectionSkipCheck;
         osg::ref_ptr<Ripples> mRipples;
 
         bool mEnabled;
@@ -126,6 +128,9 @@ namespace MWRender
         bool toggle();
 
         bool isVisible() const { return mEnabled && mToggled; }
+
+        /// OpenMGE XE: the reflection isn't drawn on frames this returns true for (no water on screen)
+        void setReflectionSkipCheck(std::function<bool(unsigned int)> check);
 
         bool isUnderwater(const osg::Vec3f& pos) const;
 

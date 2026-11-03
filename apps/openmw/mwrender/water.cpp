@@ -478,6 +478,7 @@ namespace MWRender
 
             mReflection = new Reflection(rttSize, mInterior);
             mReflection->setWaterLevel(mTop);
+            mReflection->setSkipCheck(mReflectionSkipCheck);
             mReflection->setScene(mSceneRoot);
             if (mCullCallback)
                 mReflection->addCullCallback(mCullCallback);
@@ -894,6 +895,13 @@ namespace MWRender
             texname << "textures/water/" << texture << std::setw(2) << std::setfill('0') << i << ".dds";
             textures.emplace_back(texname.str());
         }
+    }
+
+    void Water::setReflectionSkipCheck(std::function<bool(unsigned int)> check)
+    {
+        mReflectionSkipCheck = std::move(check);
+        if (mReflection)
+            mReflection->setSkipCheck(mReflectionSkipCheck);
     }
 
     void Water::setEnabled(bool enabled)

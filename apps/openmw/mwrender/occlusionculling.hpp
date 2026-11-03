@@ -163,6 +163,13 @@ namespace MWRender
         /// Update cell type flags. Call when the player transitions cells.
         void setCellType(bool isInterior, bool isQuasiExterior);
 
+        /// OpenMGE XE: after the main view has culled, test whether any of the water (at this height, out to radius)
+        /// is on screen; if none is, the frame is marked water-hidden on the culler and the reflection skipped.
+        void setWaterTest(bool enabled) { mWaterTest = enabled; }
+        void setWaterVisible(bool visible) { mWaterVisible = visible; }
+        void setWaterHeight(float height) { mWaterHeight = height; }
+        void setWaterRadius(float radius) { mWaterRadius = radius; }
+
     private:
         void setupDebugOverlay();
         void updateDebugOverlay(osgUtil::CullVisitor* cv);
@@ -180,6 +187,17 @@ namespace MWRender
         bool mIsInterior = false;
         bool mIsQuasiExterior = false;
         unsigned int mLastFrameNumber = 0;
+        // OpenMGE XE: water reflection skipped while no water is on screen
+        bool mWaterTest = false;
+        bool mWaterVisible = false;
+        float mWaterHeight = 0.f;
+        float mWaterRadius = 8192.f;
+        std::vector<osg::Vec3f> mWaterPositions;
+        std::vector<unsigned int> mWaterIndices;
+        unsigned int mWaterTested = 0;
+        unsigned int mWaterHidden = 0;
+        void testWater(osgUtil::CullVisitor* cv);
+
         // OpenMGE XE: occlusion culling in the water reflection too
         bool mEnableReflections = false;
         unsigned int mLastReflectionFrameNumber = 0;

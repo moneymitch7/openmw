@@ -63,6 +63,7 @@ namespace Settings
             makeClampSanitizerInt(0, 500000) };
         SettingValue<bool> mOcclusionActiveGridOccluders{ mIndex, "Camera", "occlusion active grid occluders" };
         SettingValue<bool> mOcclusionCullingReflections{ mIndex, "Camera", "occlusion culling reflections" };
+        SettingValue<bool> mOcclusionSkipHiddenWater{ mIndex, "Camera", "occlusion skip hidden water" };
     };
 }
 
