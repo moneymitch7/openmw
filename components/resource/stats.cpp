@@ -305,7 +305,8 @@ namespace Resource
         if (viewer != nullptr)
         {
             // Add/remove openmw stats to the osd as necessary
-            viewer->getViewerStats()->collectStats("engine", _statsType >= StatsHandler::StatsType::VIEWER_STATS);
+            viewer->getViewerStats()->collectStats(
+                "engine", mAlwaysCollectEngineStats || _statsType >= StatsHandler::StatsType::VIEWER_STATS);
 
             if (mOfflineCollect)
                 collectStatistics(*viewer);

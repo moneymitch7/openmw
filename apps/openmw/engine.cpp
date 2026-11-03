@@ -1,11 +1,22 @@
 #include "engine.hpp"
 
+#include <algorithm>
+#include <array>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <fstream>
 #include <future>
+#include <iomanip>
+#include <sstream>
 #include <system_error>
 
+#include <osg/BufferObject>
+#include <osg/ContextData>
+#include <osg/GLExtensions>
+#include <osg/GraphicsThread>
 #include <osg/Stats>
+#include <osg/Texture>
 #include <osg/Timer>
 #include <osgDB/ReaderWriter>
 #include <osgDB/Registry>
@@ -19,6 +30,7 @@
 
 #include <components/misc/framestats.hpp>
 #include <components/misc/rng.hpp>
+#include <components/misc/timeconvert.hpp>
 
 #include <components/vfs/manager.hpp>
 #include <components/vfs/registerarchives.hpp>
@@ -35,6 +47,7 @@
 
 #include <components/stereo/stereomanager.hpp>
 
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/glextensions.hpp>
 #include <components/sceneutil/workqueue.hpp>
 
@@ -71,10 +84,13 @@
 #include "mwsound/constants.hpp"
 #include "mwsound/soundmanagerimp.hpp"
 
+#include "mwworld/cell.hpp"
+#include "mwworld/cellstore.hpp"
 #include "mwworld/class.hpp"
 #include "mwworld/datetimemanager.hpp"
 #include "mwworld/worldimp.hpp"
 
+#include "mwrender/fxtimings.hpp"
 #include "mwrender/vismask.hpp"
 
 #include "mwclass/classes.hpp"
@@ -83,6 +99,7 @@
 #include "mwdialogue/journalimp.hpp"
 #include "mwdialogue/scripttest.hpp"
 
+#include "mwmechanics/actorutil.hpp"
 #include "mwmechanics/mechanicsmanagerimp.hpp"
 
 #include "mwstate/statemanagerimp.hpp"
@@ -91,6 +108,356 @@
 
 namespace
 {
+    // Video memory numbers for the performance log, read on the draw thread (the GL context lives there)
+    // about twice a second. AMD drivers report free video memory and the free system memory the driver may page
+    // textures out to (GL_ATI_meminfo); NVIDIA drivers report free video memory and how much has been evicted so far
+    // (GL_NVX_gpu_memory_info). -1 when the driver reports neither. The texture object counts are OSG's: textures it
+    // has live on the GPU, and released ones it still holds on to for reuse.
+    struct GpuMemory
+    {
+        std::atomic<int> mFreeMb{ -1 };
+        std::atomic<int> mOtherMb{ -1 };
+        std::atomic<int> mTextureObjects{ -1 };
+        std::atomic<int> mOrphanedTextureObjects{ -1 };
+        // OSG's own count of what it has put on the GPU: textures and vertex/index buffers, in MB
+        std::atomic<int> mTexturePoolMb{ -1 };
+        std::atomic<int> mBufferPoolMb{ -1 };
+        std::atomic<int> mBufferObjects{ -1 };
+    };
+    GpuMemory sGpuMemory;
+
+    class GpuMemoryProbe : public osg::GraphicsOperation
+    {
+    public:
+        GpuMemoryProbe()
+            : osg::Referenced(true)
+            , osg::GraphicsOperation("GpuMemoryProbe", true)
+        {
+        }
+
+        void operator()(osg::GraphicsContext* context) override
+        {
+            if (mFrames++ % 30 != 0 || context == nullptr || context->getState() == nullptr)
+                return;
+            const unsigned int contextId = context->getState()->getContextID();
+            if (!mChecked)
+            {
+                mChecked = true;
+                mAti = osg::isGLExtensionSupported(contextId, "GL_ATI_meminfo");
+                mNvx = !mAti && osg::isGLExtensionSupported(contextId, "GL_NVX_gpu_memory_info");
+            }
+            if (mAti)
+            {
+                // GL_TEXTURE_FREE_MEMORY_ATI: free pool memory, largest free block, free auxiliary (system) memory,
+                // largest auxiliary block, all in KB.
+                GLint values[4] = { -1, -1, -1, -1 };
+                glGetIntegerv(0x87FC, values);
+                sGpuMemory.mFreeMb = values[0] >= 0 ? values[0] / 1024 : -1;
+                sGpuMemory.mOtherMb = values[2] >= 0 ? values[2] / 1024 : -1;
+            }
+            else if (mNvx)
+            {
+                GLint available = -1;
+                GLint evicted = -1;
+                glGetIntegerv(0x9049, &available); // GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, KB
+                glGetIntegerv(0x904B, &evicted); // GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX, KB
+                sGpuMemory.mFreeMb = available >= 0 ? available / 1024 : -1;
+                sGpuMemory.mOtherMb = evicted >= 0 ? evicted / 1024 : -1;
+            }
+            if (osg::TextureObjectManager* textures = osg::get<osg::TextureObjectManager>(contextId))
+            {
+                sGpuMemory.mTextureObjects = static_cast<int>(textures->getNumberActiveTextureObjects());
+                sGpuMemory.mOrphanedTextureObjects = static_cast<int>(textures->getNumberOrphanedTextureObjects());
+                sGpuMemory.mTexturePoolMb = static_cast<int>(textures->getCurrTexturePoolSize() / (1024 * 1024));
+            }
+            if (osg::GLBufferObjectManager* buffers = osg::get<osg::GLBufferObjectManager>(contextId))
+            {
+                sGpuMemory.mBufferPoolMb = static_cast<int>(buffers->getCurrGLBufferObjectPoolSize() / (1024 * 1024));
+                sGpuMemory.mBufferObjects = static_cast<int>(buffers->getNumberActiveGLBufferObjects());
+            }
+        }
+
+    private:
+        unsigned int mFrames = 0;
+        bool mChecked = false;
+        bool mAti = false;
+        bool mNvx = false;
+    };
+
+    // The hidden performance log ([General] performance log). Every frame's F3 profiler numbers are added up,
+    // and once a second their averages, the second's worst frame and where the player is go to performance-log.csv next
+    // to openmw.log. Nothing is shown on screen.
+    class PerformanceLog
+    {
+    public:
+        PerformanceLog(const std::filesystem::path& path, osgViewer::Viewer& viewer)
+            : mFile(path, std::ios::out | std::ios::trunc)
+            , mViewer(viewer)
+        {
+            mFxProfilePath = path.parent_path() / "postprocess-profile.txt";
+            if (!mFile.is_open())
+            {
+                Log(Debug::Warning) << "Failed to open the performance log " << path;
+                return;
+            }
+            Log(Debug::Info) << "Performance log: " << path;
+            enableStats();
+            if (osg::GraphicsContext* context = viewer.getCamera()->getGraphicsContext())
+                context->add(new GpuMemoryProbe);
+            MWRender::FxTimings::setEnabled(true);
+            mFile << "time,cell,x,y,menu,fps,frame ms,worst frame ms";
+            for (const Column& column : mColumns)
+                mFile << ',' << column.mHeading;
+            mFile << ",vram free MB,vram other MB,gl textures,gl released textures,image MB,gl buffer MB,gl buffers"
+                  << ",weather,next weather,weather change,game hour";
+            mFile << '\n';
+            mFile.flush();
+        }
+
+        bool isOpen() const { return mFile.is_open(); }
+
+        void update(bool menu)
+        {
+            // Rendering stats arrive a few frames late, and loading screens draw several frames in one main loop
+            // iteration: read every frame the stats history still holds that hasn't been read yet.
+            const unsigned int frame = mViewer.getFrameStamp()->getFrameNumber();
+            if (frame < sStatsDelay + sStatsHistory)
+                return;
+            const unsigned int last = frame - sStatsDelay;
+            const unsigned int first = std::max(mLastFrame + 1, last - sStatsHistory);
+            const osg::Stats& stats = *mViewer.getViewerStats();
+            const osg::Stats& cameraStats = *mViewer.getCamera()->getStats();
+            for (unsigned int i = first; i <= last; ++i)
+            {
+                double value = 0.0;
+                double frameMs = 0.0;
+                if (stats.getAttribute(i, "Frame duration", value))
+                {
+                    frameMs = value * 1000.0;
+                    mFrameTime.add(frameMs);
+                    mWorstFrameMs = std::max(mWorstFrameMs, frameMs);
+                }
+                for (Column& column : mColumns)
+                    if ((column.mCamera ? cameraStats : stats).getAttribute(i, column.mAttribute, value))
+                    {
+                        // A time of more than a minute is the GPU's clock jumping (its timer queries come back as
+                        // days now and then on some drivers), not a measurement: left out of the averages.
+                        if (column.mScale != 1.0 && !(value * column.mScale < 60000.0))
+                            continue;
+                        column.mSum.add(value * column.mScale);
+                    }
+                if (frameMs >= sSlowFrameMs)
+                    logSlowFrame(frameMs, i, stats, cameraStats, menu);
+            }
+            mLastFrame = last;
+
+            const auto now = std::chrono::steady_clock::now();
+            if (now < mNext)
+                return;
+            mNext = now + std::chrono::seconds(1);
+
+            // Closing the F3 or F4 pages switches some of these off again.
+            enableStats();
+
+            mFile << Misc::timeToString(std::chrono::system_clock::now(), "%H:%M:%S") << ',';
+            const MWWorld::Ptr player = MWMechanics::getPlayer();
+            if (!player.isEmpty() && player.isInCell())
+            {
+                std::string cell(player.getCell()->getCell()->getDescription());
+                std::replace(cell.begin(), cell.end(), ',', ' ');
+                std::replace(cell.begin(), cell.end(), '"', '\'');
+                const osg::Vec3f pos = player.getRefData().getPosition().asVec3();
+                mFile << '"' << cell << "\"," << static_cast<int>(pos.x()) << ',' << static_cast<int>(pos.y());
+            }
+            else
+                mFile << ",,";
+
+            const double frameMs = mFrameTime.take();
+            mFile << ',' << (menu ? 1 : 0) << std::fixed << std::setprecision(2) << ','
+                  << (frameMs > 0 ? 1000.0 / frameMs : -1.0) << ',' << frameMs << ',' << mWorstFrameMs;
+            mWorstFrameMs = 0.0;
+            for (Column& column : mColumns)
+                mFile << ',' << std::setprecision(column.mScale == 1.0 ? 0 : 2) << column.mSum.take();
+            mFile << ',' << sGpuMemory.mFreeMb.load() << ',' << sGpuMemory.mOtherMb.load() << ','
+                  << sGpuMemory.mTextureObjects.load() << ',' << sGpuMemory.mOrphanedTextureObjects.load() << ','
+                  << imageMb() << ',' << sGpuMemory.mBufferPoolMb.load() << ',' << sGpuMemory.mBufferObjects.load();
+            // The weather (its number: 0 clear ... 4 rain, 5 thunderstorm, ... 9 blizzard), the one it is changing to
+            // (-1 for none) and how far along the change is, which weather-driven post-processing shaders follow.
+            if (MWBase::World* world = MWBase::Environment::get().getWorld(); world != nullptr && !player.isEmpty())
+                mFile << ',' << world->getCurrentWeatherScriptId() << ',' << world->getNextWeatherScriptId() << ','
+                      << std::setprecision(2) << world->getWeatherTransition() << ','
+                      << world->getTimeStamp().getHour();
+            else
+                mFile << ",,,,";
+            mFile << '\n';
+            mFile.flush();
+
+            if (++mSeconds % 5 == 0)
+                writeFxProfile(menu);
+        }
+
+    private:
+        // A stutter while playing: what that one frame spent its time on (the timed parts over 5 ms), and where the
+        // player was, so single hitches can be told apart from the per-second averages in the CSV.
+        static constexpr double sSlowFrameMs = 150.0;
+
+        void logSlowFrame(
+            double frameMs, unsigned int frame, const osg::Stats& stats, const osg::Stats& cameraStats, bool menu)
+        {
+            std::ostringstream parts;
+            parts << std::fixed << std::setprecision(0);
+            for (const Column& column : mColumns)
+            {
+                double value = 0.0;
+                if (column.mScale == 1.0
+                    || !(column.mCamera ? cameraStats : stats).getAttribute(frame, column.mAttribute, value))
+                    continue;
+                value *= column.mScale;
+                if (value >= 5.0)
+                    parts << ", " << column.mHeading << ' ' << value;
+            }
+            std::string where;
+            const MWWorld::Ptr player = MWMechanics::getPlayer();
+            if (!player.isEmpty() && player.isInCell())
+                where = " in " + std::string(player.getCell()->getCell()->getDescription());
+            Log(Debug::Warning) << "Slow frame: " << static_cast<int>(frameMs) << " ms" << where
+                                << (menu ? " (a menu is open)" : "")
+                                << (parts.str().empty() ? std::string(", none of the timed parts over 5 ms")
+                                                        : parts.str());
+        }
+
+        // Every 5 seconds: each post-processing shader's GPU time over those seconds, slowest first.
+        void writeFxProfile(bool menu)
+        {
+            const std::vector<MWRender::FxTimings::Entry> entries = MWRender::FxTimings::take();
+            std::ofstream out(mFxProfilePath, std::ios::out | std::ios::trunc);
+            if (!out.is_open())
+                return;
+            out << "OpenMW post-processing GPU time per shader (averages over the last ~5 seconds, rewritten every 5 "
+                   "seconds)\n";
+            const MWWorld::Ptr player = MWMechanics::getPlayer();
+            if (!player.isEmpty() && player.isInCell())
+                out << "Player in " << player.getCell()->getCell()->getDescription() << (menu ? " (menu open)" : "")
+                    << '\n';
+            out << "\n   avg ms  worst ms  frames  shader\n";
+            double total = 0.0;
+            for (const MWRender::FxTimings::Entry& entry : entries)
+            {
+                out << std::fixed << std::setprecision(2) << std::setw(9) << entry.mAverageMs << std::setw(10)
+                    << entry.mWorstMs << std::setw(8) << entry.mFrames << "  " << entry.mTechnique << '\n';
+                total += entry.mAverageMs;
+            }
+            out << "\n"
+                << std::fixed << std::setprecision(2) << std::setw(9) << total
+                << "  total (shaders in the chain that ran; timed every 4th frame)\n";
+        }
+
+        std::filesystem::path mFxProfilePath;
+        unsigned int mSeconds = 0;
+
+        static constexpr unsigned int sStatsDelay = 4;
+        static constexpr unsigned int sStatsHistory = 20;
+
+        struct Sum
+        {
+            double mTotal = 0.0;
+            unsigned int mCount = 0;
+
+            void add(double value)
+            {
+                mTotal += value;
+                ++mCount;
+            }
+
+            // The average since the last call, or -1 when nothing was recorded.
+            double take()
+            {
+                const double average = mCount > 0 ? mTotal / mCount : -1.0;
+                *this = Sum();
+                return average;
+            }
+        };
+
+        struct Column
+        {
+            const char* mHeading;
+            const char* mAttribute;
+            bool mCamera = false;
+            double mScale = 1000.0;
+            Sum mSum{};
+        };
+
+        void enableStats()
+        {
+            osg::Stats& stats = *mViewer.getViewerStats();
+            stats.collectStats("frame_rate", true);
+            stats.collectStats("resource", true);
+            osg::Stats& cameraStats = *mViewer.getCamera()->getStats();
+            cameraStats.collectStats("rendering", true);
+            cameraStats.collectStats("gpu", true);
+        }
+
+        std::ofstream mFile;
+        osgViewer::Viewer& mViewer;
+        std::chrono::steady_clock::time_point mNext;
+        unsigned int mLastFrame = 0;
+        Sum mFrameTime;
+        double mWorstFrameMs = 0.0;
+
+        // The textures loaded: not counted in this build (the column is kept so the files read the same).
+        static long long imageMb() { return -1; }
+        std::array<Column, 45> mColumns{ {
+            { "input", "input_time_taken" },
+            { "sound", "sound_time_taken" },
+            { "luasync", "luasyncupdate_time_taken" },
+            { "state", "state_time_taken" },
+            { "script", "script_time_taken" },
+            { "mech", "mechanics_time_taken" },
+            { "phys", "physics_time_taken" },
+            { "phys async", "physicsworker_time_taken" },
+            { "world", "world_time_taken" },
+            { "gui", "gui_time_taken" },
+            { "focus", "focusobject_time_taken" },
+            { "lua", "lua_time_taken" },
+            { "cull", "Cull traversal time taken", true },
+            { "cull shadows", "cullshadows_time_taken" },
+            { "cull shadow bounds", "cullshadowbounds_time_taken" },
+            { "cull water", "cullwater_time_taken" },
+            { "cull occluders", "culloccluders_time_taken" },
+            { "cull light lists", "culllightlists_time_taken" },
+            { "light lists", "Cull Light Lists", false, 1.0 },
+            { "draw", "Draw traversal time taken", true },
+            { "gpu", "GPU draw time taken", true },
+            { "occlusion tested", "Occlusion Tested", false, 1.0 },
+            { "occlusion culled", "Occlusion Culled", false, 1.0 },
+            // What the draws are, from one frame in ten (components/sceneutil/drawcount.hpp)
+            { "draws land", "Draws Land", false, 1.0 },
+            { "draws distant objects", "Draws Distant Objects", false, 1.0 },
+            { "draws nearby merged", "Draws Nearby Merged", false, 1.0 },
+            { "draws objects", "Draws Objects", false, 1.0 },
+            { "draws actors", "Draws Actors", false, 1.0 },
+            { "draws grass", "Draws Grass", false, 1.0 },
+            { "draws other", "Draws Other", false, 1.0 },
+            { "draws shadow maps", "Draws Shadow Maps", false, 1.0 },
+            { "draws reflection", "Draws Reflection", false, 1.0 },
+            { "draws other passes", "Draws Other Passes", false, 1.0 },
+            // What the resource caches hold, to tell a growing cache from memory held elsewhere.
+            { "cached images", "Image Count", false, 1.0 },
+            { "cached nodes", "Node Count", false, 1.0 },
+            { "terrain chunks", "Terrain Chunk Count", false, 1.0 },
+            { "terrain textures", "Terrain Texture Count", false, 1.0 },
+            { "object chunks", "Object Chunk Count", false, 1.0 },
+            // what the chunks hold: vertex and index data in MB and how many distinct textures (shared ones once)
+            { "object chunk MB", "Object Chunk MB", false, 1.0 },
+            { "object chunk textures", "Object Chunk Textures", false, 1.0 },
+            { "terrain chunk MB", "Terrain Chunk MB", false, 1.0 },
+            { "terrain chunk textures", "Terrain Chunk Textures", false, 1.0 },
+            { "groundcover chunks", "Groundcover Chunk Count", false, 1.0 },
+            { "preloaded cells", "CellPreloader Count", false, 1.0 },
+            { "unref queue", "UnrefQueue", false, 1.0 },
+        } };
+    };
+
     void checkSDLError(int ret)
     {
         if (ret != 0)
@@ -991,6 +1358,8 @@ void OMW::Engine::go()
     mEncoder = std::make_unique<ToUTF8::Utf8Encoder>(mEncoding);
 
     // Setup viewer
+    // with the performance log on, the cull visitors also count what the frame's draws are
+    SceneUtil::DrawCount::installCountingCullVisitor(Settings::general().mPerformanceLog);
     mViewer = new osgViewer::Viewer;
     mViewer->getCamera()->getOrCreateStateSet()->removeAttribute(osg::StateAttribute::MATERIAL);
     SceneUtil::disableFFPStateForRenderer(static_cast<osgViewer::Renderer*>(mViewer->getCamera()->getRenderer()));
@@ -1066,6 +1435,15 @@ void OMW::Engine::go()
         mWindowManager->executeInConsole(mStartupScript);
     }
 
+    std::unique_ptr<PerformanceLog> performanceLog;
+    if (Settings::general().mPerformanceLog)
+    {
+        performanceLog = std::make_unique<PerformanceLog>(mCfgMgr.getLogPath() / "performance-log.csv", *mViewer);
+        if (!performanceLog->isOpen())
+            performanceLog.reset();
+    }
+    statsHandler->setAlwaysCollectEngineStats(performanceLog != nullptr);
+
     // Start the main rendering loop
     MWWorld::DateTimeManager& timeManager = *mWorld->getTimeManager();
     Misc::FrameRateLimiter frameRateLimiter = Misc::makeFrameRateLimiter(mEnvironment.getFrameRateLimit());
@@ -1107,6 +1485,9 @@ void OMW::Engine::go()
                     reportStats(i - statsReportDelay, *mViewer, stats);
             }
         }
+
+        if (performanceLog)
+            performanceLog->update(mWindowManager->isGuiMode());
 
         frameRateLimiter.limit();
     }

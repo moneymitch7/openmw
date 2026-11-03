@@ -32,6 +32,7 @@
 #include <components/misc/rng.hpp>
 #include <components/nifosg/autotransform.hpp>
 #include <components/resource/scenemanager.hpp>
+#include <components/sceneutil/drawcount.hpp>
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/material.hpp>
 #include <components/sceneutil/morphgeometry.hpp>
@@ -918,6 +919,9 @@ namespace MWRender
 
         group->getBound();
         group->setNodeMask(Mask_Static);
+        // tells nearby merged statics from distant ones in the performance log's draw counts
+        group->setName(std::string(
+            activeGrid ? SceneUtil::DrawCount::sActiveGridChunkName : SceneUtil::DrawCount::sDistantChunkName));
         if (activeGrid)
         {
             std::sort(refnums.begin(), refnums.end());

@@ -61,6 +61,22 @@ namespace MWRender
         const osg::ref_ptr<osg::Texture>& getSceneTexture(size_t frameId) const { return mTextureScene; }
 
     private:
+        // GPU time per technique (FxTimings, the performance log). Timestamps are written before each technique and
+        // after the last; a frame's set is read back a few frames later, when the GPU has finished it, before reuse.
+        struct GpuTimerFrame
+        {
+            std::vector<unsigned int> mQueries;
+            std::vector<const Fx::Technique*> mTechniques;
+            bool mPending = false;
+        };
+        struct GpuTimer
+        {
+            std::array<GpuTimerFrame, 4> mFrames;
+            unsigned int mIndex = 0;
+        };
+        GpuTimerFrame* beginGpuTiming(osg::State& state, std::size_t techniques) const;
+        mutable std::vector<GpuTimer> mGpuTimers;
+
         bool mAvgLum = false;
         bool mPostprocessing = false;
 
