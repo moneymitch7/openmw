@@ -29,6 +29,10 @@ uniform DirectionalLight sun;
 
 const vec3 WATER_COLOR = vec3(0.090195, 0.115685, 0.12745);
 
+#if @mgeFog
+#include "lib/fog/mge.glsl"
+#endif
+
 void computeFog(vec3 pos, float euclideanDist, float linearDist, float near, float far, out float colorScale, out vec3 colorOffset)
 {
 #if @radialFog
@@ -70,6 +74,52 @@ void computeFog(vec3 pos, float euclideanDist, float linearDist, float near, flo
         end = far;
         useWaterDepthFog = false;
     }
+
+#if @mgeFog
+    // [Fog] mge fog: above the water the MGE XE fog replaces the distance fog below (lib/fog/mge.glsl). Underwater
+    // views and draws with a fixed fog depth keep it.
+    if (!cameraBelowWater && fog.depth < 0.0 && length(pos) > 0.0)
+    {
+        vec3 dirWorld = normalize((osg_ViewMatrixInverse * vec4(normalize(pos), 0.0)).xyz);
+        // geometry under the water seen from above takes the air's fog only for the stretch of the view through the
+        // air; the water's own murk covers the rest
+        float airDist = length(pos);
+        if (useWaterDepthFog && dist > 0.0)
+            airDist *= max(1.0 - waterDepth / dist, 0.001);
+        vec4 skyBehind = vec4(0.0);
+#if @skyBlending
+        vec3 skySample = sampleSkyColor(gl_FragCoord.xy / screenRes);
+        if (!isReflection && dot(skySample, skySample) > 1e-6)
+            skyBehind = vec4(skySample, 1.0);
+#endif
+        vec4 f = mgeFogColour(airDist, dirWorld, far, skyBehind);
+        colorScale = f.a;
+#ifdef ADDITIVE_BLENDING
+        colorOffset = vec3(0.0);
+#else
+        colorOffset = f.rgb;
+#endif
+        if (useWaterDepthFog)
+        {
+            colorScale *= 1.0 - underwaterFogFactor;
+#ifndef ADDITIVE_BLENDING
+            colorOffset += WATER_COLOR * length(sun.ambient.xyz) * underwaterFogFactor * f.a;
+#endif
+        }
+#if @skyBlending
+        if (!isReflection)
+        {
+            float fadeValue = clamp((far - euclideanDist) / (far - skyBlendingStart), 0.0, 1.0);
+            fadeValue *= fadeValue;
+            colorScale *= fadeValue;
+#ifndef ADDITIVE_BLENDING
+            colorOffset = colorOffset * fadeValue + skySample * (1.0 - fadeValue);
+#endif
+        }
+#endif
+        return;
+    }
+#endif
 
     if (useWaterDepthFog)
         dist -= waterDepth;

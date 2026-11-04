@@ -20,6 +20,7 @@
 
 #include "../mwsound/sound.hpp"
 
+#include "../mwrender/mgefog.hpp"
 #include "../mwrender/renderingmanager.hpp"
 #include "../mwrender/sky.hpp"
 
@@ -30,6 +31,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <tuple>
+#include <utility>
 
 namespace MWWorld
 {
@@ -41,6 +44,35 @@ namespace MWWorld
             return x * (1 - factor) + y * factor;
         }
         // linear interpolate between x and y based on factor.
+        // [Fog] mge fog: MGE's nice weathers, Clear and Cloudy (weathers added by Lua are not)
+        bool isMgeNiceWeather(const Weather* weather)
+        {
+            return weather != nullptr && (weather->mScriptId == 0 || weather->mScriptId == 1);
+        }
+
+        // A weather's distant land fog factor and offset (0-1) for the MGE fog, thinned by [Fog] mge storm fog density
+        // (ash, blight and blizzard storms) or mge weather fog density (the rest). The factor (how far the fog
+        // reaches) is scaled geometrically, so each step of the setting multiplies visibility alike; the offset
+        // linearly.
+        std::pair<float, float> getMgeFog(const Weather& weather)
+        {
+            const float density = weather.mIsStorm ? Settings::fog().mMgeStormFogDensity.get()
+                                                   : Settings::fog().mMgeWeatherFogDensity.get();
+            float factor = weather.mDL.FogFactor;
+            float offset = weather.mDL.FogOffset / 100.f;
+            if (density < 1.f && factor > 0.f)
+            {
+                factor = std::pow(factor, density);
+                offset *= density;
+            }
+            return { factor, offset };
+        }
+
+        osg::Vec3f toVec3(const osg::Vec4f& colour)
+        {
+            return osg::Vec3f(colour.r(), colour.g(), colour.b());
+        }
+
         osg::Vec4f lerp(const osg::Vec4f& x, const osg::Vec4f& y, float factor)
         {
             return x * (1 - factor) + y * factor;
@@ -851,6 +883,8 @@ namespace MWWorld
 
         if (!isExterior)
         {
+            // [Fog] mge fog: interiors keep their own linear fog
+            mRendering.setMgeFogWeather(MWRender::MgeFogWeather());
             mRendering.setSkyEnabled(false);
             stopSounds();
             mWindSpeed = 0.f;
@@ -933,6 +967,9 @@ namespace MWWorld
         mRendering.setSunColour(result.mSunColor, result.mSunColor, result.mGlareView * glareFade);
 
         mRendering.getSkyManager()->setWeather(result);
+
+        if (Settings::fog().mMgeFog)
+            updateMgeFog(result, time.getHour());
 
         // Play sounds
         if (mPlayingAmbientSoundID != result.getAmbientLoopSoundID())
@@ -1263,6 +1300,45 @@ namespace MWWorld
         }
         if (mTransitionFactor > 0.f && !mWeatherStore->search(mCurrentWeather))
             mTransitionFactor = 0.f;
+    }
+
+    void WeatherManager::updateMgeFog(const MWRender::WeatherResult& result, float gameHour) const
+    {
+        MWRender::MgeFogWeather fog;
+        fog.mExterior = true;
+        fog.mSkyColor = toVec3(result.mSkyColor);
+        fog.mFogColor = toVec3(result.mFogColor);
+        const Weather* current = mWeatherStore->search(mCurrentWeather);
+        const Weather* next = mWeatherStore->search(mNextWeather);
+        if (current != nullptr)
+        {
+            float nice = isMgeNiceWeather(current) ? 1.f : 0.f;
+            std::tie(fog.mFogFactor, fog.mFogOffset) = getMgeFog(*current);
+            fog.mNextFogFactor = fog.mFogFactor;
+            fog.mNextFogOffset = fog.mFogOffset;
+            if (next != nullptr)
+            {
+                // mTransitionFactor counts down from 1 to 0 as the transition goes on (see calculateWeatherResult)
+                const float t = 1.f - mTransitionFactor;
+                nice = lerp(nice, isMgeNiceWeather(next) ? 1.f : 0.f, t);
+                std::tie(fog.mNextFogFactor, fog.mNextFogOffset) = getMgeFog(*next);
+                fog.mTransition = t;
+                // between a nice weather and a bad one the fog takes the bad weather's own colour (the nice weather's
+                // haze fades out over it), not the blend, whose hidden blue would show through mid-transition
+                if (isMgeNiceWeather(current) != isMgeNiceWeather(next))
+                {
+                    fog.mNiceStormTransition = true;
+                    const osg::Vec4f currentFog = current->mFogColor.getValue(gameHour, mTimeSettings, "Fog");
+                    const osg::Vec4f nextFog = next->mFogColor.getValue(gameHour, mTimeSettings, "Fog");
+                    const osg::Vec4f stormFog = isMgeNiceWeather(current) ? nextFog : currentFog;
+                    // the lightning flash in result's fog colour stays
+                    fog.mFogColor += toVec3(stormFog - lerp(currentFog, nextFog, t));
+                }
+            }
+            // MGE XE squares the blend (distantland.cpp adjustFog)
+            fog.mNiceWeather = nice * nice;
+        }
+        mRendering.setMgeFogWeather(fog);
     }
 
     MWRender::WeatherResult WeatherManager::calculateWeatherResult(

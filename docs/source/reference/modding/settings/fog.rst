@@ -158,3 +158,58 @@ Fog Settings
 
    The sky RTT texture size, used only for sky blending. Smaller values
    reduce quality of the sky blending, but can have slightly better performance.
+
+.. omw-setting::
+   :title: mge fog
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   OpenMGE XE: MGE XE's distant fog and atmospheric scattering outside. Clear and cloudy weather get a blue haze that
+   turns to the sun's glow toward it, every weather its own fog thickness (thicker in valleys than on summits in dense
+   weather), and the sky meets the fogged land at the horizon. Interiors keep their own fog colour and range, and
+   underwater views the usual underwater fog. Needs shaders. Off, the fog and the sky are as without it, the shaders
+   unchanged. Takes effect on restart.
+
+.. omw-setting::
+   :title: mge fog start cells
+   :type: float32
+   :range: >= 0
+   :default: 2
+
+   Where the MGE fog begins in clear weather, in cells (8192 units). Other weathers pull it closer. 0 = MGE XE's own
+   (2).
+
+.. omw-setting::
+   :title: mge fog end cells
+   :type: float32
+   :range: >= 0
+   :default: 5
+
+   Where clear weather is fully fogged out by the MGE fog, in cells. Other weathers pull it closer. 0 = MGE XE's own
+   (5).
+
+.. omw-setting::
+   :title: mge fog follows view distance
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   The MGE fog ends at the viewing distance instead of at 'mge fog end cells', so the edge of the world never shows.
+   The start keeps its share of the way to the end that the two settings above give it.
+
+.. omw-setting::
+   :title: mge storm fog density
+   :type: float32
+   :range: [0.0, 1.0]
+   :default: 1.0
+
+   How thick the MGE fog of ash, blight and blizzard storms is: 1.0 is MGE XE's own, 0.0 as clear as Clear weather.
+
+.. omw-setting::
+   :title: mge weather fog density
+   :type: float32
+   :range: [0.0, 1.0]
+   :default: 1.0
+
+   The same for every other weather.

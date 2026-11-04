@@ -99,6 +99,8 @@ namespace MWRender
     class ScreenshotManager;
     class FogManager;
     class SkyManager;
+    class MgeFogStateUpdater;
+    struct MgeFogWeather;
     class NpcAnimation;
     class Pathgrid;
     class Camera;
@@ -154,7 +156,10 @@ namespace MWRender
         const osg::Vec4f& getSunLightPosition() const;
         void setSunDirection(const osg::Vec3f& direction);
         void setSunColour(const osg::Vec4f& diffuse, const osg::Vec4f& specular, float sunVis);
-        void setNight(bool isNight) { mNight = isNight; }
+        void setNight(bool isNight);
+
+        // [Fog] mge fog (does nothing with it off)
+        void setMgeFogWeather(const MgeFogWeather& weather);
 
         void configureAmbient(const MWWorld::Cell& cell);
         void configureFog(const MWWorld::Cell& cell);
@@ -363,6 +368,8 @@ namespace MWRender
         osg::ref_ptr<Debug::DebugDrawer> mDebugDraw;
 
         osg::ref_ptr<SceneUtil::StateUpdater> mStateUpdater;
+        // [Fog] mge fog: the same updater, with the MGE fog's uniforms (null with it off)
+        osg::ref_ptr<MgeFogStateUpdater> mMgeFog;
         osg::ref_ptr<SceneUtil::SharedUniformStateUpdater> mSharedUniformStateUpdater;
         osg::ref_ptr<SceneUtil::PerViewUniformStateUpdater> mPerViewUniformStateUpdater;
 

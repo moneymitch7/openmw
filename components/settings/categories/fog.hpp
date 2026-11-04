@@ -31,6 +31,14 @@ namespace Settings
         SettingValue<float> mSkyBlendingStart{ mIndex, "Fog", "sky blending start",
             makeClampStrictMaxSanitizerFloat(0, 1) };
         SettingValue<osg::Vec2f> mSkyRttResolution{ mIndex, "Fog", "sky rtt resolution" };
+        SettingValue<bool> mMgeFog{ mIndex, "Fog", "mge fog" };
+        SettingValue<float> mMgeFogStartCells{ mIndex, "Fog", "mge fog start cells", makeMaxSanitizerFloat(0) };
+        SettingValue<float> mMgeFogEndCells{ mIndex, "Fog", "mge fog end cells", makeMaxSanitizerFloat(0) };
+        SettingValue<bool> mMgeFogFollowsViewDistance{ mIndex, "Fog", "mge fog follows view distance" };
+        SettingValue<float> mMgeStormFogDensity{ mIndex, "Fog", "mge storm fog density",
+            makeClampSanitizerFloat(0, 1) };
+        SettingValue<float> mMgeWeatherFogDensity{ mIndex, "Fog", "mge weather fog density",
+            makeClampSanitizerFloat(0, 1) };
     };
 }
 

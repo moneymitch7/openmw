@@ -35,6 +35,7 @@ set(SHADER_FILES
     lib/light/util.glsl
     lib/light/struct.glsl
     lib/sky/passes.glsl
+    lib/fog/mge.glsl
     lib/material/parallax.glsl
     lib/material/alpha.glsl
     lib/material/struct.glsl

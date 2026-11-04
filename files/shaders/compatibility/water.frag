@@ -53,7 +53,10 @@ vec2 normalCoords(vec2 uv, float scale, float speed, float time, float timer1, f
 }
 
 uniform sampler2D rippleMap;
+#ifndef PLAYER_POS_DECLARED
+#define PLAYER_POS_DECLARED
 uniform vec3 playerPos;
+#endif
 
 varying vec3 worldPos;
 

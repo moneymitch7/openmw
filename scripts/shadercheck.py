@@ -160,7 +160,7 @@ BASE = {
     # global (renderingmanager)
     "forcePPL": 1, "clamp": 1, "preLightEnv": 0, "classicFalloff": 0,
     "radialFog": 0, "exponentialFog": 0, "skyBlending": 0,
-    "particlePointLighting": 0, "reverseZ": 1, "lampShadows": 0,
+    "particlePointLighting": 0, "reverseZ": 1, "lampShadows": 0, "mgeFog": 0,
     "groundcoverFadeStart": "0.9", "groundcoverFadeEnd": "1.0",
     "groundcoverStompMode": 2, "groundcoverStompIntensity": 1,
     "useOVR_multiview": 0, "numViews": 1, "disableNormals": 0,
@@ -211,6 +211,13 @@ MATRIX.append(("bare material", {k: 0 for k in (
     "glossMap", "detailMap", "decalMap", "darkMap", "bumpMap", "parallax")}))
 MATRIX.append(("dark+bump", {"darkMap": 1, "bumpMap": 1, "normalMap": 0, "specularMap": 0, "parallax": 0}))  # parallax needs a normal map
 MATRIX.append(("fork extras", {"waves": 1, "softShadows": 1, "mgeWxWater": 1, "diffuseMapArray": 1}))
+# [Fog] mge fog, with the fog settings it meets
+for sky, radial, clustered in itertools.product((1, 0), (1, 0), (1, 0)):
+    MATRIX.append((f"mgeFog skyBlending={sky} radialFog={radial} clustered={clustered}",
+                   {"mgeFog": 1, "skyBlending": sky, "radialFog": radial, "exponentialFog": radial,
+                    "lightingMethodClustered": clustered}))
+MATRIX.append(("mgeFog particles", {"mgeFog": 1, "skyBlending": 1, "particle": 1, "softParticles": 1,
+                                    "alphaFunc": 1, "additiveBlending": 1}))
 MATRIX.append(("particles", {"particle": 1, "softParticles": 1, "particleOcclusion": 1,
                              "alphaFunc": 1, "additiveBlending": 1}))
 
@@ -240,9 +247,48 @@ def compile_program(units, stage, tmp):
     return r.returncode, (r.stdout + r.stderr).strip(), files
 
 
+def glsl_preprocessed(units, stage, tmp, tag):
+    """Each unit after glslang's own preprocessor, blank lines and #line markers dropped."""
+    out = []
+    for i, (n, src) in enumerate(units):
+        if "GL_EXT_gpu_shader4" in src:
+            src = re.sub(r"#extension\s+GL_EXT_gpu_shader4\s*:\s*require", "", src)
+            src = src.replace("#version 120", "#version 130\n#define textureSize2D textureSize", 1)
+        p = os.path.join(tmp, f"{tag}{i}.{stage}")
+        with open(p, "w") as f:
+            f.write(src)
+        r = subprocess.run(["glslangValidator", "-E", p], capture_output=True, text=True)
+        lines = [l.strip() for l in r.stdout.splitlines()]
+        out.append((n, [l for l in lines if l and not l.startswith("#line")]))
+    return out
+
+
+def same_when_off(root, base_root):
+    """Programs built with mgeFog off must come out as the baseline tree's."""
+    diffs = 0
+    total = 0
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, stage in PROGRAMS:
+            for label, over in MATRIX:
+                d = dict(BASE, **over)
+                if d.get("mgeFog"):
+                    continue
+                total += 1
+                a = glsl_preprocessed(program(root, name, d), stage, tmp, "a")
+                b = glsl_preprocessed(program(base_root, name, d), stage, tmp, "b")
+                if a != b:
+                    diffs += 1
+                    print(f"DIFF  {name} [{label}]")
+    print(f"\n{total - diffs}/{total} programs identical to the baseline with mgeFog off")
+    return 1 if diffs else 0
+
+
 def main():
     root = os.path.join(sys.argv[1], "files", "shaders")
     verbose = "--verbose" in sys.argv
+    if "--same-when-off" in sys.argv:
+        base = sys.argv[sys.argv.index("--same-when-off") + 1]
+        return same_when_off(root, os.path.join(base, "files", "shaders"))
     failures = 0
     total = 0
     seen_errors = {}

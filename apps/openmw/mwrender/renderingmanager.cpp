@@ -82,6 +82,7 @@
 #include "fogmanager.hpp"
 #include "groundcover.hpp"
 #include "localmap.hpp"
+#include "mgefog.hpp"
 #include "navmesh.hpp"
 #include "npcanimation.hpp"
 #include "objectpaging.hpp"
@@ -289,6 +290,8 @@ namespace MWRender
         globalDefines["groundcoverStompIntensity"] = std::to_string(Settings::groundcover().mStompIntensity);
 
         globalDefines["reverseZ"] = reverseZ ? "1" : "0";
+        // [Fog] mge fog (lib/fog/mge.glsl)
+        globalDefines["mgeFog"] = Settings::fog().mMgeFog ? "1" : "0";
 
         // It is unnecessary to stop/start the viewer as no frames are being rendered yet.
         mResourceSystem->getSceneManager()->getShaderManager().setGlobalDefines(globalDefines);
@@ -332,7 +335,14 @@ namespace MWRender
         mGroundcover = chunkMgr.mGroundcover.get();
         mObjectPaging = chunkMgr.mObjectPaging.get();
 
-        mStateUpdater = new SceneUtil::StateUpdater();
+        if (Settings::fog().mMgeFog)
+        {
+            mMgeFog = new MgeFogStateUpdater();
+            mMgeFog->setViewDistance(mViewDistance);
+            mStateUpdater = mMgeFog;
+        }
+        else
+            mStateUpdater = new SceneUtil::StateUpdater();
         sceneRoot->addUpdateCallback(mStateUpdater);
 
         mSharedUniformStateUpdater = new SceneUtil::SharedUniformStateUpdater(Settings::fog().mSkyBlendingStart);
@@ -654,8 +664,24 @@ namespace MWRender
 
         mSky->setSunDirection(position);
 
+        if (mMgeFog)
+            mMgeFog->setSunDirection(sunlightPos);
+
         mPostProcessor->getStateUpdater()->setSunPos(osg::Vec4f(position, 0.f), mNight);
         mPostProcessor->getStateUpdater()->setSunVec(osg::Vec4f(-sunlightPos, 0.f));
+    }
+
+    void RenderingManager::setNight(bool isNight)
+    {
+        mNight = isNight;
+        if (mMgeFog)
+            mMgeFog->setNight(isNight);
+    }
+
+    void RenderingManager::setMgeFogWeather(const MgeFogWeather& weather)
+    {
+        if (mMgeFog)
+            mMgeFog->setWeather(weather);
     }
 
     void RenderingManager::addCell(const MWWorld::CellStore* store)
@@ -840,6 +866,12 @@ namespace MWRender
         mStateUpdater->setUnderwaterFogColor(fogUnderwaterColor);
 
         mViewer->getCamera()->setClearColor(isUnderwater ? fogUnderwaterColor : fogColor);
+
+        if (mMgeFog)
+        {
+            mMgeFog->setViewerUnderwater(isUnderwater);
+            mMgeFog->setViewDistance(mViewDistance);
+        }
 
         auto world = MWBase::Environment::get().getWorld();
         const auto& stateUpdater = mPostProcessor->getStateUpdater();

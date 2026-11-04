@@ -501,6 +501,8 @@ namespace MWWorld
         MWRender::WeatherResult calculateWeatherResult(
             const float gameHour, const float elapsedSeconds, const bool isPaused) const;
         MWRender::WeatherResult calculateResult(const Weather& weather, const float gameHour) const;
+        // [Fog] mge fog: hands the renderer the weather as the MGE fog takes it
+        void updateMgeFog(const MWRender::WeatherResult& result, float gameHour) const;
         MWRender::WeatherResult calculateTransitionResult(
             const Weather& currentWeather, const Weather& nextWeather, const float factor, const float gameHour) const;
         float calculateWindSpeed(const Weather& weather, float currentSpeed) const;

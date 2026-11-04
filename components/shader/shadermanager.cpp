@@ -881,6 +881,8 @@ namespace Shader
             { "numViews", "1" },
             { "particle", "0" },
             { "particlePointLighting", "1" },
+            { "lampShadows", "0" },
+            { "mgeFog", "0" },
         };
     }
 }

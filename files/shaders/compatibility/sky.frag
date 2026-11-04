@@ -16,10 +16,26 @@ uniform vec4 diffuseColor;
 varying vec2 diffuseMapUV;
 varying vec4 passColor;
 
+#if @mgeFog
+// [Fog] mge fog: the dome takes the fog's scattering in every direction, so the horizon meets the fogged land
+varying vec3 passViewPos;
+
+vec3 skyWorldDir()
+{
+    return normalize((osg_ViewMatrixInverse * vec4(normalize(passViewPos), 0.0)).xyz);
+}
+#endif
+
 void paintAtmosphere(inout vec4 color)
 {
     color = diffuseColor;
+#if @mgeFog
+    // opaque: the dome has the right colour all the way down, so the clear colour never shows through
+    color.xyz = mgeFogColourSky(skyWorldDir(), diffuseColor.xyz, diffuseColor.xyz) + vec3(mgeSkyDither(gl_FragCoord.xy));
+    color.a = 1.0;
+#else
     color.a *= passColor.a;
+#endif
 }
 
 void paintAtmosphereNight(inout vec4 color)
@@ -34,8 +50,17 @@ void paintClouds(inout vec4 color)
     color.a *= passColor.a * opacity;
     color.xyz = clamp(color.xyz * diffuseColor.xyz, 0.0, 1.0);
 
+#if @mgeFog
+    // ease the clouds into the dome's colour in their direction rather than the fog colour, and in dense weather into
+    // the fog band low over the horizon
+    vec3 horizonCol = mgeFogColourSky(skyWorldDir(), fog.color.xyz, diffuseColor.xyz);
+    float band = (1.0 - smoothstep(0.075, 0.2, skyWorldDir().z)) * mgeFogA.z;
+    color.xyz = mix(color.xyz, horizonCol, band);
+    color = mix(vec4(horizonCol, color.a), color, passColor.a);
+#else
     // ease transition between clear color and atmosphere/clouds
     color = mix(vec4(fog.color.xyz, color.a), color, passColor.a);
+#endif
 }
 
 void paintMoon(inout vec4 color)
