@@ -278,6 +278,8 @@ namespace MWRender
         // lamp shadows (the shaders that read them; clustered lighting only)
         globalDefines["lampShadows"]
             = (Settings::shaders().mLampShadows && sceneRoot->getClusteredLighting()) ? "1" : "0";
+        globalDefines["heldLightShadows"]
+            = (Settings::shaders().mHeldLightShadows && sceneRoot->getClusteredLighting()) ? "1" : "0";
 
         for (auto itr = lightDefines.begin(); itr != lightDefines.end(); itr++)
             globalDefines[itr->first] = itr->second;
@@ -1558,6 +1560,9 @@ namespace MWRender
                     defines["particlePointLighting"] = Settings::shaders().mParticlePointLighting ? "1" : "0";
                     defines["lampShadows"]
                         = (Settings::shaders().mLampShadows && getLightRoot()->getClusteredLighting()) ? "1" : "0";
+                    defines["heldLightShadows"]
+                        = (Settings::shaders().mHeldLightShadows && getLightRoot()->getClusteredLighting()) ? "1"
+                                                                                                          : "0";
                     mResourceSystem->getSceneManager()->getShaderManager().setGlobalDefines(defines);
 
                     mStateUpdater->reset();

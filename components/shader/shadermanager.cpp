@@ -882,6 +882,7 @@ namespace Shader
             { "particle", "0" },
             { "particlePointLighting", "1" },
             { "lampShadows", "0" },
+            { "heldLightShadows", "0" },
             { "mgeFog", "0" },
         };
     }

@@ -160,7 +160,7 @@ BASE = {
     # global (renderingmanager)
     "forcePPL": 1, "clamp": 1, "preLightEnv": 0, "classicFalloff": 0,
     "radialFog": 0, "exponentialFog": 0, "skyBlending": 0,
-    "particlePointLighting": 0, "reverseZ": 1, "lampShadows": 0, "mgeFog": 0,
+    "particlePointLighting": 0, "reverseZ": 1, "lampShadows": 0, "heldLightShadows": 0, "mgeFog": 0,
     "groundcoverFadeStart": "0.9", "groundcoverFadeEnd": "1.0",
     "groundcoverStompMode": 2, "groundcoverStompIntensity": 1,
     "useOVR_multiview": 0, "numViews": 1, "disableNormals": 0,
@@ -203,8 +203,10 @@ for clustered, shadows, lamp, simple in itertools.product((1, 0), (1, 0), (1, 0)
     MATRIX.append((
         f"clustered={clustered} shadows={shadows} lampShadows={lamp} simple={simple}",
         {"lightingMethodClustered": clustered, "shadows_enabled": shadows,
-         "lampShadows": lamp, "simpleLighting": simple,
+         "lampShadows": lamp, "heldLightShadows": lamp, "simpleLighting": simple,
          "shadow_texture_unit_list": "0,1,2" if shadows else ""}))
+MATRIX.append(("held light shadows only", {"heldLightShadows": 1}))
+MATRIX.append(("lamp shadows only", {"lampShadows": 1}))
 # material extremes on the default lighting path
 MATRIX.append(("bare material", {k: 0 for k in (
     "diffuseMap", "normalMap", "specularMap", "emissiveMap", "envMap",
@@ -271,7 +273,7 @@ def same_when_off(root, base_root):
         for name, stage in PROGRAMS:
             for label, over in MATRIX:
                 d = dict(BASE, **over)
-                if d.get("mgeFog"):
+                if d.get("mgeFog") or d.get("lampShadows") or d.get("heldLightShadows"):
                     continue
                 total += 1
                 a = glsl_preprocessed(program(root, name, d), stage, tmp, "a")
@@ -279,7 +281,7 @@ def same_when_off(root, base_root):
                 if a != b:
                     diffs += 1
                     print(f"DIFF  {name} [{label}]")
-    print(f"\n{total - diffs}/{total} programs identical to the baseline with mgeFog off")
+    print(f"\n{total - diffs}/{total} programs identical to the baseline with the opt-in features off")
     return 1 if diffs else 0
 
 

@@ -78,6 +78,18 @@ float clusterFade(vec3 viewPos, float radius) {
 }
 
 #if @lightingMethodClustered
+#if @heldLightShadows || @lampShadows
+#ifndef OSG_VIEW_MATRIX_DECLARED
+#define OSG_VIEW_MATRIX_DECLARED
+uniform mat4 osg_ViewMatrix;
+#endif
+#ifndef OSG_VIEW_MATRIX_INVERSE_DECLARED
+#define OSG_VIEW_MATRIX_INVERSE_DECLARED
+uniform mat4 osg_ViewMatrixInverse;
+#endif
+#endif
+
+#if @heldLightShadows
 // Lantern shadows (SceneUtil::HeldLightShadow): the lights the player carries cast real shadows from depth cube maps
 // drawn around them each frame. heldLightShadowPos[i]: light i in world space, w the far end of its cube map (0: no
 // light).
@@ -88,14 +100,6 @@ uniform vec4 heldLightShadowPos[2];
 // when they end before its light does (held light shadow distance, 0: they don't)
 uniform vec4 heldLightShadowCenter[2];
 uniform vec2 heldLightShadowRange; // near, resolution
-#ifndef OSG_VIEW_MATRIX_DECLARED
-#define OSG_VIEW_MATRIX_DECLARED
-uniform mat4 osg_ViewMatrix;
-#endif
-#ifndef OSG_VIEW_MATRIX_INVERSE_DECLARED
-#define OSG_VIEW_MATRIX_INVERSE_DECLARED
-uniform mat4 osg_ViewMatrixInverse;
-#endif
 
 float heldLightShadowLookup(int index, vec4 coords) {
     return index == 0 ? texture(heldLightShadowMap0, coords) : texture(heldLightShadowMap1, coords);
@@ -153,6 +157,12 @@ float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
     float fadeStart = heldLightShadowCenter[index].w;
     return fadeStart > 0.0 ? mix(lit * 0.2, 1.0, smoothstep(fadeStart, f, dist)) : lit * 0.2;
 }
+
+#else
+float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
+    return 1.0;
+}
+#endif
 
 #if @lampShadows
 // Lamp shadows (SceneUtil::LampShadows): lamps placed in the room cast shadows from six depth faces each, layers of
