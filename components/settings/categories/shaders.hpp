@@ -53,6 +53,9 @@ namespace Settings
         SettingValue<bool> mLampShadows{ mIndex, "Shaders", "lamp shadows" };
         SettingValue<int> mLampShadowResolution{ mIndex, "Shaders", "lamp shadow resolution",
             makeClampSanitizerInt(128, 1024) };
+        SettingValue<bool> mLampShadowClutter{ mIndex, "Shaders", "lamp shadow clutter" };
+        SettingValue<int> mLampShadowLiveLamps{ mIndex, "Shaders", "lamp shadow live lamps",
+            makeClampSanitizerInt(1, 8) };
         SettingValue<bool> mAntialiasAlphaTest{ mIndex, "Shaders", "antialias alpha test" };
         SettingValue<bool> mAdjustCoverageForAlphaTest{ mIndex, "Shaders", "adjust coverage for alpha test" };
         SettingValue<bool> mSoftParticles{ mIndex, "Shaders", "soft particles" };

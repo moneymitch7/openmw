@@ -415,8 +415,11 @@ namespace MWRender
         {
             Shader::ShaderManager& shaderManager = mResourceSystem->getSceneManager()->getShaderManager();
             const int unit = shaderManager.reserveGlobalTextureUnits(Shader::ShaderManager::Slot::LampShadows, 2);
-            mLampShadows = std::make_unique<SceneUtil::LampShadows>(
-                shaderManager, unit, Mask_Static, Mask_Actor | Mask_Player, Settings::shaders().mLampShadowResolution);
+            // with lamp shadow clutter, the objects too (items, containers, other lamps)
+            const unsigned int objectMask = Settings::shaders().mLampShadowClutter ? Mask_Object : 0;
+            mLampShadows = std::make_unique<SceneUtil::LampShadows>(shaderManager, unit, Mask_Static | objectMask,
+                Mask_Actor | Mask_Player, Settings::shaders().mLampShadowResolution, objectMask,
+                static_cast<std::size_t>(Settings::shaders().mLampShadowLiveLamps));
             mLampShadows->install(sceneRoot, mRootNode->getOrCreateStateSet());
         }
 

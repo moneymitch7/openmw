@@ -284,6 +284,26 @@ Shaders Settings
    (48 MB for 32 lamps); 512 is sharper at four times the memory. Needs a restart.
 
 .. omw-setting::
+   :title: lamp shadow clutter
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   With :ref:`lamp shadows`, the objects in the room cast the lamps' shadows too: the cups, books and bottles on a
+   table, chests, other lamps (not a lamp's own candlestick or lantern frame). They are drawn once per lamp, like the
+   walls, and again around one that is taken, dropped or moved. It costs the GPU more when a lamp's shadows are drawn
+   (as it comes into the room), nothing afterwards.
+
+.. omw-setting::
+   :title: lamp shadow live lamps
+   :type: int
+   :range: 1 to 8
+   :default: 4
+
+   With :ref:`lamp shadows`, how many of the lamps nearest the player also draw the characters around them every frame.
+   The others' shadows come from what doesn't move only.
+
+.. omw-setting::
    :title: antialias alpha test
    :type: boolean
    :range: true, false

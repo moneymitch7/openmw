@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstddef>
+#include <unordered_map>
 #include <vector>
 
 #include <osg/BoundingSphere>
@@ -47,15 +48,18 @@ namespace SceneUtil
     public:
         /// How many lamps keep their still shadows at once (the nearest ones).
         static constexpr std::size_t sMaxLamps = 32;
-        /// How many of them also draw the characters around them each frame.
-        static constexpr std::size_t sLiveLamps = 4;
+        /// How many of them can also draw the characters around them each frame (lamp shadow live lamps).
+        static constexpr std::size_t sMaxLiveLamps = 8;
         /// Faces start this close to the lamp.
         static constexpr float sNearPlane = 4.f;
 
         /// @param textureUnit the first of two texture units (still shadows, then live ones)
         /// @param stillMask what casts the still shadows (node masks), @param liveMask what casts the live ones
+        /// @param objectMask the part of @a stillMask that is objects (items, containers, lamps): every one of them
+        /// counts as movable (taken, dropped), and a lamp's own object casts none of its shadows. 0: none.
+        /// @param liveLamps how many lamps draw the characters around them each frame (1 to sMaxLiveLamps)
         LampShadows(Shader::ShaderManager& shaderManager, int textureUnit, unsigned int stillMask,
-            unsigned int liveMask, int resolution);
+            unsigned int liveMask, int resolution, unsigned int objectMask = 0, std::size_t liveLamps = 4);
         ~LampShadows();
 
         /// Binds the face textures to @a receivers (the root state set of what is lit) and adds the culling to
@@ -72,6 +76,8 @@ namespace SceneUtil
         {
             std::array<osg::ref_ptr<osg::Camera>, 6> mCameras;
             osg::observer_ptr<LightSource> mLight;
+            // the lamp's own object (its base node, with objectMask), left out of its faces
+            osg::observer_ptr<osg::Node> mOwner;
             osg::Vec3f mPosition;
             float mFar = 0.f;
             // the frame the faces were (first) drawn in, and the frame the slot was let go in
@@ -113,11 +119,17 @@ namespace SceneUtil
             osg::observer_ptr<PositionAttitudeTransform> mNode;
             osg::Vec3f mPosition;
             osg::Quat mAttitude;
+            osg::BoundingSphere mBound;
             bool mSeen = false;
         };
-        std::vector<Movable> mMovables;
+        std::unordered_map<const PositionAttitudeTransform*, Movable> mMovables;
+        /// The lamps whose light reaches @a bound draw their still faces again (only those drawn already, with
+        /// @a drawnOnly).
+        void redrawAround(const osg::BoundingSphere& bound, bool drawnOnly);
         unsigned int mStillMask;
         unsigned int mLiveMask;
+        unsigned int mObjectMask;
+        std::size_t mLiveLamps;
         int mResolution;
         int mTextureUnit;
         float mTanHalfFov;
