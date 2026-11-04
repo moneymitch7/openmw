@@ -110,7 +110,8 @@ float heldLightShadowTap(int index, vec3 v, float n, float f) {
 
 // How much of a carried light reaches the point, 1 for all (and for every other light).
 float heldLightShadow(PointLight light, vec3 viewPos, vec3 viewNormal) {
-    // only the carried lights whose shadows are drawn are marked (shadow.w); every other light leaves here
+    // only carried lights are marked (shadow.w); every other light leaves here, and a carried light without shadows
+    // this frame finds none of heldLightShadowPos at its position below
     if (light.shadow.w < 0.5)
         return 1.0;
     int index = -1;

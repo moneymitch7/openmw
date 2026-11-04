@@ -330,7 +330,11 @@ namespace SceneUtil
                         gpuLight.mShadow.y() = static_cast<float>(bound.mLightSource->getLampLiveLayer() + 1);
                         gpuLight.mShadow.z() = bound.mLightSource->getLampFar();
                     }
-                    if (bound.mLightSource->getCastsShadows())
+                    // Every carried light, not only the ones casting shadows: those are picked later in this cull
+                    // (HeldLightShadow), so a light that just appeared (a worn lantern's stand-in, swapped for a
+                    // dimmer or brighter one each step of its fade) would otherwise go unshadowed for its first frame.
+                    // The shaders match it to its shadows by position.
+                    if (bound.mLightSource->getCarried())
                         gpuLight.mShadow.w() = 1.f;
 
                     cache.mGPULights[frame % 2]->getData().push_back(gpuLight);
