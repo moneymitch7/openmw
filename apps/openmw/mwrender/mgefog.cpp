@@ -125,8 +125,9 @@ namespace MWRender
             nearEnd = farIntercept;
         }
 
-        // between a nice weather and a bad one, distant land is kept from reading brighter than the sky behind it
-        const float transitionWeight = mWeather.mNiceStormTransition ? 4.f * t * (1.f - t) : 0.f;
+        // through a transition to or from a bad weather, distant land is kept from reading brighter than the sky behind
+        // it, and takes that sky's hue
+        const float transitionWeight = mWeather.mStormTransition ? 4.f * t * (1.f - t) : 0.f;
 
         stateset->getUniform("mgeFogA")->set(
             osg::Vec4f(expStart, expDivisor, mix(from.mDense, to.mDense, t), mix(from.mLayer, to.mLayer, t)));

@@ -23,7 +23,8 @@ namespace MWRender
         float mNextFogFactor = 1.f;
         float mNextFogOffset = 0.f;
         float mTransition = 0.f;
-        bool mNiceStormTransition = false;
+        // a transition between two different weathers that are not both nice
+        bool mStormTransition = false;
     };
 
     // The scene root's state updater with the MGE fog's uniforms too. Everything that is the same for the whole

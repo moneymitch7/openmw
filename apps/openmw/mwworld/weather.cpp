@@ -1323,11 +1323,12 @@ namespace MWWorld
                 nice = lerp(nice, isMgeNiceWeather(next) ? 1.f : 0.f, t);
                 std::tie(fog.mNextFogFactor, fog.mNextFogOffset) = getMgeFog(*next);
                 fog.mTransition = t;
+                fog.mStormTransition
+                    = current != next && !(isMgeNiceWeather(current) && isMgeNiceWeather(next));
                 // between a nice weather and a bad one the fog takes the bad weather's own colour (the nice weather's
                 // haze fades out over it), not the blend, whose hidden blue would show through mid-transition
                 if (isMgeNiceWeather(current) != isMgeNiceWeather(next))
                 {
-                    fog.mNiceStormTransition = true;
                     const osg::Vec4f currentFog = current->mFogColor.getValue(gameHour, mTimeSettings, "Fog");
                     const osg::Vec4f nextFog = next->mFogColor.getValue(gameHour, mTimeSettings, "Fog");
                     const osg::Vec4f stormFog = isMgeNiceWeather(current) ? nextFog : currentFog;

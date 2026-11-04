@@ -16,7 +16,7 @@
 // through the uniforms below; what is left here is per pixel.
 
 uniform vec4 mgeFogA;      // x exp fog start, y exp fog divisor (units), z dense weather weight, w height layer weight
-uniform vec4 mgeFogB;      // x near fog start, y near fog end (units), z nice weather, w nice<->storm transition weight
+uniform vec4 mgeFogB;      // x near fog start, y near fog end (units), z nice weather, w bad weather transition weight
 uniform vec2 mgeFogState;  // x exterior, y the viewer is underwater
 uniform vec3 mgeSkyColor;  // the weather's sky colour
 uniform vec3 mgeFogColor;  // the weather's fog colour (the storm's own through a nice<->storm transition)
@@ -156,7 +156,7 @@ vec4 mgeFogColour(float dist, vec3 dirWorld, float far, vec4 skyBehind)
         fogT *= 1.0 - seal;
     }
 
-    // nice<->storm transition: distant land never reads brighter than the sky behind it, and its hue goes to that sky
+    // a transition to or from a bad weather: distant land never reads brighter than the sky behind it, and its hue goes to that sky
     float clampWeight = min(1.0, 2.0 * mgeFogB.w);
     if (clampWeight > 0.001)
     {
