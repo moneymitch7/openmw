@@ -25,6 +25,7 @@ namespace Settings
             makeEnumSanitizerString({ "nearest", "linear" }) };
         SettingValue<std::string> mTextureMinFilter{ mIndex, "General", "texture min filter",
             makeEnumSanitizerString({ "nearest", "linear" }) };
+        SettingValue<int> mMaxTextureSize{ mIndex, "General", "max texture size", makeClampSanitizerInt(0, 16384) };
         SettingValue<std::string> mTextureMipmap{ mIndex, "General", "texture mipmap",
             makeEnumSanitizerString({ "none", "nearest", "linear" }) };
         SettingValue<bool> mNotifyOnSavedScreenshot{ mIndex, "General", "notify on saved screenshot" };

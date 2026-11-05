@@ -39,6 +39,7 @@
 #include <components/sdlutil/sdlgraphicswindow.hpp>
 #include <components/sdlutil/sdlinputwrapper.hpp>
 
+#include <components/resource/imagemanager.hpp>
 #include <components/resource/resourcesystem.hpp>
 #include <components/resource/scenemanager.hpp>
 #include <components/resource/stats.hpp>
@@ -190,9 +191,11 @@ namespace
     class PerformanceLog
     {
     public:
-        PerformanceLog(const std::filesystem::path& path, osgViewer::Viewer& viewer)
+        PerformanceLog(
+            const std::filesystem::path& path, osgViewer::Viewer& viewer, Resource::ImageManager& imageManager)
             : mFile(path, std::ios::out | std::ios::trunc)
             , mViewer(viewer)
+            , mImageManager(imageManager)
         {
             mFxProfilePath = path.parent_path() / "postprocess-profile.txt";
             if (!mFile.is_open())
@@ -399,13 +402,14 @@ namespace
 
         std::ofstream mFile;
         osgViewer::Viewer& mViewer;
+        Resource::ImageManager& mImageManager;
         std::chrono::steady_clock::time_point mNext;
         unsigned int mLastFrame = 0;
         Sum mFrameTime;
         double mWorstFrameMs = 0.0;
 
-        // The textures loaded: not counted in this build (the column is kept so the files read the same).
-        static long long imageMb() { return -1; }
+        // The textures loaded (OSG's own GPU pool counters stay at 0 with OpenMW's texture handling).
+        long long imageMb() const { return static_cast<long long>(mImageManager.getLoadedBytes() / (1024 * 1024)); }
         std::array<Column, 45> mColumns{ {
             { "input", "input_time_taken" },
             { "sound", "sound_time_taken" },
@@ -1144,6 +1148,7 @@ void OMW::Engine::prepareEngine()
     mResourceSystem->getSceneManager()->getShaderManager().setMaxTextureUnits(mGlMaxTextureImageUnits);
     mResourceSystem->getSceneManager()->setUnRefImageDataAfterApply(
         false); // keep to Off for now to allow better state sharing
+    mResourceSystem->getImageManager()->setMaxTextureSize(Settings::general().mMaxTextureSize);
     mResourceSystem->getSceneManager()->setFilterSettings(Settings::general().mTextureMagFilter,
         Settings::general().mTextureMinFilter, Settings::general().mTextureMipmap,
         static_cast<float>(Settings::general().mAnisotropy));
@@ -1438,7 +1443,8 @@ void OMW::Engine::go()
     std::unique_ptr<PerformanceLog> performanceLog;
     if (Settings::general().mPerformanceLog)
     {
-        performanceLog = std::make_unique<PerformanceLog>(mCfgMgr.getLogPath() / "performance-log.csv", *mViewer);
+        performanceLog = std::make_unique<PerformanceLog>(
+            mCfgMgr.getLogPath() / "performance-log.csv", *mViewer, *mResourceSystem->getImageManager());
         if (!performanceLog->isOpen())
             performanceLog.reset();
     }
