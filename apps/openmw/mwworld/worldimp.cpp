@@ -2843,7 +2843,8 @@ namespace MWWorld
         if (!selectedSpell.empty())
         {
             const ESM::Spell* spell = mStore.get<ESM::Spell>().find(selectedSpell);
-            int spellCost = MWMechanics::calcSpellCost(*spell);
+            // OpenMGE XE [Game] never fail spells: what the cast costs with its chance folded in
+            int spellCost = MWMechanics::calcEffectiveSpellCost(*spell, actor);
 
             // Check mana
             bool godmode = (isPlayer && mGodMode);

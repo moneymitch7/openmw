@@ -349,6 +349,14 @@ namespace MWMechanics
                 // Check success
                 float successChance = getSpellSuccessChance(spell, mCaster, nullptr, true, false);
                 auto& prng = MWBase::Environment::get().getWorld()->getPrng();
+                // OpenMGE XE [Game] never fail spells: no roll (the cast cost more instead); Silence still stops it
+                if (spellsNeverFail(mCaster))
+                {
+                    if (stats.getMagicEffects().getOrDefault(ESM::MagicEffect::Silence).getMagnitude() > 0.f)
+                        successChance = 0.f;
+                    else
+                        successChance = 100.f;
+                }
                 if (Misc::Rng::roll0to99(prng) >= successChance)
                 {
                     if (mCaster == getPlayer())

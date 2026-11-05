@@ -278,6 +278,34 @@ Game Settings
    This makes the movement speed behavior more fair between different races.
 
 .. omw-setting::
+   :title: never fail spells
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   OpenMGE XE. The player's spells never fail. Each costs its magicka times 100 divided by the chance the cast would
+   have had: a spell with a 50% chance costs twice as much. Silence and too little magicka still stop a cast. The magic
+   window shows the cost and the chance the cast would have had. Lua mods can read the cost with
+   ``types.Actor.getSpellCost``.
+
+.. omw-setting::
+   :title: never fail spells npcs
+   :type: boolean
+   :range: true, false
+   :default: false
+
+   OpenMGE XE. The same as :ref:`never fail spells` for the spells of NPCs and creatures.
+
+.. omw-setting::
+   :title: sure chance minimum
+   :type: float32
+   :range: 1 to 100
+   :default: 5
+
+   OpenMGE XE. The lowest chance (percent) :ref:`never fail spells` costs are worked out with: a spell costs at most
+   100 divided by this times its magicka.
+
+.. omw-setting::
    :title: projectiles enchant multiplier
    :type: float32
    :range: [0, 1]

@@ -36,6 +36,13 @@ namespace MWMechanics
         const EffectCostMethod method = EffectCostMethod::GameSpell);
     int calcSpellCost(const ESM::Spell& spell);
 
+    /// OpenMGE XE [Game] never fail spells (npcs): whether \a caster's spells never fail, costing more instead
+    bool spellsNeverFail(const MWWorld::Ptr& caster);
+
+    /// The magicka \a caster pays for \a spell: calcSpellCost, or with [Game] never fail spells that cost times
+    /// 100 / the chance the cast would have had (held to [Game] sure chance minimum)
+    int calcEffectiveSpellCost(const ESM::Spell& spell, const MWWorld::Ptr& caster);
+
     int getEffectiveEnchantmentCastCost(float castCost, const MWWorld::Ptr& actor);
     int getEffectiveEnchantmentCastCost(const ESM::Enchantment& enchantment, const MWWorld::Ptr& actor);
     int getEnchantmentCharge(const ESM::Enchantment& enchantment);
