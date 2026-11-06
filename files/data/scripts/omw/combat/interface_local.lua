@@ -35,6 +35,7 @@ local onHitHandlers = {}
 -- @field [parent=#AttackInfo] #boolean ignoreDifficulty (Optional) Whether to ignore difficulty scaling.
 -- @field [parent=#AttackInfo] #boolean ignoreStagger (Optional) Whether to ignore stagger (knockdown and hit recovery).
 -- @field [parent=#AttackInfo] #boolean muteSound (Optional) If true, does not play miss or damage sounds.
+-- @field [parent=#AttackInfo] #number hitChanceScale (Optional) OpenMGE XE: the share (0 to 1) of the damage that lands after armor, set on attacks that land only because of the [Game] always hit settings (the hit chance they would have had).
 return {
     --- Basic combat interface
     -- @module Combat

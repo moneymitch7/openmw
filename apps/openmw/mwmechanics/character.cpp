@@ -1102,8 +1102,8 @@ namespace MWMechanics
             // and processing multiple hit keys for a single attack
             if (mReadyToHit)
             {
-                charClass.hit(
-                    mPtr, mAttackStrength, mAttackWindUp, attackType, mAttackVictim, mAttackHitPos, mAttackSuccess);
+                charClass.hit(mPtr, mAttackStrength, mAttackWindUp, attackType, mAttackVictim, mAttackHitPos,
+                    mAttackSuccess, mAttackHitChance);
                 mReadyToHit = false;
             }
         }
@@ -1136,13 +1136,13 @@ namespace MWMechanics
 
                 if (groupname == "attack1" || groupname == "swimattack1")
                     charClass.hit(mPtr, mAttackStrength, mAttackWindUp, ESM::Weapon::AT_Chop, mAttackVictim,
-                        mAttackHitPos, mAttackSuccess);
+                        mAttackHitPos, mAttackSuccess, mAttackHitChance);
                 else if (groupname == "attack2" || groupname == "swimattack2")
                     charClass.hit(mPtr, mAttackStrength, mAttackWindUp, ESM::Weapon::AT_Slash, mAttackVictim,
-                        mAttackHitPos, mAttackSuccess);
+                        mAttackHitPos, mAttackSuccess, mAttackHitChance);
                 else if (groupname == "attack3" || groupname == "swimattack3")
                     charClass.hit(mPtr, mAttackStrength, mAttackWindUp, ESM::Weapon::AT_Thrust, mAttackVictim,
-                        mAttackHitPos, mAttackSuccess);
+                        mAttackHitPos, mAttackSuccess, mAttackHitChance);
             }
         }
         else if (action == "shoot attach")
@@ -1248,6 +1248,7 @@ namespace MWMechanics
             return;
 
         auto& prng = MWBase::Environment::get().getWorld()->getPrng();
+        mAttackHitChance = 100.f;
         mAttackStrength = calculateWindUp();
         mAttackWindUp = mAttackStrength;
         if (mAttackStrength == -1.f)
@@ -1257,7 +1258,7 @@ namespace MWMechanics
         {
             if (weapclass != ESM::WeaponType::Thrown)
             {
-                mAttackSuccess = mPtr.getClass().evaluateHit(mPtr, mAttackVictim, mAttackHitPos);
+                mAttackSuccess = mPtr.getClass().evaluateHit(mPtr, mAttackVictim, mAttackHitPos, mAttackHitChance);
                 if (!mAttackSuccess)
                     mAttackStrength = 0.f;
             }

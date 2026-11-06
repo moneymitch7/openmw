@@ -537,10 +537,12 @@ namespace MWClass
         return ptr.getRefData().getCustomData()->asNpcCustomData().mNpcStats;
     }
 
-    bool Npc::evaluateHit(const MWWorld::Ptr& ptr, MWWorld::Ptr& victim, osg::Vec3f& hitPosition) const
+    bool Npc::evaluateHit(
+        const MWWorld::Ptr& ptr, MWWorld::Ptr& victim, osg::Vec3f& hitPosition, float& hitChance) const
     {
         victim = MWWorld::Ptr();
         hitPosition = osg::Vec3f();
+        hitChance = 100.f;
 
         // Get the weapon used (if hand-to-hand, weapon = inv.end())
         MWWorld::InventoryStore& inv = getInventoryStore(ptr);
@@ -567,11 +569,18 @@ namespace MWClass
 
         float hitchance = MWMechanics::getHitChance(ptr, victim, static_cast<int>(getSkill(ptr, weapskill)));
 
+        // OpenMGE XE [Game] always hit: lands, with the chance it would have had for scaling its damage
+        if (MWMechanics::attacksAlwaysHit(ptr))
+        {
+            hitChance = std::min(hitchance, 100.f);
+            return true;
+        }
+
         return Misc::Rng::roll0to99(world->getPrng()) < hitchance;
     }
 
     void Npc::hit(const MWWorld::Ptr& ptr, float attackStrength, float attackWindUp, int type,
-        const MWWorld::Ptr& victim, const osg::Vec3f& hitPosition, bool success) const
+        const MWWorld::Ptr& victim, const osg::Vec3f& hitPosition, bool success, float hitChance) const
     {
         MWWorld::InventoryStore& inv = getInventoryStore(ptr);
         MWWorld::ContainerStoreIterator weaponslot = inv.getSlot(MWWorld::InventoryStore::Slot_CarriedRight);
@@ -659,8 +668,13 @@ namespace MWClass
         if (othercls.getCreatureStats(victim).getKnockedDown())
             damage *= store.find("fCombatKODamageMult")->mValue.getFloat();
 
+        // OpenMGE XE [Game] always hit: an attack that would have missed staggers and casts its enchantment only
+        // when its roll against that chance succeeds (fatigue hits, hand-to-hand, always stagger as before)
+        const bool sureHitEffects = MWMechanics::rollAlwaysHitEffects(hitChance);
+
         // Apply "On hit" enchanted weapons
-        MWMechanics::applyOnStrikeEnchantment(ptr, victim, weapon, hitPosition);
+        if (sureHitEffects)
+            MWMechanics::applyOnStrikeEnchantment(ptr, victim, weapon, hitPosition);
 
         MWMechanics::applyElementalShields(ptr, victim);
 
@@ -673,7 +687,8 @@ namespace MWClass
         MWMechanics::diseaseContact(victim, ptr);
 
         MWBase::Environment::get().getLuaManager()->onHit(ptr, victim, weapon, MWWorld::Ptr(), type, attackStrength,
-            attackWindUp, damage, healthdmg, hitPosition, true, MWMechanics::DamageSourceType::Melee);
+            attackWindUp, damage, healthdmg, hitPosition, true, MWMechanics::DamageSourceType::Melee,
+            hitChance < 100.f ? MWMechanics::alwaysHitDamageScale(hitChance) : 1.f, healthdmg && !sureHitEffects);
     }
 
     void Npc::onHit(const MWWorld::Ptr& ptr, const std::map<std::string, float>& damages, ESM::RefId object,

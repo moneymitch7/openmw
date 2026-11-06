@@ -233,6 +233,10 @@ bool Launcher::SettingsPage::loadSettings()
             Settings::game().mOnlyAppropriateAmmunitionBypassesResistance, *requireAppropriateAmmunitionCheckBox);
         loadSettingBool(Settings::game().mUncappedDamageFatigue, *uncappedDamageFatigueCheckBox);
         loadSettingBool(Settings::game().mNormaliseRaceSpeed, *normaliseRaceSpeedCheckBox);
+        loadSettingBool(Settings::game().mAlwaysHit, *alwaysHitCheckBox);
+        loadSettingBool(Settings::game().mAlwaysHitNpcs, *alwaysHitNpcsCheckBox);
+        loadSettingBool(Settings::game().mNeverFailSpells, *neverFailSpellsCheckBox);
+        loadSettingBool(Settings::game().mNeverFailSpellsNpcs, *neverFailSpellsNpcsCheckBox);
         loadSettingBool(Settings::game().mSwimUpwardCorrection, *swimUpwardCorrectionCheckBox);
         loadSettingBool(Settings::game().mNPCsAvoidCollisions, *avoidCollisionsCheckBox);
         loadSettingInt(Settings::game().mStrengthInfluencesHandToHand, *unarmedFactorsStrengthComboBox);
@@ -482,6 +486,10 @@ void Launcher::SettingsPage::saveSettings()
             *requireAppropriateAmmunitionCheckBox, Settings::game().mOnlyAppropriateAmmunitionBypassesResistance);
         saveSettingBool(*uncappedDamageFatigueCheckBox, Settings::game().mUncappedDamageFatigue);
         saveSettingBool(*normaliseRaceSpeedCheckBox, Settings::game().mNormaliseRaceSpeed);
+        saveSettingBool(*alwaysHitCheckBox, Settings::game().mAlwaysHit);
+        saveSettingBool(*alwaysHitNpcsCheckBox, Settings::game().mAlwaysHitNpcs);
+        saveSettingBool(*neverFailSpellsCheckBox, Settings::game().mNeverFailSpells);
+        saveSettingBool(*neverFailSpellsNpcsCheckBox, Settings::game().mNeverFailSpellsNpcs);
         saveSettingBool(*swimUpwardCorrectionCheckBox, Settings::game().mSwimUpwardCorrection);
         saveSettingBool(*avoidCollisionsCheckBox, Settings::game().mNPCsAvoidCollisions);
         saveSettingInt(*unarmedFactorsStrengthComboBox, Settings::game().mStrengthInfluencesHandToHand);

@@ -102,6 +102,13 @@ local function onHit(data)
         if not data.ignoreArmor then
             I.Combat.applyArmor(data)
         end
+        -- OpenMGE XE [Game] always hit: an attack that lands although it would have missed deals the share of its
+        -- damage (after armor) that its hit chance gives
+        if data.hitChanceScale and data.hitChanceScale < 1 and data.damage then
+            for stat, value in pairs(data.damage) do
+                data.damage[stat] = value * data.hitChanceScale
+            end
+        end
         if not data.ignoreDifficulty then
             I.Combat.adjustDamageForDifficulty(data)
         end
