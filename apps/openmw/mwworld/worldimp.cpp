@@ -38,6 +38,7 @@
 
 #include <components/resource/bulletshape.hpp>
 #include <components/resource/resourcesystem.hpp>
+#include <components/resource/scenemanager.hpp>
 
 #include <components/sceneutil/lightmanager.hpp>
 #include <components/sceneutil/positionattitudetransform.hpp>
@@ -76,6 +77,7 @@
 #include "../mwrender/animation.hpp"
 #include "../mwrender/bulletdebugdraw.hpp"
 #include "../mwrender/camera.hpp"
+#include "../mwrender/esm4npcanimation.hpp"
 #include "../mwrender/npcanimation.hpp"
 #include "../mwrender/postprocessor.hpp"
 #include "../mwrender/renderingmanager.hpp"
@@ -228,7 +230,7 @@ namespace MWWorld
         const std::vector<std::string>& groundcoverFiles, ToUTF8::Utf8Encoder* encoder, Loading::Listener* listener)
     {
         mContentFiles = contentFiles;
-        mESMVersions.resize(mContentFiles.size(), -1);
+        mGameFormats.resize(mContentFiles.size(), ESM::GameFormat::Unknown);
 
         loadContentFiles(fileCollections, contentFiles, encoder, listener);
         loadGroundcoverFiles(fileCollections, groundcoverFiles, encoder, listener);
@@ -239,6 +241,8 @@ namespace MWWorld
         mStore.setUp();
         mStore.validateRecords(mReaders);
         mStore.movePlayerRecord();
+
+        mResourceSystem->getSceneManager()->setOptimizerBlacklist(MWRender::getESM4ActorModels(mStore));
 
         mSwimHeightScale = mStore.get<ESM::GameSetting>().find("fSwimHeightScale")->mValue.getFloat();
     }
@@ -532,9 +536,9 @@ namespace MWWorld
         return *mPlayer;
     }
 
-    const std::vector<int>& World::getESMVersions() const
+    const std::vector<ESM::GameFormat>& World::getGameFormats() const
     {
-        return mESMVersions;
+        return mGameFormats;
     }
 
     LocalScripts& World::getLocalScripts()
@@ -2788,7 +2792,7 @@ namespace MWWorld
         ToUTF8::Utf8Encoder* encoder, Loading::Listener* listener)
     {
         GameContentLoader gameContentLoader;
-        EsmLoader esmLoader(mStore, mReaders, encoder, mESMVersions);
+        EsmLoader esmLoader(mStore, mReaders, encoder, mGameFormats);
 
         gameContentLoader.addLoader(".esm", esmLoader);
         gameContentLoader.addLoader(".esp", esmLoader);

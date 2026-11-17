@@ -30,6 +30,7 @@ variables:
   ARTIFACT_COMPRESSION_LEVEL: "fast"
   CACHE_COMPRESSION_LEVEL: "fast"
   FF_TIMESTAMPS: "true"
+  OPENMW_DEBUGINFOD: OFF
 
 .Ubuntu_Image:
   tags:
@@ -127,7 +128,7 @@ Almalinux_Generic:
     CCACHE_SIZE: 1G
   before_script:
     - dnf install -y epel-release
-    - dnf install -y git binutils gcc-toolset-13 ccache cmake unzip pkg-config p7zip p7zip-plugins pipx mesa-libGL-devel libxkbcommon-devel mesa-libEGL-devel fontconfig
+    - dnf install -y git binutils gcc-toolset-13 ccache cmake unzip pkg-config p7zip p7zip-plugins python3-pip mesa-libGL-devel libxkbcommon-devel mesa-libEGL-devel fontconfig
     - source /opt/rh/gcc-toolset-13/enable
     - ./CI/linux/before_install_for_vcpkg.sh
   script:
@@ -199,7 +200,7 @@ Arch_Linux_Generic_Integration_Tests:
   extends: .base_Generic_Integration_Tests
   image: archlinux
   before_script:
-    - pacman --noconfirm -Sy python python-pip python-numpy python-matplotlib python-click xorg-server-xvfb alsa-utils git-lfs openal
+    - pacman --noconfirm -Syu python python-pip python-numpy python-matplotlib python-click xorg-server-xvfb alsa-utils git-lfs openal
     - python -m venv --system-site-packages testvenv
     - export PATH="$(pwd)/testvenv/bin:$PATH"
     - hash -r
@@ -322,6 +323,7 @@ Clang_Format:
     - CI/check_cmake_format.sh
     - CI/check_file_names.sh
     - CI/check_clang_format.sh
+  timeout: 15m
 
 Lupdate:
   extends: .Ubuntu_Image
@@ -336,6 +338,7 @@ Lupdate:
     - CI/install_debian_deps.sh openmw-qt-translations
   script:
     - CI/check_qt_translations.sh
+  timeout: 15m
 
 Teal:
   stage: checks
@@ -349,6 +352,7 @@ Teal:
     when: always
     paths:
       - teal_declarations
+  timeout: 15m
 
 Ubuntu_GCC_Debug:
   extends: .Ubuntu

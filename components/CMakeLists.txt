@@ -111,6 +111,10 @@ add_component_dir (bgsm
     stream file
     )
 
+add_component_dir (spt
+    stream file readtree readprop readmap readmisc readext
+    )
+
 add_component_dir (bsa
     bsafile compressedbsafile ba2gnrlfile ba2dx10file ba2file memorystream
     )
@@ -129,7 +133,7 @@ add_component_dir (vfs
 
 add_component_dir (resource
     scenemanager keyframemanager imagemanager animblendrulesmanager bulletshapemanager bulletshape niffilemanager objectcache resourcesystem
-    resourcemanager stats animation foreachbulletobject errormarker selectionmarker cachestats bgsmfilemanager
+    resourcemanager stats animation foreachbulletobject errormarker selectionmarker cachestats bgsmfilemanager sptfilemanager
     )
 
 add_component_dir (shader
@@ -152,6 +156,10 @@ add_component_dir (nifosg
     autotransform nifloader controller particle matrixtransform
     )
 
+add_component_dir (sptosg
+    sptloader
+    )
+
 add_component_dir (nifbullet
     bulletnifloader
     )
@@ -161,7 +169,7 @@ add_component_dir (toutf8
     toutf8
     )
 
-add_component_dir(esm attr common defs esmcommon records util luascripts format refid esmbridge esmterrain
+add_component_dir(esm attr common defs gameformat esmcommon records util luascripts format refid esmbridge esmterrain
     formid
     fourcc
     stringrefid
@@ -315,7 +323,7 @@ add_component_dir (debug
 add_component_dir (files
     linuxpath androidpath windowspath macospath fixedpath multidircollection collections configurationmanager
     constrainedfilestream memorystream hash configfileparser openfile constrainedfilestreambuf conversion
-    istreamptr streamwithbuffer utils
+    istreamptr streamwithbuffer utils binarystream
     )
 
 if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND NOT CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
@@ -485,6 +493,7 @@ add_component_dir(serialization
 
 add_component_dir(sqlite3
     db
+    error
     request
     statement
     transaction

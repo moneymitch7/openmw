@@ -3,6 +3,7 @@
 #include <components/esm4/loadarma.hpp>
 #include <components/esm4/loadarmo.hpp>
 #include <components/esm4/loadclot.hpp>
+#include <components/esm4/loadcrea.hpp>
 #include <components/esm4/loadhair.hpp>
 #include <components/esm4/loadhdpt.hpp>
 #include <components/esm4/loadnpc.hpp>
@@ -18,6 +19,44 @@
 
 namespace MWRender
 {
+    std::unordered_set<VFS::Path::Normalized, VFS::Path::Hash, std::equal_to<>> getESM4ActorModels(
+        const MWWorld::ESMStore& store)
+    {
+        std::unordered_set<VFS::Path::Normalized, VFS::Path::Hash, std::equal_to<>> modelPaths{};
+        const auto getMeshPath
+            = [](const auto& path) { return Misc::ResourceHelpers::correctMeshPath(VFS::Path::Normalized(path)); };
+
+        const auto addModel = [&](const ESM::Path& model) {
+            if (!model.empty())
+                modelPaths.insert(getMeshPath(model.getNormalized()));
+        };
+        const auto addParts = [&](const std::vector<ESM4::Race::BodyPart>& parts) {
+            for (const ESM4::Race::BodyPart& part : parts)
+                if (!part.mesh.empty())
+                    modelPaths.insert(getMeshPath(part.mesh));
+        };
+
+        for (const ESM4::Npc& npc : store.get<ESM4::Npc>())
+            addModel(npc.mModel);
+        for (const ESM4::Creature& creature : store.get<ESM4::Creature>())
+            addModel(creature.mModel);
+        for (const ESM4::Race& race : store.get<ESM4::Race>())
+        {
+            addModel(race.mModelMale);
+            addModel(race.mModelFemale);
+            addParts(race.mHeadParts);
+            addParts(race.mHeadPartsFemale);
+            addParts(race.mBodyPartsMale);
+            addParts(race.mBodyPartsFemale);
+        }
+        for (const ESM4::Hair& hair : store.get<ESM4::Hair>())
+            addModel(hair.mModel);
+        for (const ESM4::HeadPart& headPart : store.get<ESM4::HeadPart>())
+            addModel(headPart.mModel);
+
+        return modelPaths;
+    }
+
     ESM4NpcAnimation::ESM4NpcAnimation(
         const MWWorld::Ptr& ptr, osg::ref_ptr<osg::Group> parentNode, Resource::ResourceSystem* resourceSystem)
         : Animation(ptr, std::move(parentNode), resourceSystem)
@@ -33,18 +72,19 @@ namespace MWRender
         const ESM4::Npc* traits = MWClass::ESM4Npc::getTraitsRecord(mPtr);
         if (traits == nullptr)
             return;
-        if (traits->mIsTES4)
-            updatePartsTES4(*traits);
-        else if (traits->mIsFONV)
+        switch (traits->mGameFormat)
         {
-            // Not implemented yet
-        }
-        else
-        {
-            // There is no easy way to distinguish TES5 and FO3.
-            // In case of FO3 the function shouldn't crash the game and will
-            // only lead to the NPC not being rendered.
-            updatePartsTES5(*traits);
+            case ESM::GameFormat::TES4:
+            case ESM::GameFormat::FO3:
+            case ESM::GameFormat::FNV:
+                updatePartsTES4(*traits);
+                break;
+            case ESM::GameFormat::TES5:
+            case ESM::GameFormat::FO4:
+                updatePartsTES5(*traits);
+                break;
+            default:
+                break; // Skip
         }
     }
 
@@ -74,9 +114,18 @@ namespace MWRender
 
         // TODO: Body and head parts are placed incorrectly, need to attach to bones
 
-        for (const ESM4::Race::BodyPart& bodyPart : (isFemale ? race->mBodyPartsFemale : race->mBodyPartsMale))
-            insertPart(bodyPart.mesh);
-        for (const ESM4::Race::BodyPart& bodyPart : race->mHeadParts)
+        const std::vector<ESM4::Race::BodyPart>& bodyParts = isFemale ? race->mBodyPartsFemale : race->mBodyPartsMale;
+        for (std::size_t i = 0; i < bodyParts.size(); ++i)
+        {
+            // FO3 and FNV's 4th body part is the upper body texture
+            if (i == 3 && (traits.mGameFormat == ESM::GameFormat::FO3 || traits.mGameFormat == ESM::GameFormat::FNV))
+                continue;
+            insertPart(bodyParts[i].mesh);
+        }
+
+        // Oblivion genders share head parts, but later games have female-specific
+        const bool femaleHead = isFemale && !race->mHeadPartsFemale.empty();
+        for (const ESM4::Race::BodyPart& bodyPart : (femaleHead ? race->mHeadPartsFemale : race->mHeadParts))
             insertPart(bodyPart.mesh);
         if (!traits.mHair.isZeroOrUnset())
         {

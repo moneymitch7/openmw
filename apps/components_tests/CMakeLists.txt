@@ -5,6 +5,7 @@ file(GLOB UNITTEST_SRC_FILES
     main.cpp
 
     esm/testfixedstring.cpp
+    esm/testgameformat.cpp
     esm/testrefid.cpp
     esm/variant.cpp
 
@@ -55,6 +56,7 @@ file(GLOB UNITTEST_SRC_FILES
     shader/shadermanager.cpp
 
     sqlite3/db.cpp
+    sqlite3/error.cpp
     sqlite3/request.cpp
     sqlite3/statement.cpp
     sqlite3/transaction.cpp
@@ -129,8 +131,9 @@ if (BUILD_WITH_CODE_COVERAGE)
     target_link_libraries(components-tests gcov)
 endif()
 
+set(TEMPLATE_OMWGAME_URL https://gitlab.com/OpenMW/example-suite/-/raw/8966dab24692555eec720c854fb0f73d108070cd/data/template.omwgame CACHE STRING "URL for template.omwgame. Use file:// URL for local file in offline builds.")
 file(DOWNLOAD
-    https://gitlab.com/OpenMW/example-suite/-/raw/8966dab24692555eec720c854fb0f73d108070cd/data/template.omwgame
+    ${TEMPLATE_OMWGAME_URL}
     ${CMAKE_CURRENT_BINARY_DIR}/data/template.omwgame
     EXPECTED_HASH SHA512=6e38642bcf013c5f496a9cb0bf3ec7c9553b6e86b836e7844824c5a05f556c9391167214469b6318401684b702d7569896bf743c85aee4198612b3315ba778d6
 )
