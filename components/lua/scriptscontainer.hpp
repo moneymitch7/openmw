@@ -300,6 +300,7 @@ namespace LuaUtil
         Script& getScript(int scriptId);
 
         void printError(int scriptId, std::string_view msg, const std::exception& e) const;
+        friend void reportSlowLuaCall(const ScriptId& scriptId, double ms);
 
         const VFS::Path::Normalized& scriptPath(int scriptId) const
         {

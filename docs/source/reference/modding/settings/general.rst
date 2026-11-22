@@ -127,5 +127,6 @@ General
    Once a second, writes the profiler's numbers (frame time, the main loop's parts, Lua, cull, draw and GPU time, what
    the draws are, video memory, the resource caches) with the player's cell, position and the weather to
    performance-log.csv next to openmw.log. Each frame of 150 ms or more is logged to openmw.log with what it spent its
-   time on, and every five seconds each post-processing shader's GPU time goes to postprocess-profile.txt. Nothing is
-   shown on screen. The files start fresh each launch.
+   time on, and so is each single call into a Lua script (an engine or event handler, a timer) taking 30 ms or more,
+   with the script's path. Every five seconds each post-processing shader's GPU time goes to postprocess-profile.txt.
+   Nothing is shown on screen. The files start fresh each launch.

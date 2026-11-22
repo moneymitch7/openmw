@@ -276,6 +276,27 @@ CUSTOM: customdata.lua
             "Test[test2.lua]:\t update 1.5\n");
     }
 
+    // OpenMGE: with a slow call threshold set (the performance log sets one), each call into a script that takes at
+    // least that long is logged with the script's path
+    TEST_F(LuaScriptsContainerTest, SlowCallIsNamed)
+    {
+        LuaUtil::ScriptsContainer scripts(&mLua, "Test");
+        EXPECT_TRUE(scripts.addCustomScript(getId(test1Path)));
+        EXPECT_TRUE(scripts.addCustomScript(getId(test2Path)));
+
+        testing::internal::CaptureStdout();
+        scripts.update(1.5f);
+        EXPECT_THAT(internal::GetCapturedStdout(), Not(HasSubstr("Slow Lua call")));
+
+        LuaUtil::gSlowLuaCallLogMs = 1e-9;
+        testing::internal::CaptureStdout();
+        scripts.update(1.5f);
+        const std::string output = internal::GetCapturedStdout();
+        LuaUtil::gSlowLuaCallLogMs = 0;
+        EXPECT_THAT(output, HasSubstr("Slow Lua call: 0 ms in Test[test1.lua]"));
+        EXPECT_THAT(output, HasSubstr("Slow Lua call: 0 ms in Test[test2.lua]"));
+    }
+
     TEST_F(LuaScriptsContainerTest, CallEvent)
     {
         LuaUtil::ScriptsContainer scripts(&mLua, "Test");

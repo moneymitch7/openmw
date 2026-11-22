@@ -73,6 +73,7 @@ namespace LuaUtil
             }
             sol::object getCopy(lua_State* state) const;
             sol::object getReadOnly(lua_State* state) const;
+            const std::string& serialized() const { return mSerializedValue; }
 
         private:
             std::string mSerializedValue;
@@ -124,6 +125,10 @@ namespace LuaUtil
         const Listener* mListener = nullptr;
         std::set<const Section*> mRunningCallbacks;
         bool mActive = false;
+        // OpenMGE: whether anything that save() writes has changed since the storage was loaded or last saved, so
+        // save() can leave an unchanged file alone (the player storage can be tens of MB with some mods, and the
+        // settings window saves it every time it closes)
+        mutable bool mChangedSinceSave = true;
         void checkIfActive() const
         {
             if (!mActive)

@@ -88,12 +88,21 @@ namespace LuaUtil
         checkIfActive();
         throwIfCallbackRecursionIsTooDeep();
         if (value != sol::nil)
-            mValues[std::string(key)] = Value(value);
+        {
+            Value newValue(value);
+            auto it = mValues.find(key);
+            if (it == mValues.end() || it->second.serialized() != newValue.serialized())
+                mStorage->mChangedSinceSave = true;
+            mValues[std::string(key)] = std::move(newValue);
+        }
         else
         {
             auto it = mValues.find(key);
             if (it != mValues.end())
+            {
                 mValues.erase(it);
+                mStorage->mChangedSinceSave = true;
+            }
         }
         if (mStorage->mListener)
             mStorage->mListener->valueChanged(mSectionName, key, value);
@@ -104,6 +113,7 @@ namespace LuaUtil
     {
         checkIfActive();
         throwIfCallbackRecursionIsTooDeep();
+        mStorage->mChangedSinceSave = true;
         mValues.clear();
         if (values)
         {
@@ -155,10 +165,13 @@ namespace LuaUtil
             if (section.mReadOnly)
                 throw std::runtime_error("Access to storage is read only");
             section.mSection->mLifeTime = Section::Temporary;
+            section.mSection->mStorage->mChangedSinceSave = true;
         };
         sview["setLifeTime"] = [](const SectionView& section, Section::LifeTime lifeTime) {
             if (section.mReadOnly)
                 throw std::runtime_error("Access to storage is read only");
+            if (section.mSection->mLifeTime != lifeTime)
+                section.mSection->mStorage->mChangedSinceSave = true;
             section.mSection->mLifeTime = lifeTime;
         };
         sview["set"] = [](const SectionView& section, std::string_view key, const sol::object& value) {
@@ -281,6 +294,8 @@ namespace LuaUtil
                 for (const auto& [key, value] : cast<sol::table>(sectionTable))
                     section->set(cast<std::string_view>(key), value);
             }
+            // the file holds exactly what was just read
+            mChangedSinceSave = false;
         }
         catch (std::exception& e)
         {
@@ -290,6 +305,11 @@ namespace LuaUtil
 
     void LuaStorage::save(lua_State* state, const std::filesystem::path& path) const
     {
+        if (!mChangedSinceSave && std::filesystem::exists(path))
+        {
+            Log(Debug::Verbose) << "Lua storage \"" << path << "\" unchanged, not saved again";
+            return;
+        }
         sol::table data(state, sol::create);
         for (const auto& [sectionName, section] : mData)
         {
@@ -301,6 +321,8 @@ namespace LuaUtil
         std::ofstream fout(path, std::fstream::binary);
         fout.write(serializedData.data(), serializedData.size());
         fout.close();
+        if (fout)
+            mChangedSinceSave = false;
     }
 
     const std::shared_ptr<LuaStorage::Section>& LuaStorage::getSection(std::string_view sectionName)

@@ -55,6 +55,13 @@ namespace LuaUtil
         Log(Debug::Error) << mNamePrefix << "[" << scriptPath(scriptId) << "] " << msg << ": " << e.what();
     }
 
+    void reportSlowLuaCall(const ScriptId& scriptId, double ms)
+    {
+        const ScriptsContainer& container = *scriptId.mContainer;
+        Log(Debug::Warning) << "Slow Lua call: " << static_cast<int>(ms) << " ms in " << container.mNamePrefix << "["
+                            << container.scriptPath(scriptId.mIndex) << "]";
+    }
+
     void ScriptsContainer::addPackage(std::string packageName, sol::main_object package)
     {
         if (!package.is<sol::userdata>())

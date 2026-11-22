@@ -26,6 +26,7 @@
 #include <SDL.h>
 
 #include <components/debug/debuglog.hpp>
+#include <components/lua/luastate.hpp>
 #include <components/debug/gldebug.hpp>
 
 #include <components/misc/framestats.hpp>
@@ -1443,6 +1444,8 @@ void OMW::Engine::go()
     std::unique_ptr<PerformanceLog> performanceLog;
     if (Settings::general().mPerformanceLog)
     {
+        // name the script behind any single Lua call taking 30 ms or more
+        LuaUtil::gSlowLuaCallLogMs = 30;
         performanceLog = std::make_unique<PerformanceLog>(
             mCfgMgr.getLogPath() / "performance-log.csv", *mViewer, *mResourceSystem->getImageManager());
         if (!performanceLog->isOpen())

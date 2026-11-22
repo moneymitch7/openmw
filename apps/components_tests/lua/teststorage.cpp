@@ -126,6 +126,84 @@ namespace
         });
     }
 
+    // OpenMGE: an unchanged storage leaves its file alone (the settings window saves the player storage every time it
+    // closes, which took seconds with tens of MB of mod data)
+    TEST(LuaUtilStorageTest, SavingOnlyWhenChanged)
+    {
+        LuaUtil::LuaState luaState{ nullptr, nullptr };
+        luaState.protectedCall([](LuaUtil::LuaView& view) {
+            LuaUtil::LuaStorage::initLuaBindings(view);
+            LuaUtil::LuaStorage storage;
+            auto& lua = view.sol();
+            storage.setActive(true);
+            lua["permanent"] = storage.getMutableSection(lua, "permanent");
+            lua.safe_script("permanent:set('x', 1)");
+
+            const auto tmpFile = std::filesystem::temp_directory_path() / "test_storage_changed.bin";
+            const auto writeMarker = [&] { std::ofstream(tmpFile, std::ios::binary) << "marker"; };
+            const auto fileIsMarker = [&] {
+                std::ifstream in(tmpFile, std::ios::binary);
+                std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                return content == "marker";
+            };
+            const auto loadedX = [&] {
+                LuaUtil::LuaStorage loaded;
+                loaded.setActive(true);
+                loaded.load(lua, tmpFile);
+                lua["loaded"] = loaded.getMutableSection(lua, "permanent");
+                return get<int>(lua, "loaded:get('x')");
+            };
+
+            storage.save(lua, tmpFile);
+            EXPECT_EQ(loadedX(), 1);
+
+            // nothing changed: the file is not written again
+            writeMarker();
+            storage.save(lua, tmpFile);
+            EXPECT_TRUE(fileIsMarker());
+
+            // setting the same value is no change either
+            lua.safe_script("permanent:set('x', 1)");
+            storage.save(lua, tmpFile);
+            EXPECT_TRUE(fileIsMarker());
+
+            // a new value is saved
+            lua.safe_script("permanent:set('x', 2)");
+            storage.save(lua, tmpFile);
+            EXPECT_FALSE(fileIsMarker());
+            EXPECT_EQ(loadedX(), 2);
+
+            // so is a removed value or a changed life time
+            writeMarker();
+            lua.safe_script("permanent:set('y', 5)");
+            storage.save(lua, tmpFile);
+            writeMarker();
+            lua.safe_script("permanent:set('y', nil)");
+            storage.save(lua, tmpFile);
+            EXPECT_FALSE(fileIsMarker());
+            writeMarker();
+            lua.safe_script("permanent:removeOnExit()");
+            storage.save(lua, tmpFile);
+            EXPECT_FALSE(fileIsMarker());
+
+            // a missing file is always written
+            lua.safe_script("permanent:setLifeTime(0)");
+            storage.save(lua, tmpFile);
+            std::filesystem::remove(tmpFile);
+            storage.save(lua, tmpFile);
+            EXPECT_EQ(loadedX(), 2);
+
+            // a storage just loaded from its file has nothing new to save
+            LuaUtil::LuaStorage storage2;
+            storage2.setActive(true);
+            storage2.load(lua, tmpFile);
+            writeMarker();
+            storage2.save(lua, tmpFile);
+            EXPECT_TRUE(fileIsMarker());
+            std::filesystem::remove(tmpFile);
+        });
+    }
+
     TEST(LuaUtilStorageTest, InvalidData)
     {
         LuaUtil::LuaState luaState{ nullptr, nullptr };

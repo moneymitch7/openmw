@@ -1,6 +1,7 @@
 #ifndef COMPONENTS_LUA_LUASTATE_H
 #define COMPONENTS_LUA_LUASTATE_H
 
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <typeinfo>
@@ -23,6 +24,13 @@ namespace LuaUtil
     std::string getLuaVersion();
 
     class ScriptsContainer;
+    struct ScriptId;
+
+    // OpenMGE: [General] performance log names the scripts behind slow Lua frames: a single call into a script (an
+    // engine handler, an event handler, a timer callback) taking at least this many milliseconds is logged with the
+    // script's path. 0 (the default) turns it off and costs nothing.
+    inline double gSlowLuaCallLogMs = 0;
+    void reportSlowLuaCall(const ScriptId& scriptId, double ms);
     struct ScriptId
     {
         ScriptsContainer* mContainer = nullptr;
@@ -255,6 +263,23 @@ namespace LuaUtil
     template <typename... Args>
     sol::protected_function_result call(ScriptId scriptId, const sol::protected_function& fn, Args&&... args)
     {
+        // OpenMGE: times the call when the performance log asks for slow calls to be named
+        struct SlowCallTimer
+        {
+            const ScriptId& mScriptId;
+            const bool mOn = gSlowLuaCallLogMs > 0 && mScriptId.mContainer;
+            const std::chrono::steady_clock::time_point mStart
+                = mOn ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+            ~SlowCallTimer()
+            {
+                if (!mOn)
+                    return;
+                const double ms
+                    = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mStart).count();
+                if (ms >= gSlowLuaCallLogMs)
+                    reportSlowLuaCall(mScriptId, ms);
+            }
+        } slowCallTimer{ scriptId };
         LuaState* luaState = nullptr;
         if (LuaState::sProfilerEnabled && scriptId.mContainer)
         {
