@@ -86,30 +86,20 @@ namespace MWRender
         void operator()(LocalMapRenderToTexture* node, osg::NodeVisitor* nv);
     };
 
-    // Wayfarer Map Renderer: reads the map back from its texture once it has been drawn.
+    // Wayfarer Map Renderer: marks a map as drawn. The picture itself is read back by OSG: the image is attached to
+    // the camera's colour buffer beside the texture, and OSG reads the frame into it (from the resolved framebuffer
+    // when multisampled) right after drawing, before this runs.
     class LocalMapCaptureCallback : public osg::Camera::DrawCallback
     {
     public:
-        LocalMapCaptureCallback(osg::Texture* texture, osg::Image* image, std::shared_ptr<std::atomic<bool>> done)
-            : mTexture(texture)
-            , mImage(image)
-            , mDone(std::move(done))
+        explicit LocalMapCaptureCallback(std::shared_ptr<std::atomic<bool>> done)
+            : mDone(std::move(done))
         {
         }
 
-        void operator()(osg::RenderInfo& renderInfo) const override
-        {
-            if (mDone->load() || !mTexture)
-                return;
-            osg::State* state = renderInfo.getState();
-            state->applyTextureAttribute(0, mTexture.get());
-            mImage->readImageFromCurrentTexture(state->getContextID(), false, GL_UNSIGNED_BYTE);
-            mDone->store(true);
-        }
+        void operator()(osg::RenderInfo& /*renderInfo*/) const override { mDone->store(true); }
 
     private:
-        osg::ref_ptr<osg::Texture> mTexture;
-        osg::ref_ptr<osg::Image> mImage;
         std::shared_ptr<std::atomic<bool>> mDone;
     };
 
@@ -255,8 +245,20 @@ namespace MWRender
         capture.mFile = mInterior ? base / "interior" / mCaptureCell / segmentFileName(segmentX, segmentY)
                                   : base / "local" / segmentFileName(segmentX, segmentY);
         osg::Camera* camera = rtt->getCamera(nullptr);
-        camera->setFinalDrawCallback(
-            new LocalMapCaptureCallback(rtt->getColorTexture(nullptr), capture.mImage.get(), capture.mDone));
+        osg::Texture* texture = rtt->getColorTexture(nullptr);
+        capture.mImage->allocateImage(texture->getTextureWidth(), texture->getTextureHeight(), 1, GL_RGB,
+            GL_UNSIGNED_BYTE);
+        osg::Camera::BufferAttachmentMap& attachments = camera->getBufferAttachmentMap();
+        auto colour = attachments.find(osg::Camera::COLOR_BUFFER);
+        if (colour == attachments.end())
+            colour = attachments.find(osg::Camera::COLOR_BUFFER0);
+        if (colour == attachments.end())
+        {
+            Log(Debug::Warning) << "Wayfarer Map Renderer: no colour buffer to read the map from";
+            return;
+        }
+        colour->second._image = capture.mImage; // keeps the texture, and its multisampling, as they are
+        camera->setFinalDrawCallback(new LocalMapCaptureCallback(capture.mDone));
         mCaptures.push_back(std::move(capture));
         ++mCapturesPending;
     }
