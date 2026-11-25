@@ -10,14 +10,17 @@ Your own game is not changed: this is its own copy of OpenMW, used only to draw 
 
 How to use it
 1. Extract this whole folder somewhere of its own (not over your game).
-2. If you use Mod Organizer: make an empty mod called "Wayfarer Map Data" first (you may have it already, from the
-   Map Builder). The pictures are written straight into it. Otherwise they go to "Wayfarer Map Pictures" here.
+2. If you use Mod Organizer: the pictures are written straight into the mod the Wayfarer builders live in (the one
+   with "Wayfarer Map Builder.exe" or questData in it, whatever it is called). Otherwise they go to
+   "Wayfarer Map Pictures" here.
 3. Start the game from Mod Organizer once first if you have changed your mods since (so openmw.cfg in
    Documents\My Games\OpenMW lists them), then close it.
 4. Double-click "Render maps.bat". The game opens, starts a new game it never saves, and travels through every
    place on its own. Leave it running: with Tamriel Rebuilt it takes a while (half an hour to an hour). A message
    shows how far it has got. It closes itself when done.
-5. Enable "Wayfarer Map Data" in Mod Organizer, below Wayfarer's Journal.
+   It runs in its own window with the sound off, so you can use other programs meanwhile, or minimize it: it keeps
+   going. Your own settings (window size, full screen) are not changed by it.
+5. Enable that mod in Mod Organizer, below Wayfarer's Journal.
 
 Stopping it: just close the game. Run "Render maps.bat" again later and it carries on where it stopped.
 Run it again after adding or removing mods that change the world: places already drawn are kept, so to redraw

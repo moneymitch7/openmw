@@ -5,10 +5,12 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <future>
 #include <iomanip>
 #include <sstream>
+#include <string_view>
 #include <system_error>
 
 #include <osg/BufferObject>
@@ -110,6 +112,17 @@
 
 namespace
 {
+    // The Wayfarer Map Renderer launcher sets WAYFARER_MAP_RENDER: the game then opens in its own window, keeps
+    // going while that window is behind others or minimized, and leaves the player's settings.cfg as it was.
+    bool wayfarerRendering()
+    {
+        static const bool rendering = [] {
+            const char* env = std::getenv("WAYFARER_MAP_RENDER");
+            return env != nullptr && *env != '\0' && std::string_view(env) != "0";
+        }();
+        return rendering;
+    }
+
     // Video memory numbers for the performance log, read on the draw thread (the GL context lives there)
     // about twice a second. AMD drivers report free video memory and the free system memory the driver may page
     // textures out to (GL_ATI_meminfo); NVIDIA drivers report free video memory and how much has been evicted so far
@@ -614,7 +627,7 @@ bool OMW::Engine::frame(unsigned frameNumber, float frametime)
         {
             ScopedProfile<UserStatsType::Sound> profile(statsEpoch, frameNumber, frameStats);
 
-            if (!mWindowManager->isWindowVisible())
+            if (!mWindowManager->isWindowVisible() && !wayfarerRendering())
             {
                 mSoundManager->pausePlayback();
                 return false;
@@ -896,10 +909,20 @@ void OMW::Engine::setSkipMenu(bool skipMenu, bool newGame)
 void OMW::Engine::createWindow()
 {
     const int screen = Settings::video().mScreen;
-    const int width = Settings::video().mResolutionX;
-    const int height = Settings::video().mResolutionY;
-    const Settings::WindowMode windowMode = Settings::video().mWindowMode;
-    const bool windowBorder = Settings::video().mWindowBorder;
+    int width = Settings::video().mResolutionX;
+    int height = Settings::video().mResolutionY;
+    Settings::WindowMode windowMode = Settings::video().mWindowMode;
+    bool windowBorder = Settings::video().mWindowBorder;
+    bool minimizeOnFocusLoss = Settings::video().mMinimizeOnFocusLoss;
+    if (wayfarerRendering())
+    {
+        // a normal window the player can move aside; only for this run, settings.cfg is not changed
+        width = std::min(width, 1280);
+        height = std::min(height, 720);
+        windowMode = Settings::WindowMode::Windowed;
+        windowBorder = true;
+        minimizeOnFocusLoss = false;
+    }
     const SDLUtil::VSyncMode vsync = Settings::video().mVsyncMode;
     unsigned antialiasing = static_cast<unsigned>(Settings::video().mAntialiasing);
 
@@ -925,7 +948,7 @@ void OMW::Engine::createWindow()
     if (!windowBorder)
         flags |= SDL_WINDOW_BORDERLESS;
 
-    SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, Settings::video().mMinimizeOnFocusLoss ? "1" : "0");
+    SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, minimizeOnFocusLoss ? "1" : "0");
 
     checkSDLError(SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8));
     checkSDLError(SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8));
@@ -1508,8 +1531,9 @@ void OMW::Engine::go()
 
     mLuaWorker->join();
 
-    // Save user settings
-    Settings::Manager::saveUser(mCfgMgr.getUserConfigPath() / "settings.cfg");
+    // Save user settings (not after a Wayfarer map rendering run: its window size is not the player's)
+    if (!wayfarerRendering())
+        Settings::Manager::saveUser(mCfgMgr.getUserConfigPath() / "settings.cfg");
     Settings::ShaderManager::get().save();
     mLuaManager->savePermanentStorage(mCfgMgr.getUserConfigPath());
 }
