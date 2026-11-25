@@ -17,6 +17,7 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 #include <regex>
 
 #include <components/debug/debuglog.hpp>
@@ -290,10 +291,11 @@ namespace MWRender
             const std::filesystem::path dir = mCaptureDir / "textures" / "wayfarers_journal" / "interior" / mCaptureCell;
             std::error_code ec;
             std::filesystem::create_directories(dir, ec);
-            std::ofstream info(dir / "map.txt");
+            std::ostringstream info;
             info << mAngle << ' ' << mCenter.x() << ' ' << mCenter.y() << ' ' << mBounds.xMin() << ' '
                  << mBounds.yMin() << ' ' << mBounds.xMax() << ' ' << mBounds.yMax() << ' ' << segments.first << ' '
                  << segments.second << ' ' << mMapWorldSize << ' ' << mMapResolution << '\n';
+            mPendingInfo.emplace_back(dir / "map.txt", info.str());
         }
         mCapturing = false;
     }
@@ -312,11 +314,27 @@ namespace MWRender
             std::filesystem::create_directories(it->mFile.parent_path(), ec);
             if (it->mImage->data())
             {
-                if (!osgDB::writeImageFile(*it->mImage, Files::pathToUnicodeString(it->mFile)))
+                // written under another name first, then renamed: a picture is either there whole or not at all
+                std::filesystem::path part = it->mFile;
+                part.replace_extension(".part.png");
+                if (osgDB::writeImageFile(*it->mImage, Files::pathToUnicodeString(part)))
+                {
+                    std::filesystem::rename(part, it->mFile, ec);
+                    if (ec)
+                        Log(Debug::Warning) << "Wayfarer Map Renderer: could not write "
+                                            << Files::pathToUnicodeString(it->mFile) << ": " << ec.message();
+                }
+                else
                     Log(Debug::Warning) << "Wayfarer Map Renderer: could not write " << Files::pathToUnicodeString(it->mFile);
             }
             it = mCaptures.erase(it);
             --mCapturesPending;
+        }
+        if (mCaptures.empty())
+        {
+            for (const auto& [file, text] : mPendingInfo)
+                std::ofstream(file) << text;
+            mPendingInfo.clear();
         }
     }
 

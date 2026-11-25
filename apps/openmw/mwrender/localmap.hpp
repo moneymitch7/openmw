@@ -141,6 +141,9 @@ namespace MWRender
             std::filesystem::path mFile;
         };
         std::vector<Capture> mCaptures;
+        // each interior's map.txt (path, text): written only once its pictures are, so that a run stopped half way
+        // never leaves an interior looking finished
+        std::vector<std::pair<std::filesystem::path, std::string>> mPendingInfo;
         std::filesystem::path mCaptureDir;
         std::string mCaptureCell;
         bool mCapturing = false;
