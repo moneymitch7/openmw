@@ -184,6 +184,12 @@ jobs:
         rm -rf install/bin
         rm -rf install/_deps
 
+    - name: Add the Wayfarer Map Renderer launcher
+      shell: bash
+      run: |
+        cp "CI/wayfarer/Render maps.bat" install/
+        cp "CI/wayfarer/Wayfarer Map Renderer - readme.txt" install/
+
     - name: Generate CI-ID.txt
       shell: bash
       env:

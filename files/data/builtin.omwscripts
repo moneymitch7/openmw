@@ -41,3 +41,7 @@ CUSTOM: scripts/omw/console/local.lua
 
 # Music system
 NPC,CREATURE: scripts/omw/music/actor.lua
+
+# Wayfarer Map Renderer (this build only)
+GLOBAL: scripts/omw/wayfarer_renderer/global.lua
+PLAYER: scripts/omw/wayfarer_renderer/player.lua

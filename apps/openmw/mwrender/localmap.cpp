@@ -2,16 +2,27 @@
 
 #include <cstdint>
 
+#include <osg/Camera>
 #include <osg/ComputeBoundsVisitor>
+#include <osg/Image>
+#include <osg/State>
 #include <osg/Fog>
 #include <osg/PolygonMode>
 #include <osg/Texture2D>
 
 #include <osgDB/ReadFile>
+#include <osgDB/WriteFile>
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <fstream>
+#include <regex>
 
 #include <components/debug/debuglog.hpp>
 #include <components/esm3/fogstate.hpp>
 #include <components/esm3/loadcell.hpp>
+#include <components/files/conversion.hpp>
 #include <components/files/memorystream.hpp>
 #include <components/misc/constants.hpp>
 #include <components/myguiplatform/myguitexture.hpp>
@@ -29,6 +40,7 @@
 #include "../mwbase/windowmanager.hpp"
 
 #include "../mwworld/cellstore.hpp"
+#include "../mwworld/scene.hpp"
 
 #include "util.hpp"
 #include "vismask.hpp"
@@ -73,6 +85,54 @@ namespace MWRender
     public:
         void operator()(LocalMapRenderToTexture* node, osg::NodeVisitor* nv);
     };
+
+    // Wayfarer Map Renderer: reads the map back from its texture once it has been drawn.
+    class LocalMapCaptureCallback : public osg::Camera::DrawCallback
+    {
+    public:
+        LocalMapCaptureCallback(osg::Texture* texture, osg::Image* image, std::shared_ptr<std::atomic<bool>> done)
+            : mTexture(texture)
+            , mImage(image)
+            , mDone(std::move(done))
+        {
+        }
+
+        void operator()(osg::RenderInfo& renderInfo) const override
+        {
+            if (mDone->load() || !mTexture)
+                return;
+            osg::State* state = renderInfo.getState();
+            state->applyTextureAttribute(0, mTexture.get());
+            mImage->readImageFromCurrentTexture(state->getContextID(), false, GL_UNSIGNED_BYTE);
+            mDone->store(true);
+        }
+
+    private:
+        osg::ref_ptr<osg::Texture> mTexture;
+        osg::ref_ptr<osg::Image> mImage;
+        std::shared_ptr<std::atomic<bool>> mDone;
+    };
+
+    namespace
+    {
+        // the folder name of an interior's pictures: its id in lower case, anything but letters and digits as _
+        std::string captureFolderName(std::string_view id)
+        {
+            std::string out;
+            out.reserve(id.size());
+            for (char c : id)
+            {
+                const unsigned char u = static_cast<unsigned char>(c);
+                out += std::isalnum(u) ? static_cast<char>(std::tolower(u)) : '_';
+            }
+            return out;
+        }
+
+        std::string segmentFileName(int x, int y)
+        {
+            return "(" + std::to_string(x) + "," + std::to_string(y) + ").png";
+        }
+    }
 
     LocalMap::LocalMap(osg::Group* root)
         : mRoot(root)
@@ -173,10 +233,160 @@ namespace MWRender
             new LocalMapRenderToTexture(mSceneRoot, mMapResolution, mMapWorldSize, left, top, upVector, zmin, zmax));
 
         mRoot->addChild(mLocalMapRTTs.back());
+        if (mCapturing)
+            addCapture(mLocalMapRTTs.back(), segmentX, segmentY);
 
         MapSegment& segment = mInterior ? mInteriorSegments[std::make_pair(segmentX, segmentY)]
                                         : mExteriorSegments[std::make_pair(segmentX, segmentY)];
         segment.mMapTexture = static_cast<osg::Texture2D*>(mLocalMapRTTs.back()->getColorTexture(nullptr));
+    }
+
+    void LocalMap::setCapture(const std::filesystem::path& dir)
+    {
+        mCaptureDir = dir;
+    }
+
+    void LocalMap::addCapture(LocalMapRenderToTexture* rtt, int segmentX, int segmentY)
+    {
+        Capture capture;
+        capture.mImage = new osg::Image;
+        capture.mDone = std::make_shared<std::atomic<bool>>(false);
+        const std::filesystem::path base = mCaptureDir / "textures" / "wayfarers_journal";
+        capture.mFile = mInterior ? base / "interior" / mCaptureCell / segmentFileName(segmentX, segmentY)
+                                  : base / "local" / segmentFileName(segmentX, segmentY);
+        osg::Camera* camera = rtt->getCamera(nullptr);
+        camera->setFinalDrawCallback(
+            new LocalMapCaptureCallback(rtt->getColorTexture(nullptr), capture.mImage.get(), capture.mDone));
+        mCaptures.push_back(std::move(capture));
+        ++mCapturesPending;
+    }
+
+    void LocalMap::captureActiveCells()
+    {
+        if (mCaptureDir.empty())
+            return;
+        mCapturing = true;
+        for (MWWorld::CellStore* cell : MWBase::Environment::get().getWorldScene()->getActiveCells())
+        {
+            if (cell->isExterior())
+            {
+                const int x = cell->getCell()->getGridX();
+                const int y = cell->getCell()->getGridY();
+                requestExteriorMap(cell, mExteriorSegments[std::make_pair(x, y)]);
+                continue;
+            }
+            mCaptureCell = captureFolderName(cell->getCell()->getNameId());
+            mInteriorSegments.clear();
+            mInterior = false;
+            requestInteriorMap(cell);
+            if (!mInterior)
+                continue; // an empty cell: nothing to draw
+            // how the pieces lie: the angle the plan is turned by (to put the cell's north up), the point it is
+            // turned about, the area covered (in that turned frame), how many pieces across and down, and the
+            // size of a piece in game units and in pixels
+            const auto segments = divideIntoSegments(mBounds, mMapWorldSize);
+            const std::filesystem::path dir = mCaptureDir / "textures" / "wayfarers_journal" / "interior" / mCaptureCell;
+            std::error_code ec;
+            std::filesystem::create_directories(dir, ec);
+            std::ofstream info(dir / "map.txt");
+            info << mAngle << ' ' << mCenter.x() << ' ' << mCenter.y() << ' ' << mBounds.xMin() << ' '
+                 << mBounds.yMin() << ' ' << mBounds.xMax() << ' ' << mBounds.yMax() << ' ' << segments.first << ' '
+                 << segments.second << ' ' << mMapWorldSize << ' ' << mMapResolution << '\n';
+        }
+        mCapturing = false;
+    }
+
+    void LocalMap::writeCaptures()
+    {
+        auto it = mCaptures.begin();
+        while (it != mCaptures.end())
+        {
+            if (!it->mDone->load())
+            {
+                ++it;
+                continue;
+            }
+            std::error_code ec;
+            std::filesystem::create_directories(it->mFile.parent_path(), ec);
+            if (it->mImage->data())
+            {
+                if (!osgDB::writeImageFile(*it->mImage, Files::pathToUnicodeString(it->mFile)))
+                    Log(Debug::Warning) << "Wayfarer Map Renderer: could not write " << Files::pathToUnicodeString(it->mFile);
+            }
+            it = mCaptures.erase(it);
+            --mCapturesPending;
+        }
+    }
+
+    int LocalMap::buildOverviews()
+    {
+        const std::filesystem::path base = mCaptureDir / "textures" / "wayfarers_journal";
+        const std::filesystem::path localDir = base / "local";
+        constexpr int tileCells = 16;
+        constexpr int px = 32; // pixels a cell in the overview pictures
+        std::map<std::pair<int, int>, osg::ref_ptr<osg::Image>> tiles;
+        const std::regex pattern(R"(\((-?\d+),(-?\d+)\)\.png)");
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(localDir, ec))
+        {
+            std::smatch m;
+            const std::string name = Files::pathToUnicodeString(entry.path().filename());
+            if (!std::regex_match(name, m, pattern))
+                continue;
+            const int cx = std::stoi(m[1].str());
+            const int cy = std::stoi(m[2].str());
+            osg::ref_ptr<osg::Image> cellImage = osgDB::readImageFile(Files::pathToUnicodeString(entry.path()));
+            if (!cellImage || !cellImage->data() || cellImage->s() < px || cellImage->t() < px)
+                continue;
+            const int tx = static_cast<int>(std::floor(cx / static_cast<float>(tileCells)));
+            const int ty = static_cast<int>(std::floor(cy / static_cast<float>(tileCells)));
+            osg::ref_ptr<osg::Image>& tile = tiles[std::make_pair(tx, ty)];
+            if (!tile)
+            {
+                tile = new osg::Image;
+                tile->allocateImage(tileCells * px, tileCells * px, 1, GL_RGBA, GL_UNSIGNED_BYTE);
+                std::fill(tile->data(), tile->data() + tile->getTotalSizeInBytes(), 0);
+            }
+            // a box average of the cell's picture into its px x px square of the tile (rows bottom up, as in OSG)
+            const int step = cellImage->s() / px;
+            const int ox = (cx - tx * tileCells) * px;
+            const int oy = (cy - ty * tileCells) * px;
+            for (int y = 0; y < px; ++y)
+                for (int x = 0; x < px; ++x)
+                {
+                    float r = 0, g = 0, b = 0;
+                    for (int j = 0; j < step; ++j)
+                        for (int i = 0; i < step; ++i)
+                        {
+                            const osg::Vec4 c = cellImage->getColor(x * step + i, y * step + j);
+                            r += c.r();
+                            g += c.g();
+                            b += c.b();
+                        }
+                    const float n = static_cast<float>(step * step);
+                    unsigned char* d = tile->data(ox + x, oy + y);
+                    d[0] = static_cast<unsigned char>(std::clamp(r / n, 0.f, 1.f) * 255);
+                    d[1] = static_cast<unsigned char>(std::clamp(g / n, 0.f, 1.f) * 255);
+                    d[2] = static_cast<unsigned char>(std::clamp(b / n, 0.f, 1.f) * 255);
+                    d[3] = 255;
+                }
+        }
+        const std::filesystem::path mapDir = base / "map";
+        std::filesystem::create_directories(mapDir, ec);
+        const std::filesystem::path dataDir = mCaptureDir / "scripts" / "wayfarers_journal" / "data";
+        std::filesystem::create_directories(dataDir, ec);
+        std::ofstream index(dataDir / "maptiles.lua");
+        index << "-- Made by Wayfarer Map Renderer: the overview pictures of the world map.\n";
+        index << "return {tileCells=" << tileCells << ",px=" << px << ",tiles={";
+        for (const auto& [key, tile] : tiles)
+        {
+            const std::string file
+                = "t_" + std::to_string(key.first) + "_" + std::to_string(key.second) + ".png";
+            osgDB::writeImageFile(*tile, Files::pathToUnicodeString(mapDir / file));
+            index << "[\"" << key.first << "," << key.second << "\"]=true,";
+        }
+        index << "}}\n";
+        return static_cast<int>(tiles.size());
     }
 
     void LocalMap::requestMap(const MWWorld::CellStore* cell)

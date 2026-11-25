@@ -17,6 +17,12 @@ namespace MyGUI
     class ITexture;
 }
 
+#include <atomic>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace MWWorld
 {
     class CellStore;
@@ -111,7 +117,36 @@ namespace MWRender
 
         MyGUI::IntRect getInteriorGrid() const;
 
+        // Wayfarer Map Renderer (this build only): from setCapture on, every map rendered of the cells in the scene
+        // is also read back from the GPU and written as a PNG under the directory given, as the game's own local map
+        // looks: textures/wayfarers_journal/local/(x,y).png outside, textures/wayfarers_journal/interior/<cell>/
+        // (x,y).png and map.txt (how the pieces lie) inside.
+        void setCapture(const std::filesystem::path& dir);
+        const std::filesystem::path& getCaptureDir() const { return mCaptureDir; }
+        /// Render the maps of all the cells in the scene now (exterior cells, or the interior the player is in).
+        void captureActiveCells();
+        /// Maps asked for and not yet written.
+        int capturesPending() const { return mCapturesPending.load(); }
+        /// Write the maps that have been rendered.
+        void writeCaptures();
+        /// The zoomed-out overview pictures (16 x 16 cells, 512 px) from all the exterior maps written, with their
+        /// index (scripts/wayfarers_journal/data/maptiles.lua). Returns how many were made.
+        int buildOverviews();
+
     private:
+        struct Capture
+        {
+            osg::ref_ptr<osg::Image> mImage;
+            std::shared_ptr<std::atomic<bool>> mDone;
+            std::filesystem::path mFile;
+        };
+        std::vector<Capture> mCaptures;
+        std::filesystem::path mCaptureDir;
+        std::string mCaptureCell;
+        bool mCapturing = false;
+        std::atomic<int> mCapturesPending{ 0 };
+        void addCapture(LocalMapRenderToTexture* rtt, int segmentX, int segmentY);
+
         osg::ref_ptr<osg::Group> mRoot;
         osg::ref_ptr<osg::Node> mSceneRoot;
 

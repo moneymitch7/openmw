@@ -212,6 +212,7 @@ namespace MWGui
         void setFocusObject(const MWWorld::Ptr& focus) override;
         void setFocusObjectScreenCoords(float x, float y) override;
         void setWorldTooltipHidden(bool hidden) override;
+        MWRender::LocalMap* getLocalMapRender() override { return mLocalMapRender.get(); }
         MWWorld::Ptr getWorldTooltipObject() override;
         bool isWorldTooltipObjectOwned() override;
 

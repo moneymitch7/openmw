@@ -57,6 +57,11 @@ namespace MWWorld
     class Ptr;
 }
 
+namespace MWRender
+{
+    class LocalMap;
+}
+
 namespace MWGui
 {
     class Layout;
@@ -192,6 +197,8 @@ namespace MWBase
 
         /// Opt-in (Lua): hide the engine's tooltip for objects in the world; tooltips in menus are unaffected.
         virtual void setWorldTooltipHidden(bool hidden) = 0;
+        /// Wayfarer Map Renderer: the local map renderer (may be null before the game has started).
+        virtual MWRender::LocalMap* getLocalMapRender() = 0;
         /// The object the world tooltip is (or would be) shown for, and whether taking it would be a crime.
         virtual MWWorld::Ptr getWorldTooltipObject() = 0;
         virtual bool isWorldTooltipObjectOwned() = 0;

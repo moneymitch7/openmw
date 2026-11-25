@@ -1,11 +1,15 @@
 #include "uibindings.hpp"
 
+#include <cstdlib>
+#include <filesystem>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <glm/vec2.hpp>
 
+#include <components/debug/debuglog.hpp>
+#include <components/files/conversion.hpp>
 #include <components/lua/util.hpp>
 #include <components/lua_ui/alignment.hpp>
 #include <components/lua_ui/content.hpp>
@@ -31,6 +35,7 @@
 #include "../mwbase/environment.hpp"
 #include "../mwbase/inputmanager.hpp"
 #include "../mwbase/windowmanager.hpp"
+#include "../mwrender/localmap.hpp"
 
 #include <format>
 
@@ -139,6 +144,58 @@ namespace MWLua
         };
         api["_isWorldTooltipObjectOwned"]
             = [windowManager]() -> bool { return windowManager->isWorldTooltipObjectOwned(); };
+        // Wayfarer Map Renderer (this build only): writes the game's local maps of the cells in the scene as
+        // pictures, for Wayfarer's Journal. The folder is WAYFARER_MAP_OUT, else "wayfarer_maps" in the user data.
+        api["_wmrStart"] = [luaManager = context.mLuaManager]() {
+            luaManager->addAction([] {
+                MWRender::LocalMap* map = MWBase::Environment::get().getWindowManager()->getLocalMapRender();
+                if (!map)
+                    return;
+                std::filesystem::path dir;
+                if (const char* env = std::getenv("WAYFARER_MAP_OUT"); env && *env)
+                    dir = Files::pathFromUnicodeString(env);
+                if (dir.empty())
+                    dir = std::filesystem::current_path() / "wayfarer_maps";
+                map->setCapture(dir);
+            });
+        };
+        api["_wmrDir"] = [windowManager]() -> std::string {
+            MWRender::LocalMap* map = windowManager->getLocalMapRender();
+            return map ? Files::pathToUnicodeString(map->getCaptureDir()) : std::string();
+        };
+        api["_wmrCapture"] = [luaManager = context.mLuaManager]() {
+            luaManager->addAction([] {
+                if (MWRender::LocalMap* map = MWBase::Environment::get().getWindowManager()->getLocalMapRender())
+                    map->captureActiveCells();
+            });
+        };
+        api["_wmrWrite"] = [luaManager = context.mLuaManager]() {
+            luaManager->addAction([] {
+                if (MWRender::LocalMap* map = MWBase::Environment::get().getWindowManager()->getLocalMapRender())
+                    map->writeCaptures();
+            });
+        };
+        api["_wmrPending"] = [windowManager]() -> int {
+            MWRender::LocalMap* map = windowManager->getLocalMapRender();
+            return map ? map->capturesPending() : 0;
+        };
+        // has this picture (a path under the folder) been written already? (to carry on after a stop)
+        api["_wmrHas"] = [windowManager](std::string_view relative) -> bool {
+            MWRender::LocalMap* map = windowManager->getLocalMapRender();
+            if (!map || map->getCaptureDir().empty())
+                return false;
+            std::error_code ec;
+            return std::filesystem::exists(map->getCaptureDir() / Files::pathFromUnicodeString(relative), ec);
+        };
+        api["_wmrOverviews"] = [luaManager = context.mLuaManager]() {
+            luaManager->addAction([] {
+                if (MWRender::LocalMap* map = MWBase::Environment::get().getWindowManager()->getLocalMapRender())
+                {
+                    const int n = map->buildOverviews();
+                    Log(Debug::Info) << "Wayfarer Map Renderer: " << n << " overview pictures";
+                }
+            });
+        };
         api["showMessage"]
             = [luaManager = context.mLuaManager](std::string_view message, const sol::optional<sol::table>& options) {
                   MWGui::ShowInDialogueMode mode = MWGui::ShowInDialogueMode_IfPossible;
