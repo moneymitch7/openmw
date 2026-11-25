@@ -17,7 +17,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.2'
+VERSION = '0.3'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -538,8 +538,32 @@ def build(world):
                 st['next'] = nxt
             higher = [t for t in idxs if t > s]
             if higher and not st.get('finished'):
-                st['nextIndex'] = min(nxt) if nxt else higher[0]
+                if nxt:
+                    st['nextIndex'] = min(nxt)
+                else:
+                    # Nothing says what follows: take the first stage above that can be reached straight away, not
+                    # one on another route (its steps wait on another quest's progress or the alternative's items).
+                    plain = [t for t in higher if any(direct(b) for b in q['stages'][t]['requirements'])]
+                    st['nextIndex'] = plain[0] if plain else higher[0]
+                    st['next'] = [st['nextIndex']]
     return quests
+
+
+OBJECTIVE_TYPES = ('ACT', 'DX', 'IX', 'DIS', 'PCL')
+
+
+def direct(block):
+    """A way to a stage that waits on nothing else: it has a step to take, no other quest's progress and no item
+    that only an alternative route gives."""
+    if not any(r.get('type') in OBJECTIVE_TYPES for r in block):
+        return False
+    for r in block:
+        if r.get('type') == 'JX':
+            return False
+        if r.get('type') == 'IX' and r.get('object') == 'player' and any(x.get('type') == 'ACT' for x in block):
+            # "talk to X once you have the item": the item comes from somewhere else first
+            return False
+    return True
 
 
 def needed_ids(world, quests):
