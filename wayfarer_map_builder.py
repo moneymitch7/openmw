@@ -14,6 +14,7 @@ Usage: wayfarer_map_builder [--config openmw.cfg] [--out folder] [--looks atlas,
 
 import argparse
 import os
+import re
 import struct
 import sys
 import time
@@ -23,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.1'
+VERSION = '0.2'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -81,6 +82,84 @@ def heights(lands, by_tile, x0, y0, w, h):
 
 
 # --------------------------------------------------------------------------------------------------------------------
+# The game's own top-down pictures of the cells (its local map): Wayfarer Map Renderer's, else Advanced World Map's.
+# They show what the heights can't: towns, buildings, roads, docks, bridges. Each look recolours them into its style.
+
+LOCAL_DIRS = ('textures/advanced_world_map/local', 'textures/wayfarers_journal/local')  # later wins
+LOCAL_NAME = re.compile(r'^\((-?\d+),(-?\d+)\)\.png$', re.IGNORECASE)
+
+
+def find_local_maps(data_dirs):
+    found = {}
+    for sub in LOCAL_DIRS:
+        for d in data_dirs:
+            p = os.path.join(d, *sub.split('/'))
+            try:
+                names = os.listdir(p)
+            except OSError:
+                continue
+            for n in names:
+                m = LOCAL_NAME.match(n)
+                if m:
+                    found[(int(m.group(1)), int(m.group(2)))] = os.path.join(p, n)
+    return found
+
+
+class LocalMaps:
+    """Each cell's picture at PX x PX: luminance 0..1 and whether each pixel is open water (rows north first)."""
+
+    def __init__(self, paths):
+        self.paths = paths
+        self.cache = {}
+
+    def get(self, cell):
+        if cell in self.cache:
+            return self.cache[cell]
+        v = None
+        path = self.paths.get(cell)
+        if path:
+            try:
+                img = Image.open(path).convert('RGB').resize((PX, PX), Image.Resampling.BOX)
+                a = np.asarray(img, dtype=np.float32)
+                if a.mean() > 3:  # an empty (black) picture is no picture
+                    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+                    lum = (0.30 * r + 0.55 * g + 0.15 * b)
+                    water = (b - r >= 4) & (g - r >= 2)
+                    v = (lum.astype(np.float16), water)
+            except OSError:
+                v = None
+        self.cache[cell] = v
+        return v
+
+    def layer(self, x0, y0, w, h):
+        """Luminance (NaN where no picture) and water, over pixels [x0, x0 + w) x [y0, y0 + h) (row 0 the north)."""
+        lum = np.full((h, w), np.nan, dtype=np.float32)
+        water = np.zeros((h, w), dtype=bool)
+        top = y0 + h - 1
+        for cx in range(x0 // PX, (x0 + w - 1) // PX + 1):
+            for cy in range(y0 // PX, (y0 + h - 1) // PX + 1):
+                v = self.get((cx, cy))
+                if v is None:
+                    continue
+                px, py = cx * PX, cy * PX
+                ax0, ax1 = max(px, x0), min(px + PX, x0 + w)
+                ay0, ay1 = max(py, y0), min(py + PX, y0 + h)
+                if ax0 >= ax1 or ay0 >= ay1:
+                    continue
+                r0, r1 = py + PX - ay1, py + PX - ay0   # picture rows (north first) for y in [ay0, ay1)
+                rows = slice(top - (ay1 - 1), top - ay0 + 1)
+                cols = slice(ax0 - x0, ax1 - x0)
+                lum[rows, cols] = v[0][r0:r1, ax0 - px:ax1 - px]
+                water[rows, cols] = v[1][r0:r1, ax0 - px:ax1 - px]
+        return lum, water
+
+
+def stretch(lum):
+    """The pictures are dark (lit as the game's map is): spread their brightness over 0..1."""
+    return np.clip((lum - 12.0) / 85.0, 0, 1) ** 0.85
+
+
+# --------------------------------------------------------------------------------------------------------------------
 # Drawing
 
 def box_blur(a, r):
@@ -122,13 +201,23 @@ def coast(land):
     return e
 
 
-def draw_atlas(h, x0, y0):
-    """The parchment atlas: sepia relief on paper, the coast inked, the sea darkened a little along it."""
+def draw_atlas(h, x0, y0, local=None):
+    """The parchment atlas: sepia relief on paper, the coast inked, the sea darkened a little along it; where the
+    game's own picture of a cell is known, that picture in sepia ink (towns, roads, docks), lit by the relief."""
     land = h > 0
     shade = hillshade(h, 2.2)
     rise = np.clip(h / 14000.0, 0, 1) ** 0.6
     col = lerp((196, 168, 118), (92, 62, 32), rise)
     col *= (0.42 + 0.78 * shade)[..., None]
+    built = np.zeros_like(land)
+    if local is not None:
+        lum, water = local
+        has = ~np.isnan(lum)
+        L = stretch(np.nan_to_num(lum))
+        ink = lerp((64, 42, 22), (232, 212, 168), L) * (0.78 + 0.32 * shade)[..., None]
+        col = np.where(has[..., None], ink * 0.8 + col * 0.2, col)
+        built = has & ~water & ~land  # docks, bridges, cantons standing in the water
+        ink_flat = lerp((64, 42, 22), (232, 212, 168), L)
     paper = np.empty(h.shape + (3,), dtype=np.float32)
     paper[:] = SEA['atlas']   # plain: the journal lays its own paper under the map, and pictures meet without a seam
     glow = box_blur(land.astype(np.float32), 5)
@@ -136,16 +225,27 @@ def draw_atlas(h, x0, y0):
     out = np.where(land[..., None], col, paper)
     edge = coast(land)
     out[edge] = (84, 56, 30)
+    if built.any():
+        out[built] = ink_flat[built]
     return out
 
 
-def draw_native(h, x0, y0):
-    """The native window: brown land lit from the north-west, teal water darker where deeper."""
+def draw_native(h, x0, y0, local=None):
+    """The native window: brown land lit from the north-west, teal water; where the game's own picture of a cell
+    is known, that picture in the window's browns (towns, roads, docks), lit by the relief."""
     land = h > 0
     shade = hillshade(h, 2.0)
     rise = np.clip(h / 12000.0, 0, 1)
     col = lerp((120, 86, 60), (82, 58, 42), rise)
     col *= (0.45 + 0.65 * shade)[..., None]
+    built = np.zeros_like(land)
+    if local is not None:
+        lum, water = local
+        has = ~np.isnan(lum)
+        L = stretch(np.nan_to_num(lum))
+        brown = lerp((46, 32, 22), (196, 156, 112), L)
+        col = np.where(has[..., None], brown * (0.80 + 0.30 * shade)[..., None] * 0.85 + col * 0.15, col)
+        built = has & ~water & ~land
     # the water one teal (its depth only shows as cell-sized steps where files give no sea bed), lighter by the shore
     water = np.empty(h.shape + (3,), dtype=np.float32)
     water[:] = SEA['native']
@@ -154,6 +254,8 @@ def draw_native(h, x0, y0):
     out = np.where(land[..., None], col, water)
     edge = coast(land)
     out[edge] = out[edge] * 0.72
+    if built.any():
+        out[built] = brown[built]
     return out
 
 
@@ -222,6 +324,7 @@ def main(argv=None):
     ap.add_argument('--looks', default='atlas,native', help='which looks to draw (atlas, native)')
     ap.add_argument('--only', help='X,Y,X2,Y2: only the pictures over these cells (to try it out)')
     ap.add_argument('--remap', action='append', default=[], help='FROM=TO: read data folders under FROM at TO')
+    ap.add_argument('--no-pictures', action='store_true', help='draw the land only, without the local map pictures')
     ap.add_argument('--no-pause', action='store_true', help='don\'t wait for Enter at the end')
     args = ap.parse_args(argv)
 
@@ -234,6 +337,13 @@ def main(argv=None):
     log(f'Wayfarer Map Builder {VERSION}')
     log(f'Profile: {cfg}')
     order, missing = content_order(cfg, remaps)
+    data_dirs, _ = read_config(cfg, remaps)
+    local_paths = {} if args.no_pictures else find_local_maps(data_dirs)
+    local = LocalMaps(local_paths) if local_paths else None
+    if local:
+        log(f'Using the game\'s own pictures of {len(local_paths)} cells for towns and roads')
+    else:
+        log('No local map pictures found (Wayfarer Map Renderer\'s or Advanced World Map\'s): drawing the land only')
     if missing:
         log(f'{len(missing)} content files not found (skipped): ' + ', '.join(missing[:10])
             + (' ...' if len(missing) > 10 else ''))
@@ -266,8 +376,9 @@ def main(argv=None):
     for i, (tx, ty) in enumerate(sorted(want)):
         x0, y0 = tx * size - MARGIN, ty * size - MARGIN
         h = heights(lands, None, x0, y0, size + 2 * MARGIN, size + 2 * MARGIN)
+        layer = local.layer(x0, y0, size + 2 * MARGIN, size + 2 * MARGIN) if local else None
         for k in looks:
-            rgb = LOOKS[k](h, x0, y0)[MARGIN:-MARGIN, MARGIN:-MARGIN]
+            rgb = LOOKS[k](h, x0, y0, layer)[MARGIN:-MARGIN, MARGIN:-MARGIN]
             save_png(rgb, os.path.join(tex, k, f't_{tx}_{ty}.png'))
             q = rgb.reshape(size // 4, 4, size // 4, 4, 3).mean(axis=(1, 3))
             small[k][(tx, ty)] = q

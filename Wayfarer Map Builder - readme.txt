@@ -1,4 +1,4 @@
-Wayfarer Map Builder 0.1
+Wayfarer Map Builder 0.2
 ========================
 
 Draws the world map of Wayfarer's Journal from the land of your own load order, in the map's two styled looks:
@@ -18,5 +18,9 @@ How to use it
 
 Run it again when you add or remove mods that change the land.
 
+Towns, buildings, roads and docks: the heights only give the land, so the builder also lays the game's own top-down
+picture of each cell over it, recoloured into each look: the pictures Wayfarer Map Renderer drew for your load
+order, else Advanced World Map's local map textures if they are installed. Run it again after running the renderer.
+
 Options (from a command prompt): --config PATH (another openmw.cfg), --out FOLDER (write somewhere else),
---looks atlas,native (draw only one look).
+--looks atlas,native (draw only one look), --no-pictures (the land only).
