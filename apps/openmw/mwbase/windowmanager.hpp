@@ -190,6 +190,12 @@ namespace MWBase
         virtual void setFocusObject(const MWWorld::Ptr& focus) = 0;
         virtual void setFocusObjectScreenCoords(float x, float y) = 0;
 
+        /// Opt-in (Lua): hide the engine's tooltip for objects in the world; tooltips in menus are unaffected.
+        virtual void setWorldTooltipHidden(bool hidden) = 0;
+        /// The object the world tooltip is (or would be) shown for, and whether taking it would be a crime.
+        virtual MWWorld::Ptr getWorldTooltipObject() = 0;
+        virtual bool isWorldTooltipObjectOwned() = 0;
+
         virtual void setCursorVisible(bool visible) = 0;
         virtual void setCursorActive(bool active) = 0;
         virtual void setCursorInteractionEnabled(bool enabled) = 0;

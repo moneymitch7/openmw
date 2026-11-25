@@ -119,6 +119,20 @@ namespace MWLua
         };
         api["_isHudVisible"] = []() -> bool { return MWBase::Environment::get().getWindowManager()->isHudVisible(); };
         api["_getDefaultFontSize"] = []() -> int { return Settings::gui().mFontSize; };
+        // Opt-in (this build): a mod that draws its own label for what the crosshair is on can hide the engine's
+        // tooltip for objects in the world, and ask which object that is (nil in menus or when there is none).
+        api["_setWorldTooltipHidden"] = [luaManager = context.mLuaManager](bool hidden) {
+            luaManager->addAction(
+                [hidden] { MWBase::Environment::get().getWindowManager()->setWorldTooltipHidden(hidden); });
+        };
+        api["_getWorldTooltipObject"] = [windowManager]() -> sol::optional<LObject> {
+            MWWorld::Ptr ptr = windowManager->getWorldTooltipObject();
+            if (ptr.isEmpty())
+                return sol::nullopt;
+            return LObject(getId(ptr));
+        };
+        api["_isWorldTooltipObjectOwned"]
+            = [windowManager]() -> bool { return windowManager->isWorldTooltipObjectOwned(); };
         api["showMessage"]
             = [luaManager = context.mLuaManager](std::string_view message, const sol::optional<sol::table>& options) {
                   MWGui::ShowInDialogueMode mode = MWGui::ShowInDialogueMode_IfPossible;

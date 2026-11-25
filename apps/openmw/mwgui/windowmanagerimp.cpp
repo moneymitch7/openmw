@@ -1190,6 +1190,21 @@ namespace MWGui
         }
     }
 
+    void WindowManager::setWorldTooltipHidden(bool hidden)
+    {
+        mToolTips->setWorldTooltipHidden(hidden);
+    }
+
+    MWWorld::Ptr WindowManager::getWorldTooltipObject()
+    {
+        return mToolTips->getWorldTooltipObject();
+    }
+
+    bool WindowManager::isWorldTooltipObjectOwned()
+    {
+        return !mToolTips->getWorldTooltipObject().isEmpty() && mToolTips->checkOwned();
+    }
+
     void WindowManager::setFocusObjectScreenCoords(float x, float y)
     {
         mToolTips->setFocusObjectScreenCoords(x, y);

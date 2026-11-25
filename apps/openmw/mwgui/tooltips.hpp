@@ -103,6 +103,12 @@ namespace MWGui
         bool checkOwned();
         /// Returns True if taking mFocusObject would be crime
 
+        /// Opt-in, for Lua mods that draw their own label for what the crosshair is on: hide the engine's tooltip for
+        /// objects in the world (tooltips in menus are unaffected). Off unless a script turns it on.
+        void setWorldTooltipHidden(bool hidden) { mWorldTooltipHidden = hidden; }
+        /// The object the world tooltip is (or would be) shown for, or an empty Ptr.
+        MWWorld::Ptr getWorldTooltipObject();
+
     private:
         MyGUI::Widget* mDynamicToolTipBox;
 
@@ -129,6 +135,7 @@ namespace MWGui
         int mLastMouseY;
 
         bool mEnabled;
+        bool mWorldTooltipHidden = false;
 
         bool mFullHelp;
 

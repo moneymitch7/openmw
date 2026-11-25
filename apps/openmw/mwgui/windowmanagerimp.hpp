@@ -211,6 +211,9 @@ namespace MWGui
 
         void setFocusObject(const MWWorld::Ptr& focus) override;
         void setFocusObjectScreenCoords(float x, float y) override;
+        void setWorldTooltipHidden(bool hidden) override;
+        MWWorld::Ptr getWorldTooltipObject() override;
+        bool isWorldTooltipObjectOwned() override;
 
         void getMousePosition(int& x, int& y) override;
         void getMousePosition(float& x, float& y) override;

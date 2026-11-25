@@ -306,7 +306,7 @@ namespace MWGui
         }
         else
         {
-            if (!mFocusObject.isEmpty())
+            if (!mFocusObject.isEmpty() && !mWorldTooltipHidden)
             {
                 MyGUI::IntSize tooltipSize = getToolTipViaPtr(mFocusObject.getCellRef().getCount(), true, checkOwned());
 
@@ -317,6 +317,16 @@ namespace MWGui
                 mDynamicToolTipBox->setVisible(true);
             }
         }
+    }
+
+    MWWorld::Ptr ToolTips::getWorldTooltipObject()
+    {
+        MWBase::WindowManager* winMgr = MWBase::Environment::get().getWindowManager();
+        if (!mEnabled || winMgr->isGuiMode() || mFocusObject.isEmpty())
+            return MWWorld::Ptr();
+        if (!mFocusObject.getClass().hasToolTip(mFocusObject))
+            return MWWorld::Ptr();
+        return mFocusObject;
     }
 
     void ToolTips::position(MyGUI::IntPoint& position, MyGUI::IntSize size, MyGUI::IntSize viewportSize)
