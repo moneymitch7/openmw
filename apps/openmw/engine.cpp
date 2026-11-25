@@ -1151,6 +1151,16 @@ void OMW::Engine::setWindowIcon()
 
 void OMW::Engine::prepareEngine()
 {
+    if (wayfarerRendering())
+    {
+        // Draw the land at full detail, cell by cell, as the game's own local map always did: with distant terrain
+        // (or groundcover, which needs the same terrain), the land seen from the map camera's height uses the
+        // low-detail composite textures, and the pictures come out blurred. Only for this run (settings.cfg is not
+        // saved after it); neither shows on the local map otherwise (groundcover is not drawn on it).
+        Settings::terrain().mDistantTerrain.set(false);
+        Settings::groundcover().mEnabled.set(false);
+    }
+
     mStateManager = std::make_unique<MWState::StateManager>(mCfgMgr.getUserDataPath() / "saves", mContentFiles);
     mEnvironment.setStateManager(*mStateManager);
 
