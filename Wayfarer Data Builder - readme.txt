@@ -1,4 +1,4 @@
-Wayfarer Data Builder 0.1
+Wayfarer Data Builder 0.2
 =========================
 
 Makes the quest data for Wayfarer's Journal from your own load order: for each quest and stage, who to talk to

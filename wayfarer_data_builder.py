@@ -17,7 +17,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.1'
+VERSION = '0.2'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -426,7 +426,7 @@ def script_sources(text, owner):
 def info_requirements(world, dial, info):
     """A dialogue response's requirements: who says it, about what, and its conditions."""
     reqs = []
-    topic = '#dia: ' + dial['name'].lower()
+    topic = '#dia: ' + dial['name']  # the topic as the game writes it ("Galasa Uvayn")
     reqs.append({'type': 'DIA', 'operator': 48, 'variable': topic})
     for c in info['conds']:
         kind, name, op = c['kind'], c['name'].lower(), c.get('op') or '0'
