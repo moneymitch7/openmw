@@ -23,7 +23,9 @@ file(GLOB UNITTEST_SRC_FILES
 
     misc/compression.cpp
     misc/progressreporter.cpp
+    misc/testconvertglm.cpp
     misc/testendianness.cpp
+    misc/testglmexperimental.cpp
     misc/testmathutil.cpp
     misc/testresourcehelpers.cpp
     misc/teststringops.cpp
@@ -76,6 +78,7 @@ file(GLOB UNITTEST_SRC_FILES
     fx/technique.cpp
 
     esm3/readerscache.cpp
+    esm3/testesmreader.cpp
     esm3/testsaveload.cpp
     esm3/testesmwriter.cpp
     esm3/testinfoorder.cpp

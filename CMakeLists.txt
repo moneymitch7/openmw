@@ -92,6 +92,7 @@ message(STATUS "Configuring OpenMW...")
 set(OPENMW_VERSION_MAJOR 0)
 set(OPENMW_VERSION_MINOR 53)
 set(OPENMW_VERSION_RELEASE 0)
+set(OPENMW_COPYRIGHT_YEAR "2026")
 set(OPENMW_LUA_API_REVISION 166)
 set(OPENMW_POSTPROCESSING_API_REVISION 5)
 
@@ -171,6 +172,14 @@ endif()
 option(RECASTNAVIGATION_STATIC "Build recastnavigation static libraries" ${_recastnavigation_static_default})
 
 option(OPENMW_USE_SYSTEM_SQLITE3 "Use system provided SQLite3 library" ON)
+
+option(OPENMW_USE_SYSTEM_GLM "Use system provided OpenGL Mathematics (glm) library" OFF)
+if(OPENMW_USE_SYSTEM_GLM)
+    find_package(glm 1.0 CONFIG REQUIRED)
+endif()
+# Default-constructed glm types start as zero/identity, like the osg types they
+# replace. Global so every translation unit sees the same glm (ODR).
+add_compile_definitions(GLM_FORCE_CTOR_INIT)
 
 option(OPENMW_USE_SYSTEM_BENCHMARK "Use system Google Benchmark library." OFF)
 option(OPENMW_USE_SYSTEM_GOOGLETEST "Use system Google Test library." OFF)

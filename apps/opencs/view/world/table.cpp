@@ -21,6 +21,7 @@
 #include <apps/opencs/model/world/idtableproxymodel.hpp>
 #include <apps/opencs/model/world/record.hpp>
 #include <apps/opencs/model/world/universalid.hpp>
+#include <apps/opencs/model/world/variantconversion.hpp>
 #include <apps/opencs/view/world/dragrecordtable.hpp>
 
 #include <components/debug/debuglog.hpp>
@@ -117,11 +118,11 @@ void CSVWorld::Table::contextMenuEvent(QContextMenuEvent* event)
                 if (column != -1)
                 {
                     int row = mProxyModel->mapToSource(mProxyModel->index(selectedRows.begin()->row(), 0)).row();
-                    QString curData = mModel->data(mModel->index(row, column)).toString();
+                    QString curData = mModel->getData(row, column).toString();
 
                     if (row > 0)
                     {
-                        QString prevData = mModel->data(mModel->index(row - 1, column)).toString();
+                        QString prevData = mModel->getData(row - 1, column).toString();
                         if (Misc::StringUtils::ciEqual(curData.toStdString(), prevData.toStdString()))
                         {
                             menu.addAction(mMoveUpAction);
@@ -130,7 +131,7 @@ void CSVWorld::Table::contextMenuEvent(QContextMenuEvent* event)
 
                     if (row < mModel->rowCount() - 1)
                     {
-                        QString nextData = mModel->data(mModel->index(row + 1, column)).toString();
+                        QString nextData = mModel->getData(row + 1, column).toString();
                         if (Misc::StringUtils::ciEqual(curData.toStdString(), nextData.toStdString()))
                         {
                             menu.addAction(mMoveDownAction);
@@ -260,7 +261,7 @@ CSVWorld::Table::Table(const CSMWorld::UniversalId& id, bool createAndDelete, bo
     , mUnselectAfterJump(false)
     , mAutoJump(false)
 {
-    mModel = &dynamic_cast<CSMWorld::IdTableBase&>(*mDocument.getData().getTableModel(id));
+    mModel = &mDocument.getData().getTableModel<CSMWorld::IdTableBase>(id);
 
     bool isInfoTable = id.getType() == CSMWorld::UniversalId::Type_TopicInfos
         || id.getType() == CSMWorld::UniversalId::Type_JournalInfos;
@@ -301,8 +302,7 @@ CSVWorld::Table::Table(const CSMWorld::UniversalId& id, bool createAndDelete, bo
 
         if (flags & CSMWorld::ColumnBase::Flag_Table)
         {
-            CSMWorld::ColumnBase::Display display = static_cast<CSMWorld::ColumnBase::Display>(
-                mModel->headerData(i, Qt::Horizontal, CSMWorld::ColumnBase::Role_Display).toInt());
+            const auto display = mModel->getColumnDisplay(i);
 
             CommandDelegate* delegate
                 = CommandDelegateFactoryCollection::get().makeDelegate(display, mDispatcher, document, this);
@@ -458,12 +458,7 @@ CSMWorld::UniversalId CSVWorld::Table::getUniversalId(int row) const
 {
     row = mProxyModel->mapToSource(mProxyModel->index(row, 0)).row();
 
-    int idColumn = mModel->findColumnIndex(CSMWorld::Columns::ColumnId_Id);
-    int typeColumn = mModel->findColumnIndex(CSMWorld::Columns::ColumnId_RecordType);
-
-    return CSMWorld::UniversalId(
-        static_cast<CSMWorld::UniversalId::Type>(mModel->data(mModel->index(row, typeColumn)).toInt()),
-        mModel->data(mModel->index(row, idColumn)).toString().toUtf8().constData());
+    return mModel->getUniversalId(row);
 }
 
 std::vector<std::string> CSVWorld::Table::getSelectedIds() const
@@ -475,7 +470,7 @@ std::vector<std::string> CSVWorld::Table::getSelectedIds() const
     for (QModelIndexList::const_iterator iter(selectedRows.begin()); iter != selectedRows.end(); ++iter)
     {
         int row = mProxyModel->mapToSource(mProxyModel->index(iter->row(), 0)).row();
-        ids.emplace_back(mModel->data(mModel->index(row, columnIndex)).toString().toUtf8().constData());
+        ids.emplace_back(CSMWorld::getString(mModel->getData(row, columnIndex)));
     }
     return ids;
 }
@@ -813,7 +808,7 @@ void CSVWorld::Table::tableSizeUpdate()
             {
                 QModelIndex index = mProxyModel->mapToSource(mProxyModel->index(i, 0));
 
-                int state = mModel->data(mModel->index(index.row(), columnIndex)).toInt();
+                int state = mModel->getData(index.row(), columnIndex).toInt();
 
                 switch (state)
                 {
@@ -882,12 +877,11 @@ std::vector<std::string> CSVWorld::Table::getColumnsWithDisplay(CSMWorld::Column
     std::vector<std::string> titles;
     for (int i = 0; i < count; ++i)
     {
-        CSMWorld::ColumnBase::Display columndisplay = static_cast<CSMWorld::ColumnBase::Display>(
-            mModel->headerData(i, Qt::Horizontal, CSMWorld::ColumnBase::Role_Display).toInt());
+        const auto columndisplay = mModel->getColumnDisplay(i);
 
         if (display == columndisplay)
         {
-            titles.emplace_back(mModel->headerData(i, Qt::Horizontal).toString().toUtf8().constData());
+            titles.emplace_back(CSMWorld::getString(mModel->headerData(i, Qt::Horizontal)));
         }
     }
     return titles;

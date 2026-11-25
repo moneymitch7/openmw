@@ -33,6 +33,7 @@
 #include "info.hpp"
 #include "land.hpp"
 #include "record.hpp"
+#include "variantconversion.hpp"
 
 namespace CSMWorld
 {
@@ -193,7 +194,7 @@ namespace CSMWorld
             {
                 case ESM::VT_String:
 
-                    record2.mValue.setString(data.toString().toUtf8().constData());
+                    record2.mValue.setString(getString(data));
                     break;
 
                 case ESM::VT_Int:
@@ -235,7 +236,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mDescription = data.toString().toUtf8().constData();
+            record2.mDescription = getString(data);
 
             record.setModified(record2);
         }
@@ -332,7 +333,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mName = data.toString().toUtf8().constData();
+            record2.mName = getString(data);
 
             record.setModified(record2);
         }
@@ -357,7 +358,7 @@ namespace CSMWorld
         {
             CSMWorld::Cell record2 = record.get();
 
-            record2.mName = data.toString().toUtf8().constData();
+            record2.mName = getString(data);
 
             record.setModified(record2);
         }
@@ -701,7 +702,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mSound = data.toString().toUtf8().constData();
+            record2.mSound = getString(data);
 
             record.setModified(record2);
         }
@@ -746,7 +747,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mSleepList = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mSleepList = getRefId(data);
 
             record.setModified(record2);
         }
@@ -771,7 +772,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mTexture = data.toString().toUtf8().constData();
+            record2.mTexture = getString(data);
 
             record.setModified(record2);
         }
@@ -847,7 +848,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mScriptText = data.toString().toUtf8().constData();
+            record2.mScriptText = getString(data);
 
             record.setModified(record2);
         }
@@ -872,7 +873,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mRegion = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mRegion = getRefId(data);
 
             record.setModified(record2);
         }
@@ -901,7 +902,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mCell = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mCell = getRefId(data);
 
             record.setModified(record2);
         }
@@ -928,7 +929,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mOriginalCell = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mOriginalCell = getRefId(data);
 
             record.setModified(record2);
         }
@@ -955,7 +956,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mRefID = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mRefID = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1000,7 +1001,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mOwner = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mOwner = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1025,7 +1026,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mSoul = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mSoul = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1050,7 +1051,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mFaction = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mFaction = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1179,7 +1180,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mDestCell = data.toString().toUtf8().constData();
+            record2.mDestCell = getString(data);
 
             record.setModified(record2);
         }
@@ -1253,7 +1254,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mKey = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mKey = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1278,7 +1279,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mTrap = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mTrap = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1303,7 +1304,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mFilter = data.toString().toUtf8().constData();
+            record2.mFilter = getString(data);
 
             record.setModified(record2);
         }
@@ -1454,7 +1455,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mResponse = data.toString().toUtf8().constData();
+            record2.mResponse = getString(data);
 
             record.setModified(record2);
         }
@@ -1500,7 +1501,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mTopicId = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mTopicId = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1527,7 +1528,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mActor = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mActor = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1552,7 +1553,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mRace = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mRace = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1577,7 +1578,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mClass = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mClass = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1602,7 +1603,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mPcFaction = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mPcFaction = getRefId(data);
 
             record.setModified(record2);
         }
@@ -1627,7 +1628,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mResponse = data.toString().toUtf8().constData();
+            record2.mResponse = getString(data);
 
             record.setModified(record2);
         }
@@ -1843,7 +1844,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mModel = data.toString().toUtf8().constData();
+            record2.mModel = getString(data);
 
             record.setModified(record2);
         }
@@ -1940,7 +1941,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mGlobalVariable = data.toString().toUtf8().constData();
+            record2.mGlobalVariable = getString(data);
 
             record.setModified(record2);
         }
@@ -2019,7 +2020,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mSound = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mSound = getRefId(data);
 
             record.setModified(record2);
         }
@@ -2044,7 +2045,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mCreature = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            record2.mCreature = getRefId(data);
 
             record.setModified(record2);
         }
@@ -2231,7 +2232,7 @@ namespace CSMWorld
             if (!id)
                 throw std::logic_error("Unsupported column ID");
 
-            *id = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            *id = getRefId(data);
 
             record.setModified(record2);
         }
@@ -2300,7 +2301,7 @@ namespace CSMWorld
             if (!id)
                 throw std::logic_error("Unsupported column ID");
 
-            *id = ESM::RefId::stringRefId(data.toString().toUtf8().constData());
+            *id = getRefId(data);
 
             record.setModified(record2);
         }
@@ -2338,7 +2339,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mAuthor = data.toString().toUtf8().constData();
+            record2.mAuthor = getString(data);
 
             record.setModified(record2);
         }
@@ -2363,7 +2364,7 @@ namespace CSMWorld
         {
             ESXRecordT record2 = record.get();
 
-            record2.mDescription = data.toString().toUtf8().constData();
+            record2.mDescription = getString(data);
 
             record.setModified(record2);
         }

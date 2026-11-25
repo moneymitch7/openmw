@@ -30,7 +30,7 @@ opencs_units (model/world
     )
 
 opencs_hdrs (model/world
-    columnimp disabletag idcollection collection info subcellcollection cell nestedtablewrapper record
+    columnimp disabletag idcollection collection info subcellcollection cell nestedtablewrapper record variantconversion
     )
 
 
@@ -81,7 +81,8 @@ opencs_units (view/world
 
 opencs_units (view/widget
     scenetoolbar scenetool scenetoolmode pushbutton scenetooltoggle scenetoolrun modebutton scenetoolvertexpaintbrush
-    scenetooltoggle2 scenetooltexturebrush scenetoolshapebrush completerpopup coloreditor colorpickerpopup droplineedit
+    scenetooltoggle2 scenetooltexturebrush scenetoolshapebrush scenetoollistpanel completerpopup coloreditor
+    colorpickerpopup droplineedit
     )
 
 opencs_units (view/render
