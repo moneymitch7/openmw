@@ -10,6 +10,7 @@ Usage: wayfarer_data_builder [--config openmw.cfg] [--out folder]
 """
 
 import argparse
+import codecs
 import json
 import os
 import re
@@ -17,7 +18,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.3'
+VERSION = '0.4'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -102,11 +103,42 @@ def find_files(data_dirs, names):
 # --------------------------------------------------------------------------------------------------------------------
 # Reading the files
 
+# The text encoding of the content files: openmw.cfg's "encoding=" (win1252 for English, win1250 for Central
+# European, win1251 for Russian, gbk for Chinese), or --encoding.
+ENCODINGS = {'win1250': 'cp1250', 'win1251': 'cp1251', 'win1252': 'cp1252', 'gbk': 'gbk', 'gb2312': 'gbk',
+             'gb18030': 'gb18030', 'big5': 'big5', 'utf8': 'utf-8', 'utf-8': 'utf-8'}
+TEXT_ENCODING = 'cp1252'
+
+
+def set_encoding(name):
+    global TEXT_ENCODING
+    TEXT_ENCODING = ENCODINGS.get((name or '').strip().lower(), (name or 'cp1252').strip() or 'cp1252')
+    try:
+        codecs.lookup(TEXT_ENCODING)
+    except LookupError:
+        log(f'Unknown encoding "{name}", using win1252.')
+        TEXT_ENCODING = 'cp1252'
+
+
+def config_encoding(path):
+    """openmw.cfg's encoding= line (the last one wins), or None."""
+    enc = None
+    try:
+        with open(path, encoding='utf-8-sig', errors='replace') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('encoding='):
+                    enc = line[9:].strip().strip('"')
+    except OSError:
+        pass
+    return enc
+
+
 def zstr(b):
     i = b.find(b'\0')
     if i >= 0:
         b = b[:i]
-    return b.decode('cp1252', errors='replace')
+    return b.decode(TEXT_ENCODING, errors='replace')
 
 
 def subrecords(data):
@@ -222,7 +254,7 @@ class World:
                     if sname == b'SCHD':
                         sid = zstr(sdata[:32])
                     elif sname == b'SCTX':
-                        text = sdata.decode('cp1252', errors='replace')
+                        text = sdata.decode(TEXT_ENCODING, errors='replace')
                 if sid:
                     if deleted:
                         self.scripts.pop(sid.lower(), None)
@@ -654,6 +686,8 @@ def main(argv=None):
     ap.add_argument('--out', default=os.path.join(here, 'questData'),
                     help='the folder to write (default: questData next to the program)')
     ap.add_argument('--remap', action='append', default=[], help='FROM=TO: read data folders under FROM at TO')
+    ap.add_argument('--encoding', help='the content files\' text encoding (default: openmw.cfg\'s encoding=, else '
+                    'win1252); for example gbk for Chinese')
     ap.add_argument('--no-pause', action='store_true', help='don\'t wait for Enter at the end')
     args = ap.parse_args(argv)
 
@@ -664,6 +698,8 @@ def main(argv=None):
     remaps = [tuple(r.split('=', 1)) for r in args.remap if '=' in r]
     log(f'Wayfarer Data Builder {VERSION}')
     log(f'Profile: {cfg}')
+    set_encoding(args.encoding or config_encoding(cfg) or 'win1252')
+    log(f'Text encoding: {TEXT_ENCODING}')
     data_dirs, content = read_config(cfg, remaps)
     plugins = [c for c in content if c.lower().endswith(('.esm', '.esp', '.omwaddon', '.omwgame'))]
     paths = find_files(data_dirs, plugins)

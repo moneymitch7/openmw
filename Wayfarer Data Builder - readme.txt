@@ -1,4 +1,4 @@
-Wayfarer Data Builder 0.3
+Wayfarer Data Builder 0.4
 =========================
 
 Makes the quest data for Wayfarer's Journal from your own load order: for each quest and stage, who to talk to
@@ -19,7 +19,12 @@ Run it again after adding or removing mods that have quests.
 Options (from a command prompt):
   --config PATH   the openmw.cfg to read (default: Documents/My Games/OpenMW/openmw.cfg)
   --out FOLDER    where to write (default: questData next to where it's run)
+  --encoding NAME the content files' text encoding: win1252 (English and most), win1250 (Central European),
+                  win1251 (Russian), gbk (Chinese). Default: the "encoding=" line of openmw.cfg, else win1252.
   --no-pause      don't wait for Enter at the end
+
+Other languages: the text in the game's files (quest names, topics, places) is read in the encoding your openmw.cfg
+names, so Russian, Polish, Chinese and other versions of the game come out right.
 
 The questData it writes is in the same format as Quest Guider Lite's Quest Data Builder (the parts Wayfarer's
 Journal reads), so it replaces it for the journal.

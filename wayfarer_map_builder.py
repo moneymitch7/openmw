@@ -162,7 +162,7 @@ SEA = {'atlas': (234, 219, 178), 'native': (58, 96, 92)}
 
 
 def save_png(rgb, path, colours=128):
-    img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), 'RGB')
+    img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
     img = img.quantize(colours, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
     img.save(path, optimize=True)
 
