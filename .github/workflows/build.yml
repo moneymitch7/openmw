@@ -1,0 +1,27 @@
+name: Wayfarer Data Builder
+
+on:
+  push:
+    branches: [wayfarer-data-builder]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build the program
+        run: |
+          python -m pip install --upgrade pip pyinstaller==6.11.1
+          pyinstaller --onefile --console --name "Wayfarer Data Builder" wayfarer_data_builder.py
+          copy "Wayfarer Data Builder - readme.txt" dist\
+      - name: Try it on nothing (it must start and explain itself)
+        run: |
+          dist\"Wayfarer Data Builder.exe" --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Wayfarer-Data-Builder-${{ github.sha }}
+          path: dist/
