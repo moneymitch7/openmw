@@ -16,7 +16,37 @@ echo The game will open, travel through every place on its own and close when it
 echo You can stop it at any time (close the game); run this again to carry on where it stopped.
 echo It runs in its own window with the sound off: you can use other programs, or minimize it, while it works.
 echo Your own settings (window size, full screen) are not changed.
+echo If the game crashes, it is started again by itself and carries on (as long as the last go drew something).
+set "PICS=%WAYFARER_MAP_OUT%\textures\wayfarers_journal"
+set /a TRIES=0
+
+:run
+call :count BEFORE
 start "" /wait openmw.exe --skip-menu --start "Balmora" --no-sound
+set "CODE=%ERRORLEVEL%"
+if "%CODE%"=="0" goto done
+call :count AFTER
+set /a TRIES+=1
+if %AFTER% LEQ %BEFORE% (
+  echo.
+  echo The game stopped ^(code %CODE%^) without drawing anything new, so it was not started again.
+  echo Send openmw.log ^(Documents\My Games\OpenMW^) to look at what stopped it.
+  goto end
+)
+if %TRIES% GEQ 50 goto end
 echo.
-echo Finished. Keep that mod enabled in Mod Organizer, below Wayfarer's Journal.
+echo The game stopped ^(code %CODE%^) after drawing more; starting it again to carry on...
+goto run
+
+:done
+echo.
+echo Finished, or stopped by closing the game. Run this again to carry on if it was not finished.
+echo Keep that mod enabled in Mod Organizer, below Wayfarer's Journal.
+:end
 pause
+exit /b
+
+:count
+set "%1=0"
+for /f %%N in ('dir /s /b /a-d "%PICS%\local" "%PICS%\interior" 2^>nul ^| find /c /v ""') do set "%1=%%N"
+exit /b
