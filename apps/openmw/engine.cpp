@@ -28,8 +28,8 @@
 #include <SDL.h>
 
 #include <components/debug/debuglog.hpp>
-#include <components/lua/luastate.hpp>
 #include <components/debug/gldebug.hpp>
+#include <components/lua/luastate.hpp>
 
 #include <components/misc/framestats.hpp>
 #include <components/misc/rng.hpp>

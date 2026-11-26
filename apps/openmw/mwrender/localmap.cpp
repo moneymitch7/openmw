@@ -4,10 +4,10 @@
 
 #include <osg/Camera>
 #include <osg/ComputeBoundsVisitor>
-#include <osg/Image>
-#include <osg/State>
 #include <osg/Fog>
+#include <osg/Image>
 #include <osg/PolygonMode>
+#include <osg/State>
 #include <osg/Texture2D>
 
 #include <osgDB/ReadFile>
@@ -17,8 +17,8 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
-#include <sstream>
 #include <regex>
+#include <sstream>
 
 #include <components/debug/debuglog.hpp>
 #include <components/esm3/fogstate.hpp>
@@ -58,10 +58,50 @@ namespace
         osg::Vec2f min(bounds.xMin(), bounds.yMin());
         osg::Vec2f max(bounds.xMax(), bounds.yMax());
         osg::Vec2f length = max - min;
-        const int segsX = static_cast<int>(std::ceil(length.x() / mapSize));
-        const int segsY = static_cast<int>(std::ceil(length.y() / mapSize));
-        return { segsX, segsY };
+        // never more than a sane number of segments, whatever the bounds (a broken mesh can make them enormous)
+        const auto count = [mapSize](float len) {
+            if (!std::isfinite(len) || len <= 0.f)
+                return 1;
+            return static_cast<int>(std::clamp(std::ceil(len / mapSize), 1.f, 256.f));
+        };
+        return { count(length.x()), count(length.y()) };
     }
+
+    // Biggest a single object may be across (in game units) and still count for an interior's map: about 128 cells.
+    constexpr float maxObjectSpan = 1 << 20;
+
+    // The bounds of everything in the scene, leaving out anything absurdly large or far away (a mesh with broken
+    // bounds, or an object placed at a huge position), which would otherwise make the map cover the whole world and
+    // break saving its fog of war (leaving the cell then failed with "vector too long").
+    class SaneBoundsVisitor : public osg::ComputeBoundsVisitor
+    {
+    public:
+        using osg::ComputeBoundsVisitor::apply;
+
+        void apply(osg::Drawable& drawable) override
+        {
+            const osg::BoundingBox& local = drawable.getBoundingBox();
+            if (!local.valid())
+                return;
+            osg::BoundingBox box;
+            if (_matrixStack.empty())
+                box = local;
+            else
+                for (unsigned int i = 0; i < 8; ++i)
+                    box.expandBy(local.corner(i) * _matrixStack.back());
+            const osg::Vec3f size = box._max - box._min;
+            if (!std::isfinite(size.x()) || !std::isfinite(size.y()) || !std::isfinite(size.z())
+                || !std::isfinite(box._min.x()) || !std::isfinite(box._min.y()) || std::abs(box._min.x()) > 1e8f
+                || std::abs(box._min.y()) > 1e8f || size.x() > maxObjectSpan || size.y() > maxObjectSpan)
+            {
+                ++mSkipped;
+                return;
+            }
+            _bb.expandBy(box);
+        }
+
+        int mSkipped = 0;
+    };
 }
 
 namespace MWRender
@@ -247,8 +287,8 @@ namespace MWRender
                                   : base / "local" / segmentFileName(segmentX, segmentY);
         osg::Camera* camera = rtt->getCamera(nullptr);
         osg::Texture* texture = rtt->getColorTexture(nullptr);
-        capture.mImage->allocateImage(texture->getTextureWidth(), texture->getTextureHeight(), 1, GL_RGB,
-            GL_UNSIGNED_BYTE);
+        capture.mImage->allocateImage(
+            texture->getTextureWidth(), texture->getTextureHeight(), 1, GL_RGB, GL_UNSIGNED_BYTE);
         osg::Camera::BufferAttachmentMap& attachments = camera->getBufferAttachmentMap();
         auto colour = attachments.find(osg::Camera::COLOR_BUFFER);
         if (colour == attachments.end())
@@ -288,13 +328,14 @@ namespace MWRender
             // turned about, the area covered (in that turned frame), how many pieces across and down, and the
             // size of a piece in game units and in pixels
             const auto segments = divideIntoSegments(mBounds, mMapWorldSize);
-            const std::filesystem::path dir = mCaptureDir / "textures" / "wayfarers_journal" / "interior" / mCaptureCell;
+            const std::filesystem::path dir
+                = mCaptureDir / "textures" / "wayfarers_journal" / "interior" / mCaptureCell;
             std::error_code ec;
             std::filesystem::create_directories(dir, ec);
             std::ostringstream info;
-            info << mAngle << ' ' << mCenter.x() << ' ' << mCenter.y() << ' ' << mBounds.xMin() << ' '
-                 << mBounds.yMin() << ' ' << mBounds.xMax() << ' ' << mBounds.yMax() << ' ' << segments.first << ' '
-                 << segments.second << ' ' << mMapWorldSize << ' ' << mMapResolution << '\n';
+            info << mAngle << ' ' << mCenter.x() << ' ' << mCenter.y() << ' ' << mBounds.xMin() << ' ' << mBounds.yMin()
+                 << ' ' << mBounds.xMax() << ' ' << mBounds.yMax() << ' ' << segments.first << ' ' << segments.second
+                 << ' ' << mMapWorldSize << ' ' << mMapResolution << '\n';
             mPendingInfo.emplace_back(dir / "map.txt", info.str());
         }
         mCapturing = false;
@@ -325,7 +366,8 @@ namespace MWRender
                                             << Files::pathToUnicodeString(it->mFile) << ": " << ec.message();
                 }
                 else
-                    Log(Debug::Warning) << "Wayfarer Map Renderer: could not write " << Files::pathToUnicodeString(it->mFile);
+                    Log(Debug::Warning) << "Wayfarer Map Renderer: could not write "
+                                        << Files::pathToUnicodeString(it->mFile);
             }
             it = mCaptures.erase(it);
             --mCapturesPending;
@@ -400,8 +442,7 @@ namespace MWRender
         index << "return {tileCells=" << tileCells << ",px=" << px << ",tiles={";
         for (const auto& [key, tile] : tiles)
         {
-            const std::string file
-                = "t_" + std::to_string(key.first) + "_" + std::to_string(key.second) + ".png";
+            const std::string file = "t_" + std::to_string(key.first) + "_" + std::to_string(key.second) + ".png";
             osgDB::writeImageFile(*tile, Files::pathToUnicodeString(mapDir / file));
             index << "[\"" << key.first << "," << key.second << "\"]=true,";
         }
@@ -529,9 +570,12 @@ namespace MWRender
 
     void LocalMap::requestInteriorMap(const MWWorld::CellStore* cell)
     {
-        osg::ComputeBoundsVisitor computeBoundsVisitor;
+        SaneBoundsVisitor computeBoundsVisitor;
         computeBoundsVisitor.setTraversalMask(Mask_Scene | Mask_Terrain | Mask_Object | Mask_Static);
         mSceneRoot->accept(computeBoundsVisitor);
+        if (computeBoundsVisitor.mSkipped > 0)
+            Log(Debug::Warning) << "Local map of " << cell->getCell()->getNameId() << ": left out "
+                                << computeBoundsVisitor.mSkipped << " object part(s) with broken or enormous bounds";
 
         osg::BoundingBox bounds = computeBoundsVisitor.getBoundingBox();
 
