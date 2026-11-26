@@ -1,5 +1,6 @@
 #include "water.hpp"
 
+#include <cstdlib>
 #include <sstream>
 
 #include <osg/ClipNode>
@@ -380,6 +381,24 @@ namespace MWRender
         // simple water fallback for the local map
         osg::ref_ptr<osg::Geometry> geom2(osg::clone(mWaterGeom.get(), osg::CopyOp::DEEP_COPY_NODES));
         createSimpleWaterStateSet(geom2, Fallback::Map::getFloat("Water_Map_Alpha"));
+        if (const char* env = std::getenv("WAYFARER_MAP_RENDER"); env != nullptr && *env != '\0' && *env != '0')
+        {
+            // Wayfarer Map Renderer: water in one dark, even colour, as on Advanced World Map's pictures, whatever
+            // water texture is installed (a pale one leaves the water hard to tell from the sea bed, on the pictures
+            // and for the Map Builder, which finds the water by its colour)
+            osg::ref_ptr<osg::StateSet> stateset
+                = SceneUtil::createSimpleWaterStateSet(0.6f, MWRender::RenderBin_DepthSorted);
+            if (auto* material
+                = dynamic_cast<SceneUtil::Material*>(stateset->getAttribute(osg::StateAttribute::MATERIAL)))
+            {
+                material->setDiffuse(osg::Vec4f(0.f, 0.f, 0.f, 0.6f));
+                material->setAmbient(osg::Vec4f(0.f, 0.f, 0.f, 1.f));
+                material->setEmission(osg::Vec4f(0.09f, 0.13f, 0.16f, 1.f));
+            }
+            geom2->setStateSet(stateset);
+            geom2->setUpdateCallback(nullptr);
+            mResourceSystem->getSceneManager()->recreateShaders(geom2);
+        }
         geom2->setNodeMask(Mask_SimpleWater);
         geom2->setName("Simple Water Geometry");
         mWaterNode->addChild(geom2);
