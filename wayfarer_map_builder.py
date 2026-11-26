@@ -24,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.2'
+VERSION = '0.3'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -124,7 +124,11 @@ class LocalMaps:
                 if a.mean() > 3:  # an empty (black) picture is no picture
                     r, g, b = a[..., 0], a[..., 1], a[..., 2]
                     lum = (0.30 * r + 0.55 * g + 0.15 * b)
-                    water = (b - r >= 4) & (g - r >= 2)
+                    # open water: bluish (Advanced World Map's pictures), or dark and grey (the Wayfarer Map
+                    # Renderer's, whose water is a dark blue-grey that the sea bed can turn neutral); either way only
+                    # used where the land is under the sea, to tell the water from what stands in it
+                    sat = a.max(axis=-1) - a.min(axis=-1)
+                    water = ((b - r >= 4) & (g - r >= 2)) | ((lum < 48) & (sat < 14) & (b >= r - 4))
                     v = (lum.astype(np.float16), water)
             except OSError:
                 v = None
