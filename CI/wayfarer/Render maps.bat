@@ -30,7 +30,7 @@ set /a TRIES+=1
 if %AFTER% LEQ %BEFORE% (
   echo.
   echo The game stopped ^(code %CODE%^) without drawing anything new, so it was not started again.
-  echo Send openmw.log ^(Documents\My Games\OpenMW^) to look at what stopped it.
+  echo Send openmw.log ^(in this folder^) to look at what stopped it.
   goto end
 )
 if %TRIES% GEQ 50 goto end

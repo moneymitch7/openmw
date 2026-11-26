@@ -23,6 +23,7 @@ extern "C" __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x
 #endif
 
 #include <filesystem>
+#include <string_view>
 
 #if (defined(__APPLE__) || defined(__linux) || defined(__unix) || defined(__posix))
 #include <unistd.h>
@@ -65,7 +66,13 @@ bool parseOptions(int argc, char** argv, OMW::Engine& engine, Files::Configurati
 
     cfgMgr.readConfiguration(variables, desc);
 
-    Debug::setupLogging(cfgMgr.getLogPath(), "OpenMW");
+    // The Wayfarer Map Renderer (Render maps.bat sets WAYFARER_MAP_RENDER) keeps its log and crash files in its own
+    // folder, so a rendering run never replaces the player's own openmw.log.
+    std::filesystem::path logDir = cfgMgr.getLogPath();
+    if (const char* env = std::getenv("WAYFARER_MAP_RENDER");
+        env != nullptr && *env != '\0' && std::string_view(env) != "0")
+        logDir = std::filesystem::current_path();
+    Debug::setupLogging(logDir, "OpenMW");
     Log(Debug::Info) << Version::getOpenmwVersionDescription();
 
     Settings::Manager::load(cfgMgr);

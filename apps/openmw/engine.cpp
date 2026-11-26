@@ -1159,6 +1159,8 @@ void OMW::Engine::prepareEngine()
         // saved after it); neither shows on the local map otherwise (groundcover is not drawn on it).
         Settings::terrain().mDistantTerrain.set(false);
         Settings::groundcover().mEnabled.set(false);
+        // No pathfinding: nothing walks anywhere in a rendering run, and it leaves the player's navmesh.db alone.
+        Settings::navigator().mEnable.set(false);
     }
 
     mStateManager = std::make_unique<MWState::StateManager>(mCfgMgr.getUserDataPath() / "saves", mContentFiles);
@@ -1541,11 +1543,15 @@ void OMW::Engine::go()
 
     mLuaWorker->join();
 
-    // Save user settings (not after a Wayfarer map rendering run: its window size is not the player's)
+    // Save user settings. A Wayfarer map rendering run saves none of the player's files (settings.cfg, the shader
+    // settings, the Lua mods' stored settings): it only reads them, so the player's own game is left as it was,
+    // whatever OpenMW version they play.
     if (!wayfarerRendering())
+    {
         Settings::Manager::saveUser(mCfgMgr.getUserConfigPath() / "settings.cfg");
-    Settings::ShaderManager::get().save();
-    mLuaManager->savePermanentStorage(mCfgMgr.getUserConfigPath());
+        Settings::ShaderManager::get().save();
+        mLuaManager->savePermanentStorage(mCfgMgr.getUserConfigPath());
+    }
 }
 
 void OMW::Engine::setCompileAll(bool all)
