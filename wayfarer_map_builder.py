@@ -24,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.5'
+VERSION = '0.6'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -124,19 +124,23 @@ class LocalMaps:
                 if a.mean() > 3:  # an empty (black) picture is no picture
                     r, g, b = a[..., 0], a[..., 1], a[..., 2]
                     lum = (0.30 * r + 0.55 * g + 0.15 * b)
-                    # open water: bluish (Advanced World Map's pictures), or tinted green-grey (the Wayfarer Map
-                    # Renderer's dark blue-grey water over the sea bed); only used where the land is under the sea, to
-                    # tell the water from what stands in it
-                    # (the water's blue-green tint lifts green above red even over a pale sand bed, while wood, stone
-                    # and rock standing in the water stay red-brown or grey)
-                    water = ((b - r >= 4) & (g - r >= 2)) | ((g - r >= 1) & (lum < 140) & (b >= r - 12))
-                    # and, out at sea where the bed is dark and the water comes out a neutral grey-brown: anything
-                    # close to the picture's own typical dark, grey colour (the water), when there is enough of it
+                    # open water (only used where the land is under the sea, to tell the water from what stands in
+                    # it): bluish, as on Advanced World Map's pictures, or, on the Map Renderer's, what is water is judged against the picture's own water: the typical dark grey of it, when
+                    # there is enough of it, and anything close to that or only a little lighter with the water's
+                    # green-blue tint. Absolute colours alone can't tell pale shallows from a blue-grey roof (Vivec's
+                    # canton domes with some texture packs), but against the picture's own water they can.
                     sat = a.max(axis=-1) - a.min(axis=-1)
+                    water = (b - r >= 4) & (g - r >= 2) & (lum < 90)
+                    tint = (g - r >= 1) & (b >= r - 12)
                     grey = (lum < 70) & (sat < 16)
                     if grey.mean() > 0.15:
-                        ref = np.median(a[grey], axis=0)
-                        water |= np.sqrt(((a - ref) ** 2).sum(axis=-1)) < 12
+                        cut = np.percentile(lum[grey], 60)
+                        ref = np.median(a[grey & (lum <= cut)], axis=0)
+                        ref_lum = 0.30 * ref[0] + 0.55 * ref[1] + 0.15 * ref[2]
+                        water |= np.sqrt(((a - ref) ** 2).sum(axis=-1)) < 14
+                        water |= tint & (lum <= ref_lum + 16)
+                    else:
+                        water |= tint & (lum < 45)
                     v = (lum.astype(np.float16), water)
             except OSError:
                 v = None
