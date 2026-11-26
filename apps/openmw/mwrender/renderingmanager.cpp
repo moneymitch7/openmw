@@ -1363,19 +1363,6 @@ namespace MWRender
         return computeBounds.getBoundingBox();
     }
 
-    bool RenderingManager::projectToScreen(const osg::Vec3f& worldPos, osg::Vec2f& screen, float& distance) const
-    {
-        const osg::Camera* camera = mViewer->getCamera();
-        const osg::Vec4f clip = osg::Vec4f(worldPos, 1.0f) * (camera->getViewMatrix() * camera->getProjectionMatrix());
-        if (clip.w() <= 0.f)
-            return false;
-        screen.set((clip.x() / clip.w() + 1.f) * 0.5f, (clip.y() / clip.w() - 1.f) * -0.5f);
-        osg::Vec3d eye, center, up;
-        camera->getViewMatrixAsLookAt(eye, center, up);
-        distance = (worldPos - osg::Vec3f(eye)).length();
-        return true;
-    }
-
     osg::Vec2f RenderingManager::getScreenCoords(const osg::BoundingBox& bb)
     {
         if (bb.valid())

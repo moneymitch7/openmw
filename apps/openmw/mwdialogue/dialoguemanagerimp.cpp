@@ -728,10 +728,10 @@ namespace MWDialogue
         if (info != nullptr)
         {
             MWBase::WindowManager* winMgr = MWBase::Environment::get().getWindowManager();
+            if (Settings::gui().mSubtitles)
+                winMgr->messageBox(info->mResponse);
             if (!info->mSound.empty())
                 sndMgr->say(actor, Misc::ResourceHelpers::correctSoundPath(VFS::Path::Normalized(info->mSound)));
-            if (Settings::gui().mSubtitles)
-                winMgr->speechSubtitle(actor, info->mResponse);
             if (!info->mResultScript.empty())
                 executeScript(info->mResultScript, actor);
             MWBase::Environment::get().getLuaManager()->onDialogueResponse(actor, *info, *dial);

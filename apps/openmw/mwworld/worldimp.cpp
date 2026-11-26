@@ -3650,11 +3650,6 @@ namespace MWWorld
         return mRendering->getTerrainHeightAt(worldPos, worldspace);
     }
 
-    bool World::projectToScreen(const osg::Vec3f& worldPos, osg::Vec2f& screen, float& distance) const
-    {
-        return mRendering->projectToScreen(worldPos, screen, distance);
-    }
-
     osg::Vec3f World::getHalfExtents(const ConstPtr& object, bool rendering) const
     {
         if (!object.getClass().isActor())
