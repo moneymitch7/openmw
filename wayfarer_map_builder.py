@@ -24,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.3'
+VERSION = '0.4'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -124,11 +124,12 @@ class LocalMaps:
                 if a.mean() > 3:  # an empty (black) picture is no picture
                     r, g, b = a[..., 0], a[..., 1], a[..., 2]
                     lum = (0.30 * r + 0.55 * g + 0.15 * b)
-                    # open water: bluish (Advanced World Map's pictures), or dark and grey (the Wayfarer Map
-                    # Renderer's, whose water is a dark blue-grey that the sea bed can turn neutral); either way only
-                    # used where the land is under the sea, to tell the water from what stands in it
-                    sat = a.max(axis=-1) - a.min(axis=-1)
-                    water = ((b - r >= 4) & (g - r >= 2)) | ((lum < 48) & (sat < 14) & (b >= r - 4))
+                    # open water: bluish (Advanced World Map's pictures), or tinted green-grey (the Wayfarer Map
+                    # Renderer's dark blue-grey water over the sea bed); only used where the land is under the sea, to
+                    # tell the water from what stands in it
+                    # (the water's blue-green tint lifts green above red even over a pale sand bed, while wood, stone
+                    # and rock standing in the water stay red-brown or grey)
+                    water = ((b - r >= 4) & (g - r >= 2)) | ((g - r >= 1) & (lum < 140) & (b >= r - 12))
                     v = (lum.astype(np.float16), water)
             except OSError:
                 v = None
@@ -342,7 +343,8 @@ def main(argv=None):
     log(f'Profile: {cfg}')
     order, missing = content_order(cfg, remaps)
     data_dirs, _ = read_config(cfg, remaps)
-    local_paths = {} if args.no_pictures else find_local_maps(data_dirs)
+    # also the output folder itself (where the Map Renderer puts its pictures), even if that mod is switched off
+    local_paths = {} if args.no_pictures else find_local_maps(list(data_dirs) + [args.out])
     local = LocalMaps(local_paths) if local_paths else None
     if local:
         log(f'Using the game\'s own pictures of {len(local_paths)} cells for towns and roads')

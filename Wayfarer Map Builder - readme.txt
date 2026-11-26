@@ -1,4 +1,4 @@
-Wayfarer Map Builder 0.3
+Wayfarer Map Builder 0.4
 ========================
 
 Draws the world map of Wayfarer's Journal from the land of your own load order, in the map's two styled looks:
