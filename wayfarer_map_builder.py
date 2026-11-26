@@ -24,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.4'
+VERSION = '0.5'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -130,6 +130,13 @@ class LocalMaps:
                     # (the water's blue-green tint lifts green above red even over a pale sand bed, while wood, stone
                     # and rock standing in the water stay red-brown or grey)
                     water = ((b - r >= 4) & (g - r >= 2)) | ((g - r >= 1) & (lum < 140) & (b >= r - 12))
+                    # and, out at sea where the bed is dark and the water comes out a neutral grey-brown: anything
+                    # close to the picture's own typical dark, grey colour (the water), when there is enough of it
+                    sat = a.max(axis=-1) - a.min(axis=-1)
+                    grey = (lum < 70) & (sat < 16)
+                    if grey.mean() > 0.15:
+                        ref = np.median(a[grey], axis=0)
+                        water |= np.sqrt(((a - ref) ** 2).sum(axis=-1)) < 12
                     v = (lum.astype(np.float16), water)
             except OSError:
                 v = None
