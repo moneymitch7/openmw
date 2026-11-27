@@ -8,6 +8,9 @@ water). Writes the pictures and an index of them next to the program:
   textures/wayfarers_journal/gen/<look>/t_<x>_<y>.png   16 x 16 cells each, 64 pixels a cell
   textures/wayfarers_journal/gen/<look>/o_<x>_<y>.png   64 x 64 cells each, for the map zoomed out
   scripts/wayfarers_journal/data/genmap.lua             which pictures there are
+and of each picture, and of each picture Wayfarer Map Renderer drew (local, interior and map), a compressed copy
+(.dds, DXT1) beside it: every picture the journal's map has shown stays in video memory until the game is quit, and
+compressed it takes an eighth of the memory.
 
 Usage: wayfarer_map_builder [--config openmw.cfg] [--out folder] [--looks atlas,native]
 """
@@ -24,7 +27,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.8'
+VERSION = '0.9'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -352,9 +355,90 @@ SEA = {'atlas': (234, 219, 178), 'native': (58, 96, 92)}
 
 
 def save_png(rgb, path, colours=128):
-    img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
-    img = img.quantize(colours, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
+    full = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
+    img = full.quantize(colours, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
     img.save(path, optimize=True)
+    save_dds(full, os.path.splitext(path)[0] + '.dds')
+
+
+def save_dds(img, path):
+    """A picture as the journal's map loads it best: DXT1 (DXT5 where it is see-through), a power of two across and
+    down (the game shrinks any other size when it loads it, slowly and blurrily). Written whole or not at all."""
+    w, h = img.size
+    pw, ph = pow2_below(w), pow2_below(h)
+    alpha = img.mode in ('RGBA', 'LA', 'PA') or (img.mode == 'P' and 'transparency' in img.info)
+    img = img.convert('RGBA' if alpha else 'RGB')
+    if alpha and img.getchannel('A').getextrema()[0] == 255:
+        img, alpha = img.convert('RGB'), False
+    if (pw, ph) != (w, h):
+        img = img.resize((pw, ph), Image.Resampling.LANCZOS)
+    tmp = path + '.part'
+    img.save(tmp, 'DDS', pixel_format='DXT5' if alpha else 'DXT1')
+    # the header's linear size as the format has it (the picture's bytes), whatever the writer put there
+    with open(tmp, 'r+b') as f:
+        f.seek(20)
+        f.write(struct.pack('<I', ((pw + 3) // 4) * ((ph + 3) // 4) * (16 if alpha else 8)))
+    os.replace(tmp, path)
+
+
+def pow2_below(n):
+    p = 4
+    while p * 2 <= n:
+        p *= 2
+    return p
+
+
+GAME_PICTURES = ('textures/wayfarers_journal/local', 'textures/wayfarers_journal/interior',
+                 'textures/wayfarers_journal/map')
+
+
+def compress_pictures(data_dirs, out_dir):
+    """A compressed copy (.dds) in the output folder of each picture Wayfarer Map Renderer drew, wherever it is in
+    the data folders (the last folder wins, as in the game). Copies already newer than their picture are kept, and
+    copies whose picture is gone are removed. Returns how many were made and how many there are."""
+    src = {}
+    for d in data_dirs:
+        for sub in GAME_PICTURES:
+            root = os.path.join(d, *sub.split('/'))
+            if not os.path.isdir(root):
+                continue
+            for dirpath, _, names in os.walk(root):
+                rel_dir = os.path.relpath(dirpath, d)
+                for n in names:
+                    if n.lower().endswith('.png'):
+                        src[os.path.normcase(os.path.join(rel_dir, n[:-4]))] = (os.path.join(rel_dir, n[:-4]),
+                                                                                os.path.join(dirpath, n))
+    made = 0
+    t = time.time()
+    for i, (rel, path) in enumerate(src.values()):
+        dds = os.path.join(out_dir, rel + '.dds')
+        try:
+            if os.path.getmtime(dds) >= os.path.getmtime(path):
+                continue
+        except OSError:
+            pass
+        try:
+            os.makedirs(os.path.dirname(dds), exist_ok=True)
+            with Image.open(path) as img:
+                img.load()
+                save_dds(img, dds)
+            made += 1
+        except (OSError, ValueError) as e:
+            log(f'  could not compress {path}: {e}')
+        if made and made % 2000 == 0:
+            log(f'  {made} compressed ({i + 1} of {len(src)} looked at, {time.time() - t:.0f} s)')
+    for sub in GAME_PICTURES:
+        root = os.path.join(out_dir, *sub.split('/'))
+        for dirpath, _, names in os.walk(root):
+            for n in names:
+                if n.lower().endswith('.dds'):
+                    rel = os.path.normcase(os.path.join(os.path.relpath(dirpath, out_dir), n[:-4]))
+                    if rel not in src:
+                        try:
+                            os.remove(os.path.join(dirpath, n))
+                        except OSError:
+                            pass
+    return made, len(src)
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -394,7 +478,7 @@ def write_index(out_dir, looks, tiles, overs, bounds, nfiles):
         f.write('-- Made by Wayfarer Map Builder ' + VERSION + ': which world map pictures there are.\n')
         f.write('return {\n')
         f.write(f'    version = 1, time = {int(time.time())}, files = {nfiles},\n')
-        f.write(f'    px = {PX}, tileCells = {TILE}, overCells = {OVER},\n')
+        f.write(f'    px = {PX}, tileCells = {TILE}, overCells = {OVER}, dds = true,\n')
         f.write('    looks = { ' + ', '.join(f'{k} = true' for k in looks) + ' },\n')
         f.write('    sea = { ' + ', '.join(f'{k} = {{ {SEA[k][0]}, {SEA[k][1]}, {SEA[k][2]} }}' for k in looks)
                 + ' },\n')
@@ -413,6 +497,8 @@ def main(argv=None):
     ap.add_argument('--only', help='X,Y,X2,Y2: only the pictures over these cells (to try it out)')
     ap.add_argument('--remap', action='append', default=[], help='FROM=TO: read data folders under FROM at TO')
     ap.add_argument('--no-pictures', action='store_true', help='draw the land only, without the local map pictures')
+    ap.add_argument('--no-compress', action='store_true',
+                    help='don\'t make the compressed (.dds) copies of the Map Renderer\'s pictures')
     ap.add_argument('--no-pause', action='store_true', help='don\'t wait for Enter at the end')
     args = ap.parse_args(argv)
 
@@ -488,6 +574,11 @@ def main(argv=None):
                     img[r:r + q, cx * q:cx * q + q] = part
             save_png(img, os.path.join(tex, k, f'o_{ox}_{oy}.png'))
     write_index(args.out, looks, want, overs, bounds, len(order))
+    if not args.no_compress and not args.no_pictures:
+        log('Compressing the Map Renderer\'s pictures for the journal (only new or changed ones)...')
+        t2 = time.time()
+        made, total = compress_pictures(list(data_dirs) + [args.out], args.out)
+        log(f'  {made} compressed, {total - made} already were ({time.time() - t2:.0f} s)')
     log(f'Wrote {len(want)} pictures and {len(overs)} overview pictures for each look ({", ".join(looks)}) '
         f'to {os.path.abspath(args.out)} in {time.time() - t0:.0f} s')
     return 0

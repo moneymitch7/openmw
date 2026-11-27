@@ -1,4 +1,4 @@
-Wayfarer Map Builder 0.8
+Wayfarer Map Builder 0.9
 ========================
 
 Draws the world map of Wayfarer's Journal from the land of your own load order, in the map's two styled looks:
@@ -22,5 +22,12 @@ Towns, buildings, roads and docks: the heights only give the land, so the builde
 picture of each cell over it, recoloured into each look: the pictures Wayfarer Map Renderer drew for your load
 order, else Advanced World Map's local map textures if they are installed. Run it again after running the renderer.
 
+Video memory: every picture the journal's map has shown stays in video memory until you quit the game. So the
+builder also writes a compressed copy (.dds) of each of its own pictures and of each picture the Map Renderer drew
+(outside cells, interiors, overviews), beside them; the journal (0.5.0 and newer) uses those, each taking an eighth
+of the memory, at a size the game doesn't have to shrink (older 320-pixel pictures come out 256). The first run
+compresses them all (a few minutes for the whole of Tamriel Rebuilt); later runs only new or changed ones. The
+journal's setting "Compressed map pictures" goes back to the originals.
+
 Options (from a command prompt): --config PATH (another openmw.cfg), --out FOLDER (write somewhere else),
---looks atlas,native (draw only one look), --no-pictures (the land only).
+--looks atlas,native (draw only one look), --no-pictures (the land only), --no-compress (no .dds copies).
