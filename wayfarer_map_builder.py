@@ -24,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.7'
+VERSION = '0.8'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -217,6 +217,76 @@ def coast(land):
     return e
 
 
+
+def _box_count(m, r):
+    """How many pixels of a square of radius r around each pixel are set."""
+    a = m.astype(np.int32)
+    for axis in (0, 1):
+        p = np.pad(a, [((r + 1, r) if ax == axis else (0, 0)) for ax in (0, 1)], mode='constant')
+        c = np.cumsum(p, axis=axis)
+        a = (c[2 * r + 1:] - c[:-2 * r - 1]) if axis == 0 else (c[:, 2 * r + 1:] - c[:, :-2 * r - 1])
+    return a
+
+
+HOLE_MAX = PX * PX // 2   # water enclosed by a structure, up to half a cell, is part of it
+HOLE_WIDE = 6             # pixels; the gaps in a canton are narrower, the canals between cantons wider
+
+
+def _label(m):
+    """Connected parts (4-way) of a mask, numbered 0..n-1; pixels outside the mask get n. Runs along the rows,
+    joined where they touch the row below (no scipy in the build)."""
+    hgt, wid = m.shape
+    flat = m.ravel()
+    start = flat.copy()
+    start[1:] &= ~flat[:-1]
+    start[::wid] = flat[::wid]                    # a run starts where the mask starts, or at a row's first pixel
+    run = np.cumsum(start) - 1                    # each mask pixel's run
+    nruns = int(start.sum())
+    down = (m[:-1] & m[1:]).ravel()
+    pairs = np.stack([run[:-wid][down], run[wid:][down]], axis=1)
+    pairs = np.unique(pairs, axis=0) if len(pairs) else pairs
+    parent = list(range(nruns))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for p, q in pairs.tolist():
+        rp, rq = root(p), root(q)
+        if rp != rq:
+            parent[max(rp, rq)] = min(rp, rq)
+    roots = np.array([root(i) for i in range(nruns)], dtype=np.int64)
+    _, comp = np.unique(roots, return_inverse=True)
+    n = int(comp.max()) + 1 if nruns else 0
+    lab = np.full(m.size, n, dtype=np.int64)
+    lab[flat] = comp[run[flat]]
+    return lab.reshape(m.shape)
+
+
+def solid_structures(built, has, land):
+    """What stands in the water (docks, bridges, Vivec's cantons), made whole: the dark gaps between a canton's
+    terraces and its roofs come out as dark and grey as the water around it, and drawn as sea they left the cantons
+    as hollow rings. Gaps of a pixel are closed, then water fully enclosed by a structure (up to half a cell) is
+    taken as part of it."""
+    sea = has & ~land
+    b = built & sea
+    b = (_box_count(_box_count(b, 1) > 0, 1) >= 9) & sea   # closing, 3 x 3
+    lab = _label(~b)                              # the water, and anything else not drawn as structure
+    n = int(lab.max()) + 1
+    edge = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    size = np.bincount(lab.ravel(), minlength=n)
+    dry = np.bincount(lab.ravel(), weights=(~sea).ravel(), minlength=n)
+    fill = (size <= HOLE_MAX) & (dry == 0)       # enclosed, small, and all of it sea
+    fill[edge] = False
+    fill[-1] = False                              # the structure itself
+    cand = fill[lab] & ~b
+    # a canal between cantons is open water too, closed in by bridges: water wider than HOLE_WIDE pixels stays water
+    r = HOLE_WIDE // 2
+    fill[np.unique(lab[_box_count(cand, r) == (2 * r + 1) ** 2])] = False
+    return b | (fill[lab] & ~b)
+
+
 def draw_atlas(h, x0, y0, local=None):
     """The parchment atlas: sepia relief on paper, the coast inked, the sea darkened a little along it; where the
     game's own picture of a cell is known, that picture in sepia ink (towns, roads, docks), lit by the relief."""
@@ -232,7 +302,7 @@ def draw_atlas(h, x0, y0, local=None):
         L = stretch(np.nan_to_num(lum))
         ink = lerp((64, 42, 22), (232, 212, 168), L) * (0.78 + 0.32 * shade)[..., None]
         col = np.where(has[..., None], ink * 0.8 + col * 0.2, col)
-        built = has & ~water & ~land  # docks, bridges, cantons standing in the water
+        built = solid_structures(has & ~water & ~land, has, land)  # docks, bridges, cantons standing in the water
         # what stands in the water (docks, bridges, Vivec's cantons) in ink only up to a mid tan: their light parts
         # (plazas, pale stone) drawn as light as the paper read as more sea, and the cantons looked hollow
         ink_flat = lerp((58, 38, 20), (178, 150, 106), L)
@@ -263,7 +333,7 @@ def draw_native(h, x0, y0, local=None):
         L = stretch(np.nan_to_num(lum))
         brown = lerp((46, 32, 22), (196, 156, 112), L)
         col = np.where(has[..., None], brown * (0.80 + 0.30 * shade)[..., None] * 0.85 + col * 0.15, col)
-        built = has & ~water & ~land
+        built = solid_structures(has & ~water & ~land, has, land)
     # the water one teal (its depth only shows as cell-sized steps where files give no sea bed), lighter by the shore
     water = np.empty(h.shape + (3,), dtype=np.float32)
     water[:] = SEA['native']
