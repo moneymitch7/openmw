@@ -32,8 +32,9 @@ Its log is openmw.log in this folder (not your game's own openmw.log, which it l
 Stopping it: just close the game. Run "Render maps.bat" again later and it carries on where it stopped.
 Run it again after adding or removing mods that change the world: places already drawn are kept, so to redraw
 everything, delete the "local" and "interior" folders in textures\wayfarers_journal of the output first.
-Pictures drawn at another size (older versions drew 320 pixels with a UI scaling factor of 1.25) are drawn again
-on their own: the game shrinks pictures that aren't a power of two each time it loads them, slowly and blurrily.
+Pictures that are empty or cut off (a full disk or a crash while writing) are drawn again on their own, and so is
+an interior with any such piece. Pictures of another size (older versions drew 320 pixels with a UI scaling factor
+of 1.25) are kept: Wayfarer Map Builder 0.9 and newer resizes them when it compresses them.
 
 What it writes:
   textures\wayfarers_journal\local\(x,y).png          each outside cell, 256 pixels (your local map

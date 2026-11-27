@@ -180,37 +180,52 @@ namespace MWLua
             MWRender::LocalMap* map = windowManager->getLocalMapRender();
             return map ? map->capturesPending() : 0;
         };
-        // has this picture (a path under the folder) been written already, at the size drawn now? (to carry on after
-        // a stop; pictures of another size, such as the 320 pixels a UI scaling factor of 1.25 made, are drawn again)
+        // has this picture (a path under the folder) been written already? (to carry on after a stop) A picture
+        // counts when it is a whole PNG, whatever its size (Wayfarer Map Builder resizes and compresses them); an
+        // interior when its map.txt and every piece it names are. Empty or cut-off files (a full disk, a crash) are
+        // drawn again.
         api["_wmrHas"] = [windowManager](std::string_view relative) -> bool {
             MWRender::LocalMap* map = windowManager->getLocalMapRender();
             if (!map || map->getCaptureDir().empty())
                 return false;
             const std::filesystem::path path = map->getCaptureDir() / Files::pathFromUnicodeString(relative);
-            std::error_code ec;
-            if (!std::filesystem::exists(path, ec))
-                return false;
-            const int size = map->getMapResolution();
-            std::ifstream file(path, std::ios::binary);
-            if (relative.ends_with(".png"))
-            {
-                // the width, from the PNG header (big-endian, after the signature and the IHDR chunk's length and type)
-                unsigned char head[24] = {};
-                if (!file.read(reinterpret_cast<char*>(head), sizeof(head)))
+            const auto wholePng = [](const std::filesystem::path& png) {
+                std::error_code ec;
+                const auto size = std::filesystem::file_size(png, ec);
+                if (ec || size < 57) // signature, IHDR, IEND at the least
                     return false;
-                const int width = (head[16] << 24) | (head[17] << 16) | (head[18] << 8) | head[19];
-                return width == size;
-            }
+                std::ifstream file(png, std::ios::binary);
+                char head[8] = {};
+                if (!file.read(head, sizeof(head)) || std::string_view(head, 8) != std::string_view("\x89PNG\r\n\x1a\n", 8))
+                    return false;
+                char tail[8] = {};
+                file.seekg(-8, std::ios::end);
+                return file.read(tail, sizeof(tail)) && std::string_view(tail, 4) == "IEND";
+            };
+            if (relative.ends_with(".png"))
+                return wholePng(path);
             if (relative.ends_with("map.txt"))
             {
-                // the last of its numbers is a piece's size in pixels
+                std::ifstream file(path);
                 std::vector<double> numbers;
                 double v = 0;
                 while (file >> v)
                     numbers.push_back(v);
-                return numbers.size() >= 11 && static_cast<int>(numbers[10]) == size;
+                if (numbers.size() < 9)
+                    return false;
+                // angle, centre x y, bounds (4), then the pieces across and down
+                const int segX = static_cast<int>(numbers[7]);
+                const int segY = static_cast<int>(numbers[8]);
+                if (segX < 1 || segY < 1 || segX > 256 || segY > 256)
+                    return false;
+                for (int x = 0; x < segX; ++x)
+                    for (int y = 0; y < segY; ++y)
+                        if (!wholePng(path.parent_path() / ("(" + std::to_string(x) + "," + std::to_string(y) + ").png")))
+                            return false;
+                return true;
             }
-            return true;
+            std::error_code ec;
+            return std::filesystem::exists(path, ec);
         };
         api["_wmrOverviews"] = [luaManager = context.mLuaManager]() {
             luaManager->addAction([] {
