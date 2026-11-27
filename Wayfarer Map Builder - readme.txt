@@ -1,5 +1,5 @@
-Wayfarer Map Builder 0.9
-========================
+Wayfarer Map Builder 0.10
+=========================
 
 Draws the world map of Wayfarer's Journal from the land of your own load order, in the map's two styled looks:
 the parchment atlas (sepia relief on paper) and the native window (brown land, teal water). Every mod that adds or
@@ -29,5 +29,13 @@ of the memory, at a size the game doesn't have to shrink (older 320-pixel pictur
 compresses them all (a few minutes for the whole of Tamriel Rebuilt); later runs only new or changed ones. The
 journal's setting "Compressed map pictures" goes back to the originals.
 
+Interiors: the classic look shows the Map Renderer's picture of the interior you are in; the parchment atlas and the
+native window showed only a plan worked out from the rooms. So the builder (0.10 and newer) also draws each interior
+picture the renderer made in each look (sepia ink on paper, or the window's browns), beside it
+(atlas(0,0).dds, native(0,0).dds), and the journal (0.6.0 and newer) shows those. About 32 KB a piece and look; the
+first run draws them all, later runs only new or changed ones. "--interiors-only" does just this (and the
+compressing) without drawing the world map again.
+
 Options (from a command prompt): --config PATH (another openmw.cfg), --out FOLDER (write somewhere else),
---looks atlas,native (draw only one look), --no-pictures (the land only), --no-compress (no .dds copies).
+--looks atlas,native (draw only one look), --no-pictures (the land only), --no-compress (no .dds copies),
+--no-interiors (no interiors in the looks), --interiors-only (only those, and the compressing).

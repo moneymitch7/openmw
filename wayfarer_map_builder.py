@@ -10,7 +10,9 @@ water). Writes the pictures and an index of them next to the program:
   scripts/wayfarers_journal/data/genmap.lua             which pictures there are
 and of each picture, and of each picture Wayfarer Map Renderer drew (local, interior and map), a compressed copy
 (.dds, DXT1) beside it: every picture the journal's map has shown stays in video memory until the game is quit, and
-compressed it takes an eighth of the memory.
+compressed it takes an eighth of the memory. And of each picture of an interior the Map Renderer drew, a copy in
+each look (atlas(i,j).dds, native(i,j).dds beside it), so the atlas and the native window show the place drawn,
+not only its plan.
 
 Usage: wayfarer_map_builder [--config openmw.cfg] [--out folder] [--looks atlas,native]
 """
@@ -27,7 +29,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.9'
+VERSION = '0.10'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -390,6 +392,9 @@ def pow2_below(n):
 
 GAME_PICTURES = ('textures/wayfarers_journal/local', 'textures/wayfarers_journal/interior',
                  'textures/wayfarers_journal/map')
+INTERIOR = 'textures/wayfarers_journal/interior'
+PIECE = re.compile(r'^\((\d+),(\d+)\)$')            # a piece of an interior picture: (i,j)
+STYLED = re.compile(r'^(atlas|native)\(\d+,\d+\)$')   # the same piece in a look (made here)
 
 
 def compress_pictures(data_dirs, out_dir):
@@ -433,12 +438,107 @@ def compress_pictures(data_dirs, out_dir):
             for n in names:
                 if n.lower().endswith('.dds'):
                     rel = os.path.normcase(os.path.join(os.path.relpath(dirpath, out_dir), n[:-4]))
-                    if rel not in src:
+                    if rel not in src and not STYLED.match(n[:-4]):
                         try:
                             os.remove(os.path.join(dirpath, n))
                         except OSError:
                             pass
     return made, len(src)
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# Interiors in the looks
+
+VOID = (14, 20, 24)   # what the Map Renderer clears an interior's picture to, round the rooms
+# round the rooms; the journal draws the same colour round the pictures. Colours DXT1 keeps exactly (5, 6, 5 bits),
+# so the flat parts of the pictures meet the journal's colour without a seam
+INNER_BG = {'atlas': (230, 219, 181), 'native': (25, 20, 16)}
+
+
+def style_interior(img, look):
+    """One piece of an interior's picture in a look: the rooms in sepia ink (atlas) or the window's browns
+    (native), their edge inked, a soft shadow round them on the background the journal draws."""
+    a = np.asarray(img.convert('RGB'), dtype=np.float32)
+    void = np.abs(a - np.asarray(VOID, dtype=np.float32)).max(axis=-1) <= 3
+    room = ~void
+    lum = 0.30 * a[..., 0] + 0.55 * a[..., 1] + 0.15 * a[..., 2]
+    L = stretch(lum)
+    edge = coast(np.pad(room, 1, mode='edge'))[1:-1, 1:-1]
+    glow = box_blur(room.astype(np.float32), 4)
+    bg = np.empty(a.shape, dtype=np.float32)
+    bg[:] = INNER_BG[look]
+    if look == 'atlas':
+        col = lerp((64, 42, 22), (232, 212, 168), L) * 0.85 + np.asarray((196, 168, 118), dtype=np.float32) * 0.15
+        out = np.where(room[..., None], col, bg * (1 - 0.18 * glow)[..., None])
+        out[edge] = (84, 56, 30)
+    else:
+        col = lerp((46, 32, 22), (196, 156, 112), L)
+        out = np.where(room[..., None], col, bg * (1 - 0.5 * glow)[..., None])
+        out[edge] = col[edge] * 0.65
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), 'RGB')
+
+
+def style_interiors(data_dirs, out_dir, looks):
+    """A copy in each look of each piece of each interior picture the Map Renderer drew (the last data folder
+    wins), in the output folder beside it. Copies already newer than their piece are kept, those whose piece is gone
+    removed. Returns how many were made and how many there are."""
+    looks = [k for k in looks if k in INNER_BG]
+    src = {}
+    for d in data_dirs:
+        root = os.path.join(d, *INTERIOR.split('/'))
+        if not os.path.isdir(root):
+            continue
+        for place in os.listdir(root):
+            pdir = os.path.join(root, place)
+            try:
+                names = os.listdir(pdir)
+            except OSError:
+                continue
+            for n in names:
+                if n.lower().endswith('.png') and PIECE.match(n[:-4]):
+                    src[os.path.normcase(os.path.join(place, n[:-4]))] = (place, n[:-4], os.path.join(pdir, n))
+    made = 0
+    t = time.time()
+    for i, (place, piece, path) in enumerate(src.values()):
+        todo = []
+        for k in looks:
+            dds = os.path.join(out_dir, *INTERIOR.split('/'), place, k + piece + '.dds')
+            try:
+                if os.path.getmtime(dds) >= os.path.getmtime(path):
+                    continue
+            except OSError:
+                pass
+            todo.append((k, dds))
+        if not todo:
+            continue
+        try:
+            with Image.open(path) as img:
+                img.load()
+                for k, dds in todo:
+                    os.makedirs(os.path.dirname(dds), exist_ok=True)
+                    save_dds(style_interior(img, k), dds)
+                    made += 1
+        except (OSError, ValueError) as e:
+            log(f'  could not draw {path}: {e}')
+        if made and made % 2000 < len(todo):
+            log(f'  {made} drawn ({i + 1} of {len(src)} pieces looked at, {time.time() - t:.0f} s)')
+    root = os.path.join(out_dir, *INTERIOR.split('/'))
+    if os.path.isdir(root):
+        for place in os.listdir(root):
+            pdir = os.path.join(root, place)
+            try:
+                names = os.listdir(pdir)
+            except OSError:
+                continue
+            for n in names:
+                m = STYLED.match(n[:-4]) if n.lower().endswith('.dds') else None
+                if m and (m.group(1) not in looks
+                          or os.path.normcase(os.path.join(place, n[len(m.group(1)):-4])) not in src):
+                    try:
+                        os.remove(os.path.join(pdir, n))
+                    except OSError:
+                        pass
+    return made, len(src) * len(looks)
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -499,6 +599,10 @@ def main(argv=None):
     ap.add_argument('--no-pictures', action='store_true', help='draw the land only, without the local map pictures')
     ap.add_argument('--no-compress', action='store_true',
                     help='don\'t make the compressed (.dds) copies of the Map Renderer\'s pictures')
+    ap.add_argument('--no-interiors', action='store_true',
+                    help='don\'t draw the Map Renderer\'s interior pictures in the looks')
+    ap.add_argument('--interiors-only', action='store_true',
+                    help='only draw the interior pictures in the looks (and compress), not the world map')
     ap.add_argument('--no-pause', action='store_true', help='don\'t wait for Enter at the end')
     args = ap.parse_args(argv)
 
@@ -524,6 +628,8 @@ def main(argv=None):
             + (' ...' if len(missing) > 10 else ''))
 
     t0 = time.time()
+    if args.interiors_only:
+        return interiors_step(args, data_dirs, looks, t0)
     lands = {}
     for c, p in order:
         read_land(p, lands)
@@ -579,8 +685,24 @@ def main(argv=None):
         t2 = time.time()
         made, total = compress_pictures(list(data_dirs) + [args.out], args.out)
         log(f'  {made} compressed, {total - made} already were ({time.time() - t2:.0f} s)')
+    interiors_step(args, data_dirs, looks, t0)
     log(f'Wrote {len(want)} pictures and {len(overs)} overview pictures for each look ({", ".join(looks)}) '
         f'to {os.path.abspath(args.out)} in {time.time() - t0:.0f} s')
+    return 0
+
+
+def interiors_step(args, data_dirs, looks, t0):
+    if args.interiors_only and not args.no_compress:
+        log('Compressing the Map Renderer\'s pictures for the journal (only new or changed ones)...')
+        made, total = compress_pictures(list(data_dirs) + [args.out], args.out)
+        log(f'  {made} compressed, {total - made} already were')
+    if not args.no_interiors and not args.no_pictures:
+        log('Drawing the Map Renderer\'s interior pictures in each look (only new or changed ones)...')
+        t3 = time.time()
+        made, total = style_interiors(list(data_dirs) + [args.out], args.out, looks)
+        log(f'  {made} drawn, {total - made} already were ({time.time() - t3:.0f} s)')
+    if args.interiors_only:
+        log(f'Done in {time.time() - t0:.0f} s')
     return 0
 
 
