@@ -385,13 +385,15 @@ namespace MWRender
         {
             // Wayfarer Map Renderer: water in one dark, even colour, as on Advanced World Map's pictures, whatever
             // water texture is installed (a pale one leaves the water hard to tell from the sea bed, on the pictures
-            // and for the Map Builder, which finds the water by its colour)
+            // and for the Map Builder, which finds the water by its colour). Nearly opaque: a pale sea bed (Project
+            // Cyrodiil's sand) seen through it made the open sea a patchwork the Map Builder took for land and docks.
+            constexpr float alpha = 0.88f;
             osg::ref_ptr<osg::StateSet> stateset
-                = SceneUtil::createSimpleWaterStateSet(0.6f, MWRender::RenderBin_DepthSorted);
+                = SceneUtil::createSimpleWaterStateSet(alpha, MWRender::RenderBin_DepthSorted);
             if (auto* material
                 = dynamic_cast<SceneUtil::Material*>(stateset->getAttribute(osg::StateAttribute::MATERIAL)))
             {
-                material->setDiffuse(osg::Vec4f(0.f, 0.f, 0.f, 0.6f));
+                material->setDiffuse(osg::Vec4f(0.f, 0.f, 0.f, alpha));
                 material->setAmbient(osg::Vec4f(0.f, 0.f, 0.f, 1.f));
                 material->setEmission(osg::Vec4f(0.09f, 0.13f, 0.16f, 1.f));
             }
