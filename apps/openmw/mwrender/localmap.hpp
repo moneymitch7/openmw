@@ -123,6 +123,7 @@ namespace MWRender
         // (x,y).png and map.txt (how the pieces lie) inside.
         void setCapture(const std::filesystem::path& dir);
         const std::filesystem::path& getCaptureDir() const { return mCaptureDir; }
+        int getMapResolution() const { return mMapResolution; }
         /// Render the maps of all the cells in the scene now (exterior cells, or the interior the player is in).
         void captureActiveCells();
         /// Maps asked for and not yet written.

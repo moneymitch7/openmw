@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -48,6 +49,27 @@
 
 namespace
 {
+    // Wayfarer Map Renderer (WAYFARER_MAP_RENDER, set by Render maps.bat): the pictures are made for the journal's map
+    bool wayfarerRendering()
+    {
+        const char* env = std::getenv("WAYFARER_MAP_RENDER");
+        return env != nullptr && *env != '\0' && *env != '0';
+    }
+
+    // The size of a cell's picture. For the renderer a power of two, without the UI scaling factor: the game shrinks
+    // any other size to one when it loads the picture as a texture (320 to 256 with a scaling factor of 1.25), slowly
+    // and losing detail, every time the journal's map shows it.
+    int mapResolution()
+    {
+        const int setting = Settings::map().mLocalMapResolution;
+        if (!wayfarerRendering())
+            return static_cast<int>(setting * MWBase::Environment::get().getWindowManager()->getScalingFactor());
+        int size = 64;
+        while (size * 2 <= std::min(setting, 1024))
+            size *= 2;
+        return size;
+    }
+
     float square(float val)
     {
         return val * val;
@@ -167,8 +189,7 @@ namespace MWRender
 
     LocalMap::LocalMap(osg::Group* root)
         : mRoot(root)
-        , mMapResolution(static_cast<int>(
-              Settings::map().mLocalMapResolution * MWBase::Environment::get().getWindowManager()->getScalingFactor()))
+        , mMapResolution(mapResolution())
         , mMapWorldSize(Constants::CellSizeInUnits)
         , mCellDistance(Constants::CellGridRadius)
         , mAngle(0.f)

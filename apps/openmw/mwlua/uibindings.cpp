@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -179,13 +180,37 @@ namespace MWLua
             MWRender::LocalMap* map = windowManager->getLocalMapRender();
             return map ? map->capturesPending() : 0;
         };
-        // has this picture (a path under the folder) been written already? (to carry on after a stop)
+        // has this picture (a path under the folder) been written already, at the size drawn now? (to carry on after
+        // a stop; pictures of another size, such as the 320 pixels a UI scaling factor of 1.25 made, are drawn again)
         api["_wmrHas"] = [windowManager](std::string_view relative) -> bool {
             MWRender::LocalMap* map = windowManager->getLocalMapRender();
             if (!map || map->getCaptureDir().empty())
                 return false;
+            const std::filesystem::path path = map->getCaptureDir() / Files::pathFromUnicodeString(relative);
             std::error_code ec;
-            return std::filesystem::exists(map->getCaptureDir() / Files::pathFromUnicodeString(relative), ec);
+            if (!std::filesystem::exists(path, ec))
+                return false;
+            const int size = map->getMapResolution();
+            std::ifstream file(path, std::ios::binary);
+            if (relative.ends_with(".png"))
+            {
+                // the width, from the PNG header (big-endian, after the signature and the IHDR chunk's length and type)
+                unsigned char head[24] = {};
+                if (!file.read(reinterpret_cast<char*>(head), sizeof(head)))
+                    return false;
+                const int width = (head[16] << 24) | (head[17] << 16) | (head[18] << 8) | head[19];
+                return width == size;
+            }
+            if (relative.ends_with("map.txt"))
+            {
+                // the last of its numbers is a piece's size in pixels
+                std::vector<double> numbers;
+                double v = 0;
+                while (file >> v)
+                    numbers.push_back(v);
+                return numbers.size() >= 11 && static_cast<int>(numbers[10]) == size;
+            }
+            return true;
         };
         api["_wmrOverviews"] = [luaManager = context.mLuaManager]() {
             luaManager->addAction([] {
