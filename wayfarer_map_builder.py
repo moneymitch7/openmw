@@ -10,11 +10,11 @@ water). Writes the pictures and an index of them next to the program:
   scripts/wayfarers_journal/data/genmap.lua             which pictures there are
 and of each picture, and of each picture Wayfarer Map Renderer drew (local, interior and map), a compressed copy
 (.dds, DXT1) beside it: every picture the journal's map has shown stays in video memory until the game is quit, and
-compressed it takes an eighth of the memory. And of each picture of an interior the Map Renderer drew, a copy in
-each look (atlas(i,j).dds, native(i,j).dds beside it), so the atlas and the native window show the place drawn,
-not only its plan.
+compressed it takes an eighth of the memory. And, when asked (--interiors), of each picture of an interior the Map
+Renderer drew, a copy in that look (atlas(i,j).dds, native(i,j).dds beside it), so the atlas and the native window
+show the place drawn, not only its plan.
 
-Usage: wayfarer_map_builder [--config openmw.cfg] [--out folder] [--looks atlas,native]
+Usage: wayfarer_map_builder [--config openmw.cfg] [--out folder] [--looks atlas,native] [--interiors atlas,native]
 """
 
 import argparse
@@ -599,10 +599,12 @@ def main(argv=None):
     ap.add_argument('--no-pictures', action='store_true', help='draw the land only, without the local map pictures')
     ap.add_argument('--no-compress', action='store_true',
                     help='don\'t make the compressed (.dds) copies of the Map Renderer\'s pictures')
-    ap.add_argument('--no-interiors', action='store_true',
-                    help='don\'t draw the Map Renderer\'s interior pictures in the looks')
+    ap.add_argument('--interiors', default='',
+                    help='atlas, native or atlas,native: also draw the Map Renderer\'s interior pictures in these looks '
+                         '(about 32 KB a piece and look; none unless asked, the classic look doesn\'t need them)')
     ap.add_argument('--interiors-only', action='store_true',
-                    help='only draw the interior pictures in the looks (and compress), not the world map')
+                    help='only draw the interior pictures in the looks given with --interiors (and compress), '
+                         'not the world map')
     ap.add_argument('--no-pause', action='store_true', help='don\'t wait for Enter at the end')
     args = ap.parse_args(argv)
 
@@ -696,10 +698,13 @@ def interiors_step(args, data_dirs, looks, t0):
         log('Compressing the Map Renderer\'s pictures for the journal (only new or changed ones)...')
         made, total = compress_pictures(list(data_dirs) + [args.out], args.out)
         log(f'  {made} compressed, {total - made} already were')
-    if not args.no_interiors and not args.no_pictures:
-        log('Drawing the Map Renderer\'s interior pictures in each look (only new or changed ones)...')
+    inner = [k for k in (s.strip() for s in args.interiors.split(',')) if k in INNER_BG]
+    if args.interiors_only and not inner:
+        log('--interiors-only: say which looks with --interiors (atlas, native or atlas,native)')
+    if inner and not args.no_pictures:
+        log(f'Drawing the Map Renderer\'s interior pictures in {" and ".join(inner)} (only new or changed ones)...')
         t3 = time.time()
-        made, total = style_interiors(list(data_dirs) + [args.out], args.out, looks)
+        made, total = style_interiors(list(data_dirs) + [args.out], args.out, inner)
         log(f'  {made} drawn, {total - made} already were ({time.time() - t3:.0f} s)')
     if args.interiors_only:
         log(f'Done in {time.time() - t0:.0f} s')

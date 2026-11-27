@@ -20,6 +20,8 @@ jobs:
           pyinstaller --onefile --console --name "Wayfarer Map Builder" wayfarer_map_builder.py
           copy "Wayfarer Data Builder - readme.txt" dist\
           copy "Wayfarer Map Builder - readme.txt" dist\
+          copy "Wayfarer Map Builder - with parchment interiors.bat" dist\
+          copy "Wayfarer Map Builder - with native interiors.bat" dist\
       - name: Try it on nothing (it must start and explain itself)
         run: |
           dist\"Wayfarer Data Builder.exe" --help
