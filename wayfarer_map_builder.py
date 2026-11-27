@@ -24,7 +24,7 @@ from PIL import Image
 
 from wayfarer_data_builder import default_config, find_files, log, read_config, records, subrecords
 
-VERSION = '0.6'
+VERSION = '0.7'
 
 PX = 64                 # pixels a cell (a cell's land has 65 x 65 heights, 64 apart, the last shared with the next)
 TILE = 16               # cells a picture
@@ -233,7 +233,9 @@ def draw_atlas(h, x0, y0, local=None):
         ink = lerp((64, 42, 22), (232, 212, 168), L) * (0.78 + 0.32 * shade)[..., None]
         col = np.where(has[..., None], ink * 0.8 + col * 0.2, col)
         built = has & ~water & ~land  # docks, bridges, cantons standing in the water
-        ink_flat = lerp((64, 42, 22), (232, 212, 168), L)
+        # what stands in the water (docks, bridges, Vivec's cantons) in ink only up to a mid tan: their light parts
+        # (plazas, pale stone) drawn as light as the paper read as more sea, and the cantons looked hollow
+        ink_flat = lerp((58, 38, 20), (178, 150, 106), L)
     paper = np.empty(h.shape + (3,), dtype=np.float32)
     paper[:] = SEA['atlas']   # plain: the journal lays its own paper under the map, and pictures meet without a seam
     glow = box_blur(land.astype(np.float32), 5)
