@@ -18,7 +18,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.5.1'
+VERSION = '0.5.2'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -482,8 +482,13 @@ def info_requirements(world, dial, info):
             reqs.append({'type': 'IX', 'operator': opn, 'value': val, 'variable': name, 'object': 'player'})
         elif kind == '6':
             reqs.append({'type': 'DX', 'operator': opn, 'value': val, 'variable': name})
+    act = None
     if info.get('actor'):
-        reqs.append({'type': 'ACT', 'operator': 48, 'variable': topic, 'object': info['actor']})
+        act = {'type': 'ACT', 'operator': 48, 'variable': topic, 'object': info['actor']}
+        reqs.append(act)
+    for c in info['conds']:
+        if c['kind'] == '1' and c['func'] == '50' and act is not None:
+            act['choice'] = int(c.get('value', 0))  # an answer to a question the speaker asked ("Choice")
     return reqs
 
 
@@ -608,7 +613,27 @@ def build(world):
 
     drop_other_quests_deaths(quests)
 
-    # the stages that can follow each stage
+    link_stages(quests)
+    return quests
+
+
+def _other_answer(a, b):
+    """Are two stages the answers to one question (agreeing to go with Hlormar Wine-Sot, or turning him down): both
+    reached only by answering ("Choice") the same speaker on the same topic?"""
+    def ways(st):
+        out = set()
+        for block in st['requirements']:
+            acts = [r for r in block if r.get('type') == 'ACT']
+            if len(acts) != 1 or 'choice' not in acts[0]:
+                return None
+            out.add((acts[0]['variable'].lower(), acts[0]['object']))
+        return out or None
+    wa, wb = ways(a), ways(b)
+    return wa is not None and wa == wb
+
+
+def link_stages(quests):
+    """The stages that can follow each stage (next) and the one to head for (nextIndex)."""
     for qid, q in quests.items():
         idxs = sorted(q['stages'])
         for i, s in enumerate(idxs):
@@ -617,14 +642,16 @@ def build(world):
             for t in idxs:
                 if t <= s:
                     continue
-                for block in q['stages'][t]['requirements']:
-                    ok = holds(block, qid, s)
-                    # A way to end the quest that names no stage of it (Ranis Athrys taking Manwe's dues: the game
-                    # tries her answers in order, so the ones before it catch the other stages) can follow any
-                    # stage once the quest has begun.
-                    if ok or (ok is None and s > 0 and q['stages'][t].get('finished')):
-                        nxt.append(t)
-                        break
+                oks = [holds(block, qid, s) for block in q['stages'][t]['requirements']]
+                if any(oks):
+                    nxt.append(t)
+                # A way to end the quest that names no stage of it (Ranis Athrys taking Manwe's dues: the game tries
+                # her answers in order, so the ones before it catch the other stages) can follow any stage once the
+                # quest has begun; but not the other answer to the question that led here (Hlormar Wine-Sot: agreeing
+                # to go with him or turning him down are two answers to the same question, so having agreed, turning
+                # him down is no longer what comes next).
+                elif None in oks and s > 0 and q['stages'][t].get('finished') and not _other_answer(q['stages'][t], st):
+                    nxt.append(t)
             if nxt:
                 st['next'] = nxt
             higher = [t for t in idxs if t > s]
@@ -637,7 +664,6 @@ def build(world):
                     plain = [t for t in higher if any(direct(b) for b in q['stages'][t]['requirements'])]
                     st['nextIndex'] = plain[0] if plain else higher[0]
                     st['next'] = [st['nextIndex']]
-    return quests
 
 
 OBJECTIVE_TYPES = ('ACT', 'DX', 'IX', 'DIS', 'PCL')
