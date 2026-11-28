@@ -18,7 +18,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.5.2'
+VERSION = '0.5.3'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -638,11 +638,12 @@ def link_stages(quests):
         idxs = sorted(q['stages'])
         for i, s in enumerate(idxs):
             st = q['stages'][s]
-            nxt = []
+            nxt, answered, on = [], False, None
+            stages = q['stages']
             for t in idxs:
                 if t <= s:
                     continue
-                oks = [holds(block, qid, s) for block in q['stages'][t]['requirements']]
+                oks = [holds(block, qid, s) for block in stages[t]['requirements']]
                 if any(oks):
                     nxt.append(t)
                 # A way to end the quest that names no stage of it (Ranis Athrys taking Manwe's dues: the game tries
@@ -650,14 +651,27 @@ def link_stages(quests):
                 # quest has begun; but not the other answer to the question that led here (Hlormar Wine-Sot: agreeing
                 # to go with him or turning him down are two answers to the same question, so having agreed, turning
                 # him down is no longer what comes next).
-                elif None in oks and s > 0 and q['stages'][t].get('finished') and not _other_answer(q['stages'][t], st):
-                    nxt.append(t)
+                elif None in oks and s > 0 and stages[t].get('finished'):
+                    if _other_answer(stages[t], st):
+                        answered = True
+                    else:
+                        nxt.append(t)
+            if answered and all(stages[t].get('finished') for t in nxt):
+                # Answered, and nothing in the quest's own stages says what comes of it: a script moves it on without
+                # naming a stage (Pemenie's, once you have brought her to Gnaar Mok). That is the way on.
+                for t in idxs:
+                    if t > s and not stages[t].get('finished') and stages[t]['requirements'] and all(
+                            holds(blk, qid, s) is None and any(r.get('type') == 'SCR' for r in blk)
+                            for blk in stages[t]['requirements']):
+                        on = t
+                        nxt = sorted(nxt + [t])
+                        break
             if nxt:
                 st['next'] = nxt
             higher = [t for t in idxs if t > s]
             if higher and not st.get('finished'):
                 if nxt:
-                    st['nextIndex'] = min(nxt)
+                    st['nextIndex'] = on if on is not None else min(nxt)
                 else:
                     # Nothing says what follows: take the first stage above that can be reached straight away, not
                     # one on another route (its steps wait on another quest's progress or the alternative's items).
