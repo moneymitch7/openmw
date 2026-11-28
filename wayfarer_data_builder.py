@@ -18,7 +18,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.5'
+VERSION = '0.5.1'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -575,7 +575,11 @@ def build(world):
                 if t <= s:
                     continue
                 for block in q['stages'][t]['requirements']:
-                    if holds(block, qid, s):
+                    ok = holds(block, qid, s)
+                    # A way to end the quest that names no stage of it (Ranis Athrys taking Manwe's dues: the game
+                    # tries her answers in order, so the ones before it catch the other stages) can follow any
+                    # stage once the quest has begun.
+                    if ok or (ok is None and s > 0 and q['stages'][t].get('finished')):
                         nxt.append(t)
                         break
             if nxt:

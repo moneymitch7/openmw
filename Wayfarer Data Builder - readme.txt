@@ -1,5 +1,5 @@
-Wayfarer Data Builder 0.5
-=========================
+Wayfarer Data Builder 0.5.1
+===========================
 
 Makes the quest data for Wayfarer's Journal from your own load order: for each quest and stage, who to talk to
 about what, what to kill, what to get and where to go, and where those people and things are in the world. It reads
