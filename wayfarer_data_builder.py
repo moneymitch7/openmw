@@ -506,6 +506,47 @@ def holds(cond_reqs, quest, stage):
     return True if seen else None
 
 
+def _actors(block):
+    out = []
+    for r in block:
+        if r.get('type') == 'ACT':
+            out.append((r.get('object') or '').lower())
+        elif r.get('type') in ('DX', 'DIS'):
+            out.append((r.get('variable') or '').lower())
+    return out
+
+
+def drop_other_quests_deaths(quests):
+    """A script's way to a stage that waits on someone of another quest being dead is a condition, not a step: a
+    mod's Tarancur turns up for "Recruit or Kill Llarar Bereloth" once Manwe of "Manwe's Dues" is dead, and the
+    journal said to kill Manwe. Such a death is left out when the stage has other ways to it and nobody else in the
+    quest names that person; a quest whose only way on is someone's death keeps it."""
+    refs = {}
+    for qid, q in quests.items():
+        names = {}
+        for st in q['stages'].values():
+            for block in st['requirements']:
+                for name in _actors(block):
+                    names[name] = names.get(name, 0) + 1
+        refs[qid] = names
+    for qid, q in quests.items():
+        for st in q['stages'].values():
+            if len(st['requirements']) < 2:
+                continue
+            for block in st['requirements']:
+                if not any(r.get('type') == 'SCR' for r in block):
+                    continue
+                own = _actors(block)
+                keep = []
+                for r in block:
+                    name = (r.get('variable') or '').lower()
+                    if r.get('type') == 'DX' and refs[qid].get(name, 0) - own.count(name) <= 0 and any(
+                            name in refs[other] for other in refs if other != qid):
+                        continue
+                    keep.append(r)
+                block[:] = keep
+
+
 def build(world):
     quests = {}
     for did, d in world.dials.items():
@@ -564,6 +605,8 @@ def build(world):
                     reqs = reqs + [{'type': 'DIS', 'variable': owner, 'operator': 52, 'value': 300.0}]
                 reqs = [{'type': 'SCR', 'operator': 48, 'variable': sid, 'script': sid}] + reqs
                 add_source(quest, stage, reqs)
+
+    drop_other_quests_deaths(quests)
 
     # the stages that can follow each stage
     for qid, q in quests.items():
