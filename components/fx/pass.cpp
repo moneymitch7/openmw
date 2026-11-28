@@ -197,6 +197,17 @@ mat4 omw_InvProjectionMatrix()
 #endif
     }
 
+    // Colour read from the frame copies below: no NaN and no negative (a difference of the two copies feeds pow() in
+    // the shaders that use it), capped well under the FP16 limit.
+    vec4 omw_Sanitize(vec4 c)
+    {
+        c.x = (c.x == c.x) ? c.x : 0.0;
+        c.y = (c.y == c.y) ? c.y : 0.0;
+        c.z = (c.z == c.z) ? c.z : 0.0;
+        c.w = (c.w == c.w) ? c.w : 0.0;
+        return clamp(c, vec4(0.0), vec4(100.0));
+    }
+
     // OpenMGE XE: the scene as it was before blended (see-through) geometry was drawn - sky, opaque objects and
     // anything under the water, without smoke, rain, glass or the water surface. omw_GetLastShader minus this is
     // what blended geometry added, so a shader that replaces the sky can put it back on top (OMW_OPAQUE_COLOR).
