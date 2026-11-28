@@ -36,8 +36,10 @@ namespace SceneUtil
         const std::array<osg::Vec3f, 6> sFaceUps = { osg::Vec3f(0, -1, 0), osg::Vec3f(0, -1, 0), osg::Vec3f(0, 0, 1),
             osg::Vec3f(0, 0, -1), osg::Vec3f(0, -1, 0), osg::Vec3f(0, -1, 0) };
 
-        // Lamps whose still faces may be drawn in one frame: spreads a room's worth over a few frames as it loads.
-        constexpr int sLampsDrawnPerFrame = 2;
+        // Still faces drawn in one frame, nearest lamp first: spreads a room's worth over a few frames as it loads. Each
+        // face draws everything in the lamp's reach, so a frame drawing two whole lamps (twelve faces) at once hitched.
+        constexpr int sFacesDrawnPerFrame = 3;
+        constexpr unsigned int sAllFaces = 0x3fu;
 
         // A lamp that has moved this many times is left without shadows (it is carried along by something).
         constexpr int sMaxMoves = 3;
@@ -329,7 +331,7 @@ namespace SceneUtil
         slot.mLight = nullptr;
         slot.mOwner = nullptr;
         slot.mDrawn = false;
-        slot.mPending = false;
+        slot.mPendingFaces = 0;
         slot.mMoves = 0;
         slot.mFreedFrame = frame;
     }
@@ -342,7 +344,7 @@ namespace SceneUtil
                 continue;
             const float reach = slot.mFar + bound.radius();
             if ((bound.center() - slot.mPosition).length2() <= reach * reach)
-                slot.mPending = true;
+                slot.mPendingFaces = sAllFaces;
         }
     }
 
@@ -430,7 +432,7 @@ namespace SceneUtil
         mLiveCasterBounds = std::move(visitor.mLiveBounds);
 
         // A movable (a door) that turned or moved since last frame: the lamps whose light reaches it draw their still
-        // faces again, with it where it is now (two lamps a frame, as when they come into the room).
+        // faces again, with it where it is now (a few faces a frame, as when they come into the room).
         for (auto& [node, movable] : mMovables)
             movable.mSeen = false;
         for (PositionAttitudeTransform* node : visitor.mMovables)
@@ -529,7 +531,7 @@ namespace SceneUtil
             osg::ref_ptr<LightSource> light;
             if (!slot.mLight.lock(light))
             {
-                if (slot.mDrawn || slot.mPending)
+                if (slot.mDrawn || slot.mPendingFaces != 0)
                     release(slot, frame);
                 continue;
             }
@@ -551,7 +553,7 @@ namespace SceneUtil
                     continue;
                 }
                 slot.mPosition = found->mPosition;
-                slot.mPending = true;
+                slot.mPendingFaces = sAllFaces;
             }
         }
         // New lamps take free slots that have rested.
@@ -578,28 +580,38 @@ namespace SceneUtil
                 }
             free->mPosition = candidates[i].mPosition;
             free->mFar = candidates[i].mFar;
-            free->mPending = true;
+            free->mPendingFaces = sAllFaces;
             free->mDrawn = false;
             free->mMoves = 0;
         }
 
         findCasters(lightManager);
 
-        // Draw the still faces of a few waiting lamps, nearest first.
-        int drawn = 0;
+        // Draw a few waiting still faces, nearest lamp first. A lamp shades only once all six are drawn (a lamp drawn
+        // before and drawing again for a door that moved keeps shading meanwhile, its other faces as they were).
+        int budget = sFacesDrawnPerFrame;
         for (const Candidate& candidate : candidates)
         {
-            if (drawn >= sLampsDrawnPerFrame)
+            if (budget <= 0)
                 break;
             for (Slot& slot : mStill)
-                if (slot.mPending && slot.mLight == candidate.mLight)
+                if (slot.mPendingFaces != 0 && slot.mLight == candidate.mLight)
                 {
-                    drawFaces(slot, cv, mStillMask);
-                    slot.mPending = false;
-                    if (!slot.mDrawn)
-                        slot.mDrawnFrame = frame;
-                    slot.mDrawn = true;
-                    ++drawn;
+                    unsigned int faces = 0;
+                    for (unsigned int face = 0; face < 6 && budget > 0; ++face)
+                        if (slot.mPendingFaces & (1u << face))
+                        {
+                            faces |= 1u << face;
+                            --budget;
+                        }
+                    drawFaces(slot, cv, mStillMask, faces);
+                    slot.mPendingFaces &= ~faces;
+                    if (slot.mPendingFaces == 0)
+                    {
+                        if (!slot.mDrawn)
+                            slot.mDrawnFrame = frame;
+                        slot.mDrawn = true;
+                    }
                     break;
                 }
         }

@@ -84,7 +84,8 @@ namespace SceneUtil
             std::size_t mDrawnFrame = 0;
             std::size_t mFreedFrame = 0;
             bool mDrawn = false;
-            bool mPending = false;
+            // still faces waiting to be drawn, one bit a face (0: none)
+            unsigned int mPendingFaces = 0;
             int mMoves = 0;
             // live faces: which held characters when last drawn (those are drawn again, to clear them)
             unsigned int mFacesWithCasters = 0;
