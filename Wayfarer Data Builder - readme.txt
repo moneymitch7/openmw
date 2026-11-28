@@ -1,4 +1,4 @@
-Wayfarer Data Builder 0.4
+Wayfarer Data Builder 0.5
 =========================
 
 Makes the quest data for Wayfarer's Journal from your own load order: for each quest and stage, who to talk to
@@ -15,6 +15,10 @@ How to use it
 4. Start the game. Wayfarer's Journal converts the new data the first time (a message says so).
 
 Run it again after adding or removing mods that have quests.
+
+From 0.5 it also writes travel.yaml: the travel services (boats, silt striders, airships, guild guides), where each
+stands and where it goes. Wayfarer's Journal 0.7 or newer uses it to point the way to places no door leads to, such
+as Tel Eurus (reached by airship). Run it again once to get it.
 
 Options (from a command prompt):
   --config PATH   the openmw.cfg to read (default: Documents/My Games/OpenMW/openmw.cfg)

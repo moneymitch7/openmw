@@ -18,7 +18,7 @@ import struct
 import sys
 import time
 
-VERSION = '0.4'
+VERSION = '0.5'
 
 ITEM_TYPES = {b'ALCH', b'APPA', b'ARMO', b'BOOK', b'CLOT', b'INGR', b'LIGH', b'LOCK', b'MISC', b'PROB', b'REPA',
               b'WEAP'}
@@ -172,6 +172,7 @@ class World:
         self.objects = {}         # object id (lower) -> {type, name, script}
         self.inventory = {}       # holder id (lower) -> {item id (lower): count}
         self.refs = {}            # (file index, ref index) -> (object id, cell, pos) or None (deleted)
+        self.travel = {}          # npc or creature id (lower) -> [{'pos': (x, y, z), 'cell': interior name or None}]
 
     # first pass: everything but the cells
     def read_records(self, index, path):
@@ -263,6 +264,7 @@ class World:
                 continue
             # objects
             oid, name, script, inv = None, '', None, None
+            dests = []  # travel service: DODT (where you arrive), then DNAM (the interior, if not outside)
             for sname, sdata in sub:
                 if sname == b'NAME':
                     oid = zstr(sdata)
@@ -276,13 +278,23 @@ class World:
                     count = struct.unpack_from('<i', sdata)[0]
                     item = zstr(sdata[4:36]).lower()
                     inv[item] = inv.get(item, 0) + abs(count)
+                elif sname == b'DODT' and len(sdata) >= 12 and rtype in (b'NPC_', b'CREA'):
+                    dests.append({'pos': struct.unpack_from('<fff', sdata), 'cell': None})
+                elif sname == b'DNAM' and dests and rtype in (b'NPC_', b'CREA'):
+                    dests[-1]['cell'] = zstr(sdata)
             if not oid:
                 continue
             key = oid.lower()
             if deleted:
                 self.objects.pop(key, None)
                 self.inventory.pop(key, None)
+                self.travel.pop(key, None)
                 continue
+            if rtype in (b'NPC_', b'CREA'):
+                if dests:
+                    self.travel[key] = dests
+                else:
+                    self.travel.pop(key, None)
             self.objects[key] = {'type': rtype.decode(), 'name': name, 'script': script}
             if rtype in HOLDER_TYPES:
                 if inv:
@@ -672,7 +684,26 @@ def write_output(world, quests, out_dir, files):
         with open(os.path.join(out_dir, name), 'w', encoding='utf-8') as f:
             json.dump(obj, f, ensure_ascii=False, separators=(',', ':'))
 
+    # travel services (boats, silt striders, airships, guild guides): where each one stands and where it goes, so the
+    # journal can point to the way to places no door leads to
+    tout = []
+    for ref in world.refs.values():
+        if ref is None or ref[0] not in world.travel:
+            continue
+        oid, cell, pos = ref
+        at = {'pos': [round(pos[0]), round(pos[1]), round(pos[2])]}
+        if isinstance(cell, str):
+            at['name'] = cell
+        to = []
+        for d in world.travel[oid]:
+            t = {'pos': [round(d['pos'][0]), round(d['pos'][1]), round(d['pos'][2])]}
+            if d['cell']:
+                t['name'] = d['cell']
+            to.append(t)
+        tout.append({'id': oid, 'label': world.objects.get(oid, {}).get('name', ''), 'at': at, 'to': to})
+
     dump('quests.yaml', qout)
+    dump('travel.yaml', tout)
     dump('questObjects.yaml', oout)
     dump('info.yaml', {'version': 8, 'time': int(time.time()), 'format': 'yaml', 'generator':
                        'Wayfarer Data Builder ' + VERSION, 'files': files})
@@ -746,6 +777,7 @@ def main(argv=None):
     items = {i for i in wanted if i in world.objects}
     for hs in holders_of(world, items).values():
         wanted.update(hs)
+    wanted.update(world.travel)  # where the travel services stand
     t1 = time.time()
     for i, (c, p) in enumerate(order):
         world.read_cells(i, p, masters[c], wanted)
